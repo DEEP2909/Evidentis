@@ -1,0 +1,33 @@
+{
+  "name": "@evidentis/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./validators": {
+      "import": "./dist/validators.js",
+      "types": "./dist/validators.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint ./src ./tests",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@vitest/coverage-v8": "^2.1.1",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.1"
+  }
+}

@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+coverage/
+.coverage
+coverage.json
+*.log
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+.pytest_cache/
+pytest-cache-files-*/
+apps/ai-service/pytest-cache-files-*/
+.venv/
+venv/
+*.pyc
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Local tooling
+.idea/
+.vscode/

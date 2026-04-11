@@ -1,0 +1,49 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
+  "organizeImports": { "enabled": true },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "noUnusedVariables": "warn",
+        "useExhaustiveDependencies": "warn"
+      },
+      "style": {
+        "noUnusedTemplateLiteral": "warn",
+        "useNodejsImportProtocol": "warn",
+        "useTemplate": "warn",
+        "useImportType": "warn",
+        "useNumberNamespace": "warn",
+        "useExponentiationOperator": "warn",
+        "noNonNullAssertion": "warn",
+        "noInferrableTypes": "warn",
+        "useSelfClosingElements": "warn"
+      },
+      "complexity": {
+        "useLiteralKeys": "warn",
+        "noForEach": "warn"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn",
+        "noImplicitAnyLet": "warn",
+        "noArrayIndexKey": "warn"
+      },
+      "a11y": {
+        "useButtonType": "warn",
+        "noSvgWithoutTitle": "warn",
+        "useKeyWithClickEvents": "warn"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "error"
+      }
+    }
+  },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "trailingCommas": "all" }
+  },
+  "files": {
+    "ignore": ["node_modules", "dist", ".next", "coverage"]
+  }
+}

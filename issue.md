@@ -12,3 +12,4 @@ All issues raised in this file have been addressed.
 | 6 | Major | Documentation not updated for latest fixes | Updated `README.md`, `PRODUCT_DOCUMENTATION.md`, `DEPLOYMENT_GUIDE.md`, and `context.md` for Razorpay, OCR/NLP model details, migration count, and current remediation state | ✅ Resolved |
 | 7 | Critical | Node CI migration failure (`bar_council_state` missing on `attorneys`) | Patched `20260411000013_india-enterprise-foundation.js` to add/backfill `attorneys.bar_council_state` and included down migration cleanup | ✅ Resolved |
 | 8 | Minor | Node CI coverage gate failed at `69.87% < 70%` | Adjusted Node coverage threshold to 65% in `.github/workflows/ci.yml` and synchronized README coverage badge | ✅ Resolved |
+| 9 | Major | AI Docker build failed during spaCy model download due NumPy ABI mismatch | Pinned `numpy==1.26.4` for spaCy/thinc binary compatibility in `apps/ai-service/requirements.txt` | ✅ Resolved |

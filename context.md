@@ -93,6 +93,7 @@
 - Updated AI service dependency/runtime alignment:
   - Added `spacy==3.7.6`.
   - Upgraded `transformers` to `5.5.3`.
+  - Pinned `numpy==1.26.4` to avoid spaCy/thinc ABI mismatch during container builds.
   - Switched Docker spaCy model bootstrap to `en_core_web_sm`.
 - Removed stale US alias exports/usages:
   - Removed `US_STATES`, `USState`, `US_STATE_NAMES` aliases from shared package.

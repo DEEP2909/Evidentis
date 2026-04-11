@@ -111,6 +111,10 @@
 - `pytest apps/ai-service/tests -q` ✅ (105 passed)
 - `pip-audit -r apps/ai-service/requirements.txt` ✅ (no known vulnerabilities)
 - Local Docker daemon is unavailable in this session environment, so a local container build verification could not be executed here.
+- GitHub Actions run `#4` (`24292492840`) targeted gates:
+  - `node-checks` ✅
+  - `python-checks` ✅
+  - `docker-build` ✅
 
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.

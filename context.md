@@ -83,6 +83,33 @@
 - `npm run test:smoke --workspace=apps/api` ✅
 - `pytest apps/ai-service/tests -q` ✅ (105 passed)
 
+## Latest Fixes (Session 27)
+- Fixed CI node migration failure in `db/migrations/20260411000013_india-enterprise-foundation.js`:
+  - Added missing `attorneys.bar_council_state` column.
+  - Added backfill from legacy `bar_state`.
+  - Updated down migration to drop the new column.
+- Added migration `db/migrations/20260411000014_drop-paddle-columns.js` to remove orphaned Paddle billing columns and associated constraints/indexes.
+- Updated India SMS branding defaults to `MSG91_SENDER_ID=NYAYA` in API config, tests, and `.env.example`.
+- Updated AI service dependency/runtime alignment:
+  - Added `spacy==3.7.6`.
+  - Upgraded `transformers` to `5.5.3`.
+  - Switched Docker spaCy model bootstrap to `en_core_web_sm`.
+- Removed stale US alias exports/usages:
+  - Removed `US_STATES`, `USState`, `US_STATE_NAMES` aliases from shared package.
+  - Removed web utils alias and renamed seed script state constants to Indian jurisdictions.
+- Updated documentation set (`README.md`, `PRODUCT_DOCUMENTATION.md`, `DEPLOYMENT_GUIDE.md`, `issue.md`) for Razorpay naming, OCR/NLP model details, migration count, and issue closure.
+
+## Session 27 Verification
+- `npm run typecheck` ✅
+- `npm run build` ✅
+- `npm run test --workspace=packages/shared` ✅
+- `npm run test --workspace=apps/web` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run test --workspace=apps/api -- tests/config-india.test.ts` ✅
+- `pytest apps/ai-service/tests -q` ✅ (105 passed)
+- `pip-audit -r apps/ai-service/requirements.txt` ✅ (no known vulnerabilities)
+- Local Docker daemon is unavailable in this session environment, so a local container build verification could not be executed here.
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.

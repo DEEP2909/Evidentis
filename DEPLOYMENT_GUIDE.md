@@ -66,7 +66,7 @@ unzip terraform_1.7.0_linux_amd64.zip && sudo mv terraform /usr/local/bin/
 
 - [ ] Cloud provider account (AWS/GCP/Azure)
 - [ ] Domain name for your deployment
-- [ ] Paddle account for billing
+- [ ] Razorpay account for billing
 - [ ] Email provider (SendGrid/AWS SES) for notifications
 - [ ] Container registry access (Docker Hub/ECR/GCR/ACR)
 
@@ -353,16 +353,13 @@ aws secretsmanager create-secret \
   --name evidentis/production/encryption \
   --secret-string '{"key": "your-64-char-hex-key"}'
 
-# Store Paddle keys
+# Store Razorpay keys
 aws secretsmanager create-secret \
-  --name evidentis/production/paddle \
+  --name evidentis/production/razorpay \
   --secret-string '{
-    "vendor_id": "your-vendor-id",
-    "api_key": "pdl_live_...",
-    "webhook_secret": "pdl_ntfset_...",
-    "price_starter": "pri_...",
-    "price_growth": "pri_...",
-    "price_professional": "pri_..."
+    "key_id": "rzp_live_...",
+    "key_secret": "your-key-secret",
+    "webhook_secret": "your-webhook-secret"
   }'
 ```
 

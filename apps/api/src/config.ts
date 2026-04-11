@@ -70,7 +70,7 @@ const configSchema = z.object({
   ECOURTS_BASE_URL: z.string().url().default('https://services.ecourts.gov.in'),
 
   MSG91_AUTH_KEY: z.string().optional(),
-  MSG91_SENDER_ID: z.string().default('EVDTIS'),
+  MSG91_SENDER_ID: z.string().default('NYAYA'),
   MSG91_WHATSAPP_INTEGRATED_NUMBER: z.string().optional(),
   MSG91_BASE_URL: z.string().url().default('https://control.msg91.com/api'),
   OTP_EXPIRY_MINUTES: z.coerce.number().default(10),

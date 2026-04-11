@@ -25,10 +25,17 @@ exports.up = (pgm) => {
     ALTER TABLE attorneys
       ADD COLUMN IF NOT EXISTS phone_number text,
       ADD COLUMN IF NOT EXISTS bar_council_enrollment_number text,
+      ADD COLUMN IF NOT EXISTS bar_council_state text,
       ADD COLUMN IF NOT EXISTS bci_enrollment_number text,
       ADD COLUMN IF NOT EXISTS whatsapp_number text,
       ADD COLUMN IF NOT EXISTS otp_enabled boolean NOT NULL DEFAULT true,
       ADD COLUMN IF NOT EXISTS otp_last_sent_at timestamptz;
+  `);
+
+  pgm.sql(`
+    UPDATE attorneys
+    SET bar_council_state = COALESCE(bar_council_state, bar_state)
+    WHERE bar_council_state IS NULL AND bar_state IS NOT NULL;
   `);
 
   pgm.sql(`
@@ -369,6 +376,7 @@ exports.down = (pgm) => {
       DROP COLUMN IF EXISTS otp_enabled,
       DROP COLUMN IF EXISTS whatsapp_number,
       DROP COLUMN IF EXISTS bci_enrollment_number,
+      DROP COLUMN IF EXISTS bar_council_state,
       DROP COLUMN IF EXISTS bar_council_enrollment_number,
       DROP COLUMN IF EXISTS phone_number;
 

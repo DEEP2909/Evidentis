@@ -22,7 +22,7 @@ def mock_app_state():
     mock_models = MagicMock()
     mock_models.get_status.return_value = {
         "embedding": {"loaded": True, "model": "sentence-transformers/LaBSE"},
-        "spacy": {"loaded": True, "model": "en_core_web_trf"},
+        "spacy": {"loaded": True, "model": "en_core_web_sm"},
         "ocr": {"tesseract": {"available": True}},
     }
 

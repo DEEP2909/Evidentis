@@ -262,7 +262,7 @@ UPLOAD → QUARANTINE → SCAN → INGEST → CHUNK → EMBED → EXTRACT → AS
 - **Scan Time**: < 5 seconds per document
 
 ### 4.1.4 OCR Capabilities
-- **Engines**: Tesseract, EasyOCR, PaddleOCR (configurable)
+- **Engines**: Tesseract (primary), EasyOCR (optional), Google Vision (optional)
 - **Languages**: English + all scheduled Indian legal languages (23 total language codes in platform)
 - **Accuracy**: 95%+ for clean documents
 - **Handwriting**: Limited support (best-effort)
@@ -619,7 +619,7 @@ Response with Sources
 │  │   PostgreSQL     │  │     S3        │  │   External       │             │
 │  │   + pgvector     │  │   Storage     │  │   Services       │             │
 │  │                  │  │               │  │                  │             │
-│  │  • 26 tables     │  │  • Documents  │  │  • Paddle        │             │
+│  │  • 26 tables     │  │  • Documents  │  │  • Razorpay      │             │
 │  │  • HNSW index    │  │  • Quarantine │  │  • SendGrid      │             │
 │  │  • Full-text     │  │  • Exports    │  │  • ClamAV        │             │
 │  └──────────────────┘  └───────────────┘  └──────────────────┘             │
@@ -644,8 +644,8 @@ Response with Sources
 |-----------|------------|---------|
 | Runtime | Python | 3.11 |
 | Framework | FastAPI | 0.121.x |
-| Embedding | sentence-transformers | 3.x |
-| OCR | Tesseract/EasyOCR/PaddleOCR | - |
+| Embedding | sentence-transformers | 5.x |
+| OCR | Tesseract/EasyOCR/Google Vision | - |
 | LLM | Ollama | - |
 | NLP | spaCy | 3.x |
 
@@ -734,7 +734,7 @@ evidentis/
 │   │   │   ├── security.ts         # Password hashing, encryption
 │   │   │   ├── database.ts         # PostgreSQL connection pool
 │   │   │   ├── repository.ts       # Data access layer
-│   │   │   ├── billing.ts          # Paddle integration
+│   │   │   ├── billing.ts          # Razorpay integration
 │   │   │   ├── billing-enforcement.ts  # Quota middleware
 │   │   │   ├── worker.ts           # BullMQ job processing
 │   │   │   ├── orchestrator.ts     # Document pipeline
@@ -894,7 +894,7 @@ evidentis/
 │ name            │     │ tenant_id (FK)  │     │ tenant_id (FK)  │
 │ slug            │     │ email           │     │ title           │
 │ plan            │     │ role            │     │ client_name     │
-│ paddle_*        │     │ mfa_enabled     │     │ matter_type     │
+│ razorpay_*      │     │ mfa_enabled     │     │ matter_type     │
 │ settings        │     │ ...             │     │ status          │
 └─────────────────┘     └─────────────────┘     └────────┬────────┘
                                                          │
@@ -942,8 +942,8 @@ CREATE TABLE tenants (
     plan VARCHAR(50) DEFAULT 'starter',
     subscription_status VARCHAR(50) DEFAULT 'trialing',
     trial_ends_at TIMESTAMPTZ,
-    paddle_customer_id VARCHAR(255) UNIQUE,
-    paddle_subscription_id VARCHAR(255) UNIQUE,
+    razorpay_customer_id VARCHAR(255) UNIQUE,
+    razorpay_subscription_id VARCHAR(255) UNIQUE,
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -1628,12 +1628,12 @@ All errors follow this format:
 - **Use Cases**: Clause extraction, risk assessment, suggestions
 
 ### 8.1.3 OCR Engine
-- **Primary**: PaddleOCR
-- **Fallback**: Tesseract, EasyOCR
+- **Primary**: Tesseract
+- **Fallback**: EasyOCR, Google Vision
 - **Languages**: Multilingual Indian legal corpus support (all scheduled Indian languages + English)
 
 ### 8.1.4 NLP Pipeline
-- **Model**: spaCy en_core_web_trf
+- **Model**: spaCy en_core_web_sm
 - **Use Cases**: Entity extraction, sentence segmentation
 
 ## 8.2 Prompt Engineering
@@ -2009,7 +2009,7 @@ evidentis-documents/
 4. Create default playbook
 5. Create admin attorney account
 6. Send invitation email
-7. Set up Paddle customer (if billing enabled)
+7. Set up Razorpay customer metadata (if billing enabled)
 8. Create S3 folder structure
 9. Initialize quota tracking
 ```
@@ -2155,12 +2155,12 @@ describe('Tenant Isolation', () => {
 
 # 12. Billing & Subscription Management
 
-## 12.1 Paddle Integration
+## 12.1 Razorpay Integration
 
 ### 12.1.1 Customer Lifecycle
 ```
 1. Trial Start (14 days):
-   - Create Paddle customer
+   - Initialize Razorpay customer metadata
    - No payment method required
    - Full access to Starter features
 
@@ -2186,14 +2186,8 @@ describe('Tenant Isolation', () => {
 ### 12.1.2 Webhook Events Handled
 ```typescript
 const HANDLED_EVENTS = [
-  'subscription.created',
-  'subscription.activated',
-  'subscription.updated',
-  'subscription.canceled',
-  'subscription.past_due',
-  'transaction.completed',
-  'transaction.paid',
-  'transaction.payment_failed',
+  'payment.captured',
+  'payment.failed',
 ];
 ```
 
@@ -2680,7 +2674,7 @@ pytest tests/ --cov=. --cov-config=.coveragerc --cov-report=json
 | Storage | S3 / GCS | Document storage |
 | Secrets | AWS SM / GCP SM | Secret management |
 | Email | SendGrid | Transactional email |
-| Payments | Paddle | Billing |
+| Payments | Razorpay | Billing |
 | Monitoring | Datadog / Grafana | Observability |
 
 ## 17.3 CI/CD Pipeline

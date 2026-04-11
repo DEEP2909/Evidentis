@@ -52,7 +52,7 @@ EvidentIS automates contract analysis, extracts key clauses, assesses risks agai
 ### 📄 Document Intelligence
 - **Smart Upload**: PDF, DOCX, TXT with automatic malware scanning (ClamAV)
 - **Security Alerts**: Admin email notifications when infected uploads are quarantined
-- **OCR Processing**: Extract text from scanned documents (Tesseract/EasyOCR/PaddleOCR)
+- **OCR Processing**: Extract text from scanned documents (Tesseract/EasyOCR with optional Google Vision fallback)
 - **India Clause Intelligence**: Automatic extraction of India-relevant clause families (DPDP, GST, stamp duty, RERA, labour, and commercial risk terms)
 - **Multilingual Support**: UI + AI support for all constitutional Indian languages plus English, with RTL handling where required
 - **Risk Assessment**: AI-powered risk scoring with playbook compliance checking
@@ -214,7 +214,7 @@ Firm: Demo Law Firm LLP
 │                    AI SERVICE                        │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
 │  │   OCR    │  │ Embedding│  │   LLM    │          │
-│  │ (Paddle) │  │ (LaBSE)  │  │ (Ollama) │          │
+│  │(Tesseract)│ │ (LaBSE)  │  │ (Ollama) │          │
 │  └──────────┘  └──────────┘  └──────────┘          │
 │                    FastAPI                           │
 └─────────────────────────────────────────────────────┘
@@ -258,7 +258,7 @@ evidentis/
 │   │   │   ├── index.ts     # Server entry point
 │   │   │   ├── routes.ts    # All API endpoints (~120 routes)
 │   │   │   ├── auth.ts      # JWT, MFA, session management
-│   │   │   ├── billing.ts   # Paddle integration
+│   │   │   ├── billing.ts   # Razorpay integration
 │   │   │   └── ...
 │   │   └── tests/           # API tests (325 tests)
 │   │
@@ -277,7 +277,7 @@ evidentis/
 │       └── tests/           # Frontend tests (90 tests)
 │
 ├── db/
-│   └── migrations/          # Database migrations (12 files)
+│   └── migrations/          # Database migrations (15 files)
 │
 ├── k8s/                     # Kubernetes deployment manifests
 │

@@ -159,9 +159,6 @@ export const INDIAN_STATES = [
   { code: "LD", name: "Lakshadweep (UT)" },
 ] as const;
 
-// Backward-compatible alias while imports migrate.
-export const US_STATES = INDIAN_STATES;
-
 /**
  * Clause type display names
  */

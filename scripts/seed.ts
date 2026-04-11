@@ -17,12 +17,11 @@ import bcrypt from 'bcrypt';
 const DEMO_PASSWORD = 'EvidentIS2026Demo!';
 const SALT_ROUNDS = 10;
 
-const US_STATES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
+const INDIAN_STATE_CODES = [
+  'AP', 'AR', 'AS', 'BR', 'CT', 'GA', 'GJ', 'HR', 'HP', 'JH',
+  'KA', 'KL', 'MP', 'MH', 'MN', 'ML', 'MZ', 'NL', 'OD', 'PB',
+  'RJ', 'SK', 'TN', 'TG', 'TR', 'UP', 'UK', 'WB', 'DL', 'JK',
+  'LA', 'CH', 'PY', 'AN', 'DH', 'LD'
 ];
 
 const CLAUSE_TYPES = [
@@ -78,9 +77,9 @@ interface DemoMatter {
 // ============================================================================
 
 const demoTenants: DemoTenant[] = [
-  { id: randomUUID(), name: 'Acme Legal Partners LLP', slug: 'acme-legal', plan: 'professional', barState: 'NY' },
-  { id: randomUUID(), name: 'Pacific Coast Law Group', slug: 'pacific-coast', plan: 'growth', barState: 'CA' },
-  { id: randomUUID(), name: 'Midwest Corporate Counsel', slug: 'midwest-corp', plan: 'starter', barState: 'IL' },
+  { id: randomUUID(), name: 'Acme Legal Partners LLP', slug: 'acme-legal', plan: 'professional', barState: 'MH' },
+  { id: randomUUID(), name: 'Pacific Coast Law Group', slug: 'pacific-coast', plan: 'growth', barState: 'DL' },
+  { id: randomUUID(), name: 'Midwest Corporate Counsel', slug: 'midwest-corp', plan: 'starter', barState: 'KA' },
 ];
 
 function createDemoAttorneys(tenants: DemoTenant[]): DemoAttorney[] {
@@ -158,7 +157,7 @@ function createDemoMatters(tenants: DemoTenant[], attorneys: DemoAttorney[]): De
   
   tenants.forEach((tenant, ti) => {
     matterTemplates.forEach((template, mi) => {
-      const state = US_STATES[(ti * 10 + mi) % US_STATES.length];
+      const state = INDIAN_STATE_CODES[(ti * 10 + mi) % INDIAN_STATE_CODES.length];
       
       matters.push({
         id: randomUUID(),

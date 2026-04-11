@@ -149,11 +149,6 @@ export const INDIAN_STATES_AND_UTS = Object.values(INDIAN_STATE_NAMES);
 export const INDIAN_JURISDICTIONS = INDIAN_STATE_CODES;
 export const INDIAN_JURISDICTION_NAMES = INDIAN_STATE_NAMES;
 
-// Backward-compatible aliases while downstream modules migrate.
-export const US_STATES = INDIAN_JURISDICTIONS;
-export type USState = IndianStateCode;
-export const US_STATE_NAMES = INDIAN_JURISDICTION_NAMES;
-
 export type CourtLevel =
   | 'supreme_court'
   | 'high_court'

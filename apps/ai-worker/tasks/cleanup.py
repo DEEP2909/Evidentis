@@ -381,4 +381,4 @@ def purge_deleted_tenants(self) -> Dict[str, Any]:
 def get_internal_key() -> str:
     """Get internal service communication key."""
     import os
-    return os.getenv('INTERNAL_SERVICE_KEY', 'internal-key-for-dev')
+    return os.getenv('AI_SERVICE_INTERNAL_KEY', 'internal-key-for-dev')

@@ -340,6 +340,35 @@
 ## Session 39 Verification
 - `npm run test:coverage:ci --workspace=apps/api` ✅
 
+## Latest Fixes (Session 40)
+- Completed full remediation of updated `issue.md` infrastructure/runtime backlog (5/5 fixed):
+  - **docker-compose.prod API routing fix**:
+    - API healthcheck `localhost:3001/health` → `localhost:4000/health/live`
+    - Traefik service port `3001` → `4000`
+    - Traefik API healthcheck path `/health` → `/health/live`
+  - **docker-compose.prod AI service port fix**:
+    - API `AI_SERVICE_URL` `http://ai-service:8000` → `http://ai-service:5000`
+    - ai-worker `AI_SERVICE_URL` `http://ai-service:8000` → `http://ai-service:5000`
+    - ai-service healthcheck `localhost:8000/health` → `localhost:5000/health`
+  - **docker-compose.prod worker API port fix**:
+    - ai-worker `API_SERVICE_URL` `http://api:3001` → `http://api:4000`
+    - celery-beat `API_SERVICE_URL` `http://api:3001` → `http://api:4000`
+    - aligned ai-worker Celery queue list to configured queues (`default,embeddings,reports,notifications,analytics,cleanup`)
+  - **ai-worker internal key env fix**:
+    - `get_internal_key()` in all 5 task modules now reads `AI_SERVICE_INTERNAL_KEY` (not `INTERNAL_SERVICE_KEY`)
+    - Added `AI_SERVICE_INTERNAL_KEY` to ai-worker production compose env block
+    - Also aligned `batch_embed.py` fallback `AI_SERVICE_URL` default to `http://ai-service:5000`
+  - **k8s deployment completeness fix**:
+    - Added new `celery-worker` Deployment (replicas: 2)
+    - Added new `celery-beat` Deployment (replicas: 1, single scheduler)
+    - Wired Redis/DB/API/AI/internal key environment for both deployments
+- Updated `issue.md` to a resolved Session 40 ledger with verification snapshot.
+
+## Session 40 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅ (4 passed)
+- `python -m compileall apps/ai-worker` ✅
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite with `npm run test:coverage:ci -w @evidentis/api`.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX.

@@ -70,7 +70,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       # AI Service
-      AI_SERVICE_URL: http://ai-service:8000
+      AI_SERVICE_URL: http://ai-service:5000
       AI_SERVICE_INTERNAL_KEY: ${AI_SERVICE_INTERNAL_KEY}
       # S3 Storage
       S3_BUCKET: ${S3_BUCKET}
@@ -91,7 +91,7 @@ services:
       SEED_DEMO_DATA: 'false'
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health/live"]
     labels:
       <<: *common-labels
       traefik.enable: "true"
@@ -99,8 +99,8 @@ services:
       traefik.http.routers.api.entrypoints: "websecure"
       traefik.http.routers.api.tls: "true"
       traefik.http.routers.api.tls.certresolver: "letsencrypt"
-      traefik.http.services.api.loadbalancer.server.port: "3001"
-      traefik.http.services.api.loadbalancer.healthcheck.path: "/health"
+      traefik.http.services.api.loadbalancer.server.port: "4000"
+      traefik.http.services.api.loadbalancer.healthcheck.path: "/health/live"
       traefik.http.services.api.loadbalancer.healthcheck.interval: "10s"
       # Rate limiting
       traefik.http.middlewares.api-ratelimit.ratelimit.average: "100"
@@ -215,7 +215,7 @@ services:
       OTEL_SERVICE_NAME: evidentis-ai-service
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
     labels:
       <<: *common-labels
     logging: *logging
@@ -262,15 +262,16 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       # Services
-      AI_SERVICE_URL: http://ai-service:8000
-      API_SERVICE_URL: http://api:3001
+      AI_SERVICE_URL: http://ai-service:5000
+      API_SERVICE_URL: http://api:4000
+      AI_SERVICE_INTERNAL_KEY: ${AI_SERVICE_INTERNAL_KEY}
       # ClamAV
       CLAMAV_HOST: clamav
       CLAMAV_PORT: 3310
       # Telemetry
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318}
       OTEL_SERVICE_NAME: evidentis-ai-worker
-    command: celery -A celery_app worker -l INFO -c 4 -Q default,documents,embedding,analysis,notifications
+    command: celery -A celery_app worker -l INFO -c 4 -Q default,embeddings,reports,notifications,analytics,cleanup
     stop_grace_period: 60s
     labels:
       <<: *common-labels
@@ -298,7 +299,7 @@ services:
       REDIS_URL: ${REDIS_URL}
       CELERY_BROKER_URL: ${REDIS_URL}
       DATABASE_URL: ${DATABASE_URL}
-      API_SERVICE_URL: http://api:3001
+      API_SERVICE_URL: http://api:4000
     command: celery -A celery_app beat -l INFO --scheduler celery.beat:PersistentScheduler
     labels:
       <<: *common-labels

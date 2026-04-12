@@ -13,7 +13,7 @@ from celery.exceptions import MaxRetriesExceededError
 logger = logging.getLogger(__name__)
 
 # AI Service URL
-AI_SERVICE_URL = os.getenv('AI_SERVICE_URL', 'http://ai-service:8000')
+AI_SERVICE_URL = os.getenv('AI_SERVICE_URL', 'http://ai-service:5000')
 API_SERVICE_URL = os.getenv('API_SERVICE_URL', 'http://api:4000')
 
 
@@ -320,4 +320,4 @@ def reindex_matter_documents(
 def get_internal_key() -> str:
     """Get internal service communication key."""
     import os
-    return os.getenv('INTERNAL_SERVICE_KEY', 'internal-key-for-dev')
+    return os.getenv('AI_SERVICE_INTERNAL_KEY', 'internal-key-for-dev')

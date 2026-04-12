@@ -34,4 +34,27 @@ describe('CI Smoke', () => {
     expect(body.status).toBeDefined();
     expect(body.checks).toBeDefined();
   });
+
+  it('rejects razorpay webhook requests without signature header', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/razorpay',
+      payload: { event: 'payment.captured' },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 for invalid razorpay webhook signatures', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/razorpay',
+      headers: {
+        'x-razorpay-signature': 'invalid-signature',
+      },
+      payload: { event: 'payment.captured' },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
 });

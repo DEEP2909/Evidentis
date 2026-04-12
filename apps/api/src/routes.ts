@@ -3894,7 +3894,7 @@ END:VCALENDAR`;
   // ANALYTICS ADDITIONAL ROUTES
   // ============================================================
 
-  // GET /api/analytics/attorneys - Attorney productivity metrics
+  // GET /api/analytics/attorneys - Advocate productivity metrics
   fastify.get(
     '/api/analytics/attorneys',
     { preHandler: [authenticateRequest, requireRoles('admin', 'partner')] },

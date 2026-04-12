@@ -316,3 +316,21 @@
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.
 - Continue expanding legal datasets, citation coverage, and retrieval evaluation for Indian case law and state-specific rules.
+
+## Latest Fixes (Session 38)
+- Reviewed updated `issue.md` (4 issues). Analysis:
+  - **Issue 1 (build() singleton):** Already resolved — `build()` calls `createApp()` which creates a fresh `Fastify()` instance per invocation.
+  - **Issue 2 (prom-client metrics):** Already implemented — `worker-main.ts` has the complete metrics server on port 9100.
+  - **Issue 3 (Python coverage 50→70%):** Already exceeds target — CI threshold is already at 75%.
+  - **Issue 4 (Node coverage 50→70%):** Fixed — updated `test:coverage:ci` to run the full test suite, raised CI threshold from 65% → 70%.
+- **Additional fix: Missing advocateId/advocateRole decorators** (`index.ts`): Added `app.decorateRequest('advocateId', '')` and `app.decorateRequest('advocateRole', '')`.
+- Updated analytics route comment to use "Advocate productivity metrics" instead of "Attorney".
+
+## Session 38 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅ (2 passed)
+
+## Next Suggested Steps
+- Stand up local Postgres and Redis, then run the full API integration suite with `npm run test:coverage:ci -w @evidentis/api`.
+- Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX.
+- Continue expanding legal datasets, citation coverage, and retrieval evaluation for Indian case law and state-specific rules.

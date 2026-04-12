@@ -145,8 +145,11 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
   // DECORATORS
   // ============================================================
 
-  // Add tenant context to requests
+  // Add tenant context to requests (canonical India advocate naming)
   app.decorateRequest('tenantId', '');
+  app.decorateRequest('advocateId', '');
+  app.decorateRequest('advocateRole', '');
+  // Backward-compatible aliases (deprecated — use advocateId/advocateRole)
   app.decorateRequest('attorneyId', '');
   app.decorateRequest('attorneyRole', '');
 

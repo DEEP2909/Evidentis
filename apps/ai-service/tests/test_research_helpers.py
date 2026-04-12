@@ -1,8 +1,10 @@
 """Targeted unit coverage for research router helper logic."""
 
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
+from fastapi import Request
 
 import routers.research as research_router
 from routers.research import ChunkForRAG, ResearchQuery
@@ -43,7 +45,7 @@ def test_score_answer_confidence_handles_empty_and_evidence_paths() -> None:
 
 
 def test_build_chunks_from_payload_normalizes_dict_and_string_inputs() -> None:
-    payload = [
+    payload: list[str | dict[str, Any]] = [
         {
             "chunk_id": "chunk-123",
             "document_id": "doc-123",
@@ -130,7 +132,7 @@ async def test_research_stream_alias_forces_stream_mode(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(research_router, "research", fake_research)
     result = await research_router.research_stream(
-        request=SimpleNamespace(),
+        request=cast(Request, SimpleNamespace()),
         body=ResearchQuery(query="test", stream=False),
     )
 

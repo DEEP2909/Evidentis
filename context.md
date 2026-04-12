@@ -176,6 +176,25 @@
 - `npm run typecheck --workspace=apps/web` ✅
 - `pytest apps/ai-service/tests -q` ✅ (105 passed)
 
+## Latest Fixes (Session 31)
+- Fixed Python CI coverage shortfall and aligned the requested gate to **at least 75%**:
+  - Updated `apps/ai-service/.coveragerc` with working repo-relative omit patterns (`tests/*`, `models/loader.py`, `evaluation/*`, `config.py`) while retaining existing absolute-path patterns for compatibility.
+  - Added targeted helper coverage tests in `apps/ai-service/tests/test_research_helpers.py` for:
+    - numeric coercion helpers
+    - evidence-based confidence scoring
+    - chunk payload normalization
+    - retrieval not-implemented guard
+    - research answer success/error handling
+    - `/research/stream` alias behavior
+  - Updated Python coverage gate in `.github/workflows/ci.yml` from `70` to `75`.
+  - Updated docs thresholds (`README.md`, `PRODUCT_DOCUMENTATION.md`) to match the new requirement.
+
+## Session 31 Verification
+- `pytest tests/ -v --tb=short --cov=. --cov-config=.coveragerc --cov-report=json` (from `apps/ai-service`) ✅
+- Python coverage total: **78.4%** ✅ (meets ≥75%)
+- `ruff check .` (from `apps/ai-service`) ✅
+- `mypy main.py config.py domain_models.py explainability.py llm_safety.py prompts routers models evaluation --ignore-missing-imports` ✅
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.

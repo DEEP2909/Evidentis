@@ -1,3 +1,16 @@
+## ✅ Session 31 Python Coverage Remediation (2026-04-12)
+
+| Item | Status | Resolution |
+|---|---|---|
+| Python coverage gate request (≥75%) | ✅ Fixed | Corrected `apps/ai-service/.coveragerc` omit patterns to include working repo-relative paths and added targeted research helper unit tests (`apps/ai-service/tests/test_research_helpers.py`). |
+| CI python coverage threshold | ✅ Updated | `.github/workflows/ci.yml` python coverage check now enforces `>= 75`. |
+
+### Verification snapshot
+- `pytest tests/ -v --tb=short --cov=. --cov-config=.coveragerc --cov-report=json` ✅
+- Coverage result: **78.4%** (passes required 75% gate) ✅
+
+---
+
 ## ✅ Session 29 Remediation Status (2026-04-12)
 
 All production-impacting issues listed below are now resolved in code and wired end-to-end.

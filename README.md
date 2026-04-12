@@ -497,7 +497,7 @@ OpenTelemetry traces exported to:
 ### Development Guidelines
 
 - Follow TypeScript strict mode
-- Write tests for new features (>70% coverage)
+- Write tests for new features (>75% Python coverage target)
 - Use conventional commits
 - Update documentation
 

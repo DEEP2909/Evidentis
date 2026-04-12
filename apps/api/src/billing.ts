@@ -6,6 +6,7 @@
 import crypto from 'node:crypto';
 import Razorpay from 'razorpay';
 import { PRIMARY_LANGUAGE_CODES, SUPPORTED_LANGUAGE_CODES } from '@evidentis/shared';
+import type { PoolClient } from 'pg';
 
 import { config } from './config.js';
 import { pool } from './database.js';
@@ -143,6 +144,32 @@ async function getTenantPlan(tenantId: string): Promise<PlanType> {
   return plan && plan in PLANS ? (plan as PlanType) : 'starter';
 }
 
+function getFinancialYearLabel(referenceDate: Date): string {
+  const year = referenceDate.getUTCFullYear();
+  const month = referenceDate.getUTCMonth() + 1;
+  const startYear = month >= 4 ? year : year - 1;
+  const endYearShort = String((startYear + 1) % 100).padStart(2, '0');
+  return `${startYear}-${endYearShort}`;
+}
+
+async function generateSequentialInvoiceNumber(client: PoolClient, tenantId: string, issueDate: Date): Promise<string> {
+  const financialYearLabel = getFinancialYearLabel(issueDate);
+  const prefix = `EVD/${financialYearLabel}/`;
+
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice:${tenantId}:${financialYearLabel}`]);
+
+  const sequenceResult = await client.query<{ max_seq: number | null }>(
+    `SELECT COALESCE(MAX(NULLIF(substring(invoice_number FROM '([0-9]{4,})$'), '')::integer), 0) AS max_seq
+     FROM invoices
+     WHERE tenant_id = $1
+       AND invoice_number LIKE $2`,
+    [tenantId, `${prefix}%`]
+  );
+
+  const nextSequence = (sequenceResult.rows[0]?.max_seq ?? 0) + 1;
+  return `${prefix}${String(nextSequence).padStart(4, '0')}`;
+}
+
 export async function createCheckoutSession(
   tenantId: string,
   advocateEmail: string,
@@ -170,13 +197,13 @@ export async function createCheckoutSession(
     },
     callback_url: successUrl,
     callback_method: 'get',
-      notes: {
-        tenantId,
-        plan,
-        subtotalPaise: String(totals.subtotalPaise),
-        gstAmountPaise: String(totals.gstAmountPaise),
-        sacCode: '998212',
-      },
+    notes: {
+      tenantId,
+      plan,
+      subtotalPaise: String(totals.subtotalPaise),
+      gstAmountPaise: String(totals.gstAmountPaise),
+      sacCode: '998212',
+    },
   });
 
   await pool.query(
@@ -217,6 +244,7 @@ export async function getBillingStatus(tenantId: string): Promise<BillingStatus>
     [tenantId]
   );
 
+  // DB table remains `attorneys` for backward-compatibility, but rows represent advocates.
   const advocatesResult = await pool.query<{ count: string }>(
     `SELECT COUNT(*) FROM attorneys WHERE tenant_id = $1 AND status = 'active'`,
     [tenantId]
@@ -351,33 +379,45 @@ export async function createInvoiceForPlan(tenantId: string, plan: PlanType, cre
   }
 
   const totals = calculateInvoiceTotals(planConfig.priceInPaise, planConfig.gstRatePercent);
-  const tenantPlan = await getTenantPlan(tenantId);
-  const invoiceNumber = `EVD-${tenantPlan.toUpperCase()}-${Date.now()}`;
+  const issueDate = new Date();
+  const client = await pool.connect();
 
-  const invoice = await pool.query<{ id: string }>(
-    `INSERT INTO invoices (
-       tenant_id, client_name, invoice_number, issue_date, due_date,
-       subtotal_paise, gst_rate, gst_amount_paise, total_paise, status, created_by
-     )
-     VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '15 days', $4, $5, $6, $7, 'draft', $8)
-     RETURNING id`,
-    [tenantId, 'Tenant Billing Account', invoiceNumber, totals.subtotalPaise, totals.gstRatePercent, totals.gstAmountPaise, totals.totalPaise, createdBy]
-  );
+  try {
+    await client.query('BEGIN');
 
-  const invoiceId = invoice.rows[0]?.id;
-  if (invoiceId) {
-    await pool.query(
-      `INSERT INTO gst_details (
-         invoice_id, sac_code, gst_rate, taxable_amount_paise, cgst_amount_paise, sgst_amount_paise, igst_amount_paise
+    const invoiceNumber = await generateSequentialInvoiceNumber(client, tenantId, issueDate);
+    const invoice = await client.query<{ id: string }>(
+      `INSERT INTO invoices (
+         tenant_id, client_name, invoice_number, issue_date, due_date,
+         subtotal_paise, gst_rate, gst_amount_paise, total_paise, status, created_by
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [invoiceId, '998212', totals.gstRatePercent, totals.subtotalPaise, 0, 0, totals.gstAmountPaise]
+       VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '15 days', $4, $5, $6, $7, 'draft', $8)
+       RETURNING id`,
+      [tenantId, 'Tenant Billing Account', invoiceNumber, totals.subtotalPaise, totals.gstRatePercent, totals.gstAmountPaise, totals.totalPaise, createdBy]
     );
-  }
 
-  return {
-    id: invoiceId,
-    invoiceNumber,
-    ...totals,
-  };
+    const invoiceId = invoice.rows[0]?.id;
+    if (invoiceId) {
+      await client.query(
+        `INSERT INTO gst_details (
+           invoice_id, sac_code, gst_rate, taxable_amount_paise, cgst_amount_paise, sgst_amount_paise, igst_amount_paise
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [invoiceId, '998212', totals.gstRatePercent, totals.subtotalPaise, 0, 0, totals.gstAmountPaise]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return {
+      id: invoiceId,
+      invoiceNumber,
+      ...totals,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }

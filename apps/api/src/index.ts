@@ -181,7 +181,8 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
       fastifyError.statusCode !== 400 &&
       fastifyError.statusCode !== 401 &&
       fastifyError.statusCode !== 403 &&
-      fastifyError.statusCode !== 404
+      fastifyError.statusCode !== 404 &&
+      fastifyError.statusCode !== 429
     ) {
       return reply.status(500).send({
         success: false,

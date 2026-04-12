@@ -459,3 +459,31 @@
 - `npm run test:coverage:ci --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
 - `pytest apps/ai-service/tests -q` ✅ (111 passed)
+
+## Latest Fixes (Session 44)
+- Completed remediation pass for the latest open `issue.md` entries (R1-R8, N1-N5):
+  - **Security middleware overlap cleanup** (`apps/api/src/security-hardening.ts`):
+    - Removed default header overlap so `@fastify/helmet` remains the single source for standard security headers.
+    - Removed custom CORS preHandler to avoid duplicate/conflicting `Access-Control-*` behavior with `@fastify/cors`.
+  - **Input threat detection coverage expansion** (`apps/api/src/security-hardening.ts`):
+    - Added recursive request scanning across `query`, `params`, and `body`, including nested arrays/objects.
+    - Added precise threat logging with source path metadata.
+  - **Rate-limit semantics fix** (`apps/api/src/index.ts`):
+    - Production error passthrough list now includes HTTP `429` so rate-limited requests preserve correct status and response body.
+  - **Billing compliance and clarity updates** (`apps/api/src/billing.ts`):
+    - Normalized Razorpay checkout payload formatting for `notes`.
+    - Replaced timestamp invoice numbering with sequential FY format `EVD/<YYYY-YY>/<NNNN>`.
+    - Added transaction-safe invoice sequence generation using advisory transaction lock per tenant/year.
+    - Added explicit comment clarifying legacy `attorneys` table stores advocate records.
+  - **Matter PATCH SQL resilience** (`apps/api/src/routes.ts`):
+    - Quoted mapped SQL identifiers in dynamic `UPDATE matters SET ...` clause.
+  - **Documentation/state update**:
+    - `issue.md` rewritten as Session 44 resolved ledger; remaining open items marked none.
+
+## Session 44 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run build --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run test:coverage:ci --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `pytest apps/ai-service/tests -q` ✅ (111 passed)

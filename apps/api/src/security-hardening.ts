@@ -3,9 +3,8 @@
  * Helmet, CORS, input validation, and security headers
  */
 
-import { FastifyInstance, type FastifyPluginCallback, type FastifyRequest, type FastifyReply } from 'fastify';
+import { type FastifyPluginCallback, type FastifyRequest, type FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
-import { config } from './config.js';
 import { logger } from './logger.js';
 
 // =============================================================================
@@ -29,22 +28,7 @@ interface SecurityHeadersConfig {
   xssFilter?: boolean;
 }
 
-const DEFAULT_SECURITY_CONFIG: SecurityHeadersConfig = {
-  contentSecurityPolicy: true,
-  crossOriginEmbedderPolicy: false, // Can break legitimate embeds
-  crossOriginOpenerPolicy: { policy: 'same-origin' },
-  crossOriginResourcePolicy: { policy: 'same-origin' },
-  dnsPrefetchControl: { allow: false },
-  frameguard: { action: 'deny' },
-  hidePoweredBy: true,
-  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
-  ieNoOpen: true,
-  noSniff: true,
-  originAgentCluster: true,
-  permittedCrossDomainPolicies: { permittedPolicies: 'none' },
-  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-  xssFilter: true,
-};
+const DEFAULT_SECURITY_CONFIG: SecurityHeadersConfig = {};
 
 function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): void {
   // Content Security Policy
@@ -156,44 +140,6 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
 }
 
 // =============================================================================
-// CORS Configuration
-// =============================================================================
-
-interface CorsConfig {
-  origins: string[];
-  methods: string[];
-  allowedHeaders: string[];
-  exposedHeaders: string[];
-  credentials: boolean;
-  maxAge: number;
-}
-
-function getCorsConfig(): CorsConfig {
-  const isProduction = config.NODE_ENV === 'production';
-  
-  return {
-    origins: isProduction
-      ? [config.FRONTEND_URL].filter(Boolean) as string[]
-      : ['http://localhost:3000', 'http://localhost:4000'],
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Request-ID',
-      'X-Tenant-ID',
-    ],
-    exposedHeaders: [
-      'X-Request-ID',
-      'X-RateLimit-Limit',
-      'X-RateLimit-Remaining',
-      'X-RateLimit-Reset',
-    ],
-    credentials: true,
-    maxAge: 86400, // 24 hours
-  };
-}
-
-// =============================================================================
 // Input Validation
 // =============================================================================
 
@@ -275,60 +221,77 @@ export function detectXss(input: string): boolean {
   return XSS_PATTERNS.some(pattern => pattern.test(input));
 }
 
+function findThreatInPayload(payload: unknown, fieldPath: string): { type: 'sql' | 'xss'; fieldPath: string } | null {
+  if (typeof payload === 'string') {
+    if (detectSqlInjection(payload)) {
+      return { type: 'sql', fieldPath };
+    }
+    if (detectXss(payload)) {
+      return { type: 'xss', fieldPath };
+    }
+    return null;
+  }
+
+  if (payload === null || payload === undefined) {
+    return null;
+  }
+
+  if (Buffer.isBuffer(payload) || payload instanceof Date) {
+    return null;
+  }
+
+  if (Array.isArray(payload)) {
+    for (let index = 0; index < payload.length; index++) {
+      const nestedThreat = findThreatInPayload(payload[index], `${fieldPath}[${index}]`);
+      if (nestedThreat) {
+        return nestedThreat;
+      }
+    }
+    return null;
+  }
+
+  if (typeof payload === 'object') {
+    for (const [key, value] of Object.entries(payload)) {
+      const nestedPath = fieldPath ? `${fieldPath}.${key}` : key;
+      const nestedThreat = findThreatInPayload(value, nestedPath);
+      if (nestedThreat) {
+        return nestedThreat;
+      }
+    }
+  }
+
+  return null;
+}
+
 // =============================================================================
 // Security Plugin
 // =============================================================================
 
 const securityHardeningPlugin: FastifyPluginCallback = (fastify, opts, done) => {
   const securityConfig = { ...DEFAULT_SECURITY_CONFIG, ...opts };
-  const corsConfig = getCorsConfig();
 
   // Apply security headers to all responses
   fastify.addHook('onSend', async (request, reply) => {
     applySecurityHeaders(reply, securityConfig);
   });
 
-  // Handle CORS preflight
-  fastify.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
-    const origin = request.headers.origin;
-
-    if (origin && corsConfig.origins.includes(origin)) {
-      // nosemgrep: javascript.express.security.cors-misconfiguration.cors-misconfiguration -- origin is allowlisted above
-      reply.header('Access-Control-Allow-Origin', origin);
-      reply.header('Access-Control-Allow-Credentials', String(corsConfig.credentials));
-      
-      if (request.method === 'OPTIONS') {
-        reply.header('Access-Control-Allow-Methods', corsConfig.methods.join(', '));
-        reply.header('Access-Control-Allow-Headers', corsConfig.allowedHeaders.join(', '));
-        reply.header('Access-Control-Max-Age', String(corsConfig.maxAge));
-        return reply.status(204).send();
-      }
-      
-      reply.header('Access-Control-Expose-Headers', corsConfig.exposedHeaders.join(', '));
-    }
-  });
-
   // Input validation for all requests
   fastify.addHook('preValidation', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Check query params for injection
-    if (request.query && typeof request.query === 'object') {
-      for (const [key, value] of Object.entries(request.query)) {
-        if (typeof value === 'string') {
-          if (detectSqlInjection(value)) {
-            logger.warn({ key, ip: request.ip }, 'SQL injection attempt detected');
-            return reply.status(400).send({
-              success: false,
-              error: { code: 'INVALID_INPUT', message: 'Invalid input detected' },
-            });
-          }
-          if (detectXss(value)) {
-            logger.warn({ key, ip: request.ip }, 'XSS attempt detected');
-            return reply.status(400).send({
-              success: false,
-              error: { code: 'INVALID_INPUT', message: 'Invalid input detected' },
-            });
-          }
-        }
+    const threatSources: Array<{ name: string; payload: unknown }> = [
+      { name: 'query', payload: request.query },
+      { name: 'params', payload: request.params },
+      { name: 'body', payload: request.body },
+    ];
+
+    for (const source of threatSources) {
+      const threat = findThreatInPayload(source.payload, source.name);
+      if (threat) {
+        const message = threat.type === 'sql' ? 'SQL injection attempt detected' : 'XSS attempt detected';
+        logger.warn({ fieldPath: threat.fieldPath, source: source.name, ip: request.ip }, message);
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Invalid input detected' },
+        });
       }
     }
   });

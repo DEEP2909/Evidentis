@@ -1242,7 +1242,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     // Build dynamic update query
-    const updates: string[] = ['updated_at = NOW()'];
+    const updates: string[] = ['"updated_at" = NOW()'];
     const values: unknown[] = [];
     let paramIndex = 1;
 
@@ -1266,7 +1266,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     for (const [key, column] of Object.entries(fieldMap)) {
       if (normalizedBody[key] !== undefined) {
-        updates.push(`${column} = $${paramIndex}`);
+        updates.push(`"${column}" = $${paramIndex}`);
         values.push(normalizedBody[key]);
         paramIndex++;
       }

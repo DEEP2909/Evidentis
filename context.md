@@ -116,6 +116,16 @@
   - `python-checks` ✅
   - `docker-build` ✅
 
+## Latest Fixes (Session 28)
+- Closed remaining `e2e-tests` CI blocker by updating stale Playwright smoke assertions in `apps/web/tests/ci-smoke.spec.ts`:
+  - Root route now validates current public landing page rendering instead of login redirect.
+  - Research smoke now validates current heading/content in the India-aligned research UI.
+  - Dashboard smoke now validates current dashboard shell rendering instead of login redirect.
+- Updated issue tracking ledger (`issue.md`) to include the resolved E2E mismatch.
+
+## Session 28 Verification
+- `npm run test:e2e:ci --workspace=@evidentis/web` ✅ (6 passed)
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.

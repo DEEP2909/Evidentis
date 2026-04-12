@@ -157,6 +157,25 @@
 - `npm run test:smoke --workspace=apps/api` ✅
 - `pytest apps/ai-service/tests -q` ✅ (105 passed)
 
+## Latest Fixes (Session 30)
+- Re-audited the full `issue.md` backlog again and closed residual gaps that were still outstanding:
+  - Added runtime embedding-dimension assertions (`apps/api/src/embedding-cache.ts`) and enforced them in research query/stream paths so vector-size drift fails fast instead of silently reaching pgvector queries.
+  - Added deterministic local dev startup orchestration:
+    - New `scripts/wait-for-port.mjs`
+    - Root `package.json` now uses `concurrently` and `dev:web:wait` so web waits for API readiness.
+  - Updated `issue.md` status ledger to reflect the additional closures and refreshed verification snapshot.
+- Pushed all latest issue-remediation changes to GitHub:
+  - Branch: `main`
+  - Commit: `7e1e13a`
+  - Remote: `origin` (`https://github.com/DEEP2909/Evidentis.git`)
+
+## Session 30 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run build --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `pytest apps/ai-service/tests -q` ✅ (105 passed)
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.

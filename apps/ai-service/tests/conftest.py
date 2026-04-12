@@ -10,6 +10,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from main import app
 
 
+class MockRateLimitRedis:
+    """Minimal async Redis substitute for middleware rate-limit tests."""
+
+    def __init__(self) -> None:
+        self._counters: dict[str, int] = {}
+
+    async def incr(self, key: str) -> int:
+        next_value = self._counters.get(key, 0) + 1
+        self._counters[key] = next_value
+        return next_value
+
+    async def expire(self, key: str, _seconds: int) -> bool:
+        if key not in self._counters:
+            return False
+        return True
+
+
 @pytest.fixture(autouse=True)
 def mock_app_state():
     """Initialize app.state so routes don't crash on missing models/settings.
@@ -38,12 +55,17 @@ def mock_app_state():
     mock_settings.ollama_base_url = "http://localhost:11434"
     mock_settings.embedding_model = "sentence-transformers/LaBSE"
     mock_settings.embedding_dim = 768
+    mock_settings.ai_service_internal_key = ""
+    mock_settings.rate_limit_requests_per_minute = 120
 
     app.state.models = mock_models
     app.state.settings = mock_settings
+    app.state.rate_limit_redis = MockRateLimitRedis()
     yield
     # cleanup
     if hasattr(app.state, 'models'):
         del app.state.models
     if hasattr(app.state, 'settings'):
         del app.state.settings
+    if hasattr(app.state, 'rate_limit_redis'):
+        del app.state.rate_limit_redis

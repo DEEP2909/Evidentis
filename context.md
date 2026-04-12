@@ -222,6 +222,26 @@
 - `pip-audit -r apps/ai-service/requirements.txt` ✅
 - Result: **No known vulnerabilities found** ✅
 
+## Latest Fixes (Session 34)
+- Completed full remediation pass for the newly updated `issue.md` backlog (7/7 fixed):
+  - Updated `docker-compose.yml` AI service embedding runtime to LaBSE (`sentence-transformers/LaBSE`, `EMBEDDING_DIM=768`) and added `AI_SERVICE_INTERNAL_KEY` passthrough.
+  - Updated repository advocate creation defaults and canonical bar council persistence:
+    - default role now `advocate`
+    - `attorneyRepo.create()` now writes `bar_council_enrollment_number` and `bar_council_state` with compatibility fallback.
+  - Updated shared type safety:
+    - `ATTORNEY_ROLES` now aliases `ADVOCATE_ROLES` without reintroducing `attorney`
+    - removed stale `Tenant.paddleCustomerId`
+  - Replaced AI-service in-memory rate limiting with Redis-backed counters in middleware (`ratelimit:{ip}:{path}`) and lifecycle-managed Redis client.
+  - Added DB migration `20260412000016_rename-audit-actor-column.js` to rename `audit_events.actor_attorney_id` → `actor_advocate_id`, and updated all API routes/repository/test references.
+  - Rewrote `issue.md` as a resolved-status ledger with the validation snapshot.
+
+## Session 34 Verification
+- `npm run typecheck --workspace=packages/shared` ✅
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `mypy main.py config.py domain_models.py explainability.py llm_safety.py prompts routers models evaluation tests/test_ai_service.py tests/test_domain_models.py tests/test_explainability.py tests/test_llm_safety.py tests/test_router_logic.py tests/test_research_helpers.py --ignore-missing-imports` ✅
+- `pytest apps/ai-service/tests -q` ✅ (111 passed)
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.

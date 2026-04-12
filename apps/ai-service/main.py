@@ -5,11 +5,10 @@ clause extraction, risk assessment, and semantic research.
 """
 
 import logging
-import time
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from typing import Any, Deque, Dict
+from typing import Any, Dict
 
+import redis.asyncio as redis
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -28,7 +27,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
-request_windows: dict[str, Deque[float]] = defaultdict(deque)
 INTERNAL_BYPASS_PATHS = {
     "/",
     "/health",
@@ -39,6 +37,7 @@ INTERNAL_BYPASS_PATHS = {
     "/redoc",
     "/openapi.json",
 }
+RATE_LIMIT_WINDOW_SECONDS = 60
 
 # Global model registry
 model_registry: ModelRegistry | None = None
@@ -61,6 +60,7 @@ async def lifespan(app: FastAPI):
     # Store in app state for access in routes
     app.state.models = model_registry
     app.state.settings = settings
+    app.state.rate_limit_redis = redis.from_url(settings.redis_url)
     
     logger.info("AI Service ready")
     
@@ -70,6 +70,9 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down AI Service...")
     if model_registry:
         await model_registry.unload_all()
+    rate_limit_redis = getattr(app.state, "rate_limit_redis", None)
+    if rate_limit_redis:
+        await rate_limit_redis.aclose()
 
 
 # Create FastAPI app
@@ -83,26 +86,35 @@ app = FastAPI(
 
 @app.middleware("http")
 async def enforce_internal_access(request: Request, call_next):
+    runtime_settings = getattr(request.app.state, "settings", settings)
+
     if request.url.path in INTERNAL_BYPASS_PATHS:
         return await call_next(request)
 
-    if settings.ai_service_internal_key:
+    if runtime_settings.ai_service_internal_key:
         request_key = request.headers.get("X-Internal-Key", "")
-        if request_key != settings.ai_service_internal_key:
+        if request_key != runtime_settings.ai_service_internal_key:
             return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
-    now = time.monotonic()
+    rate_limit_redis = getattr(request.app.state, "rate_limit_redis", None)
+    if rate_limit_redis is None:
+        logger.error("Rate limiter unavailable: Redis client missing on app state")
+        return JSONResponse(status_code=503, content={"detail": "Rate limiter unavailable"})
+
     client_ip = request.client.host if request.client else "unknown"
-    bucket_key = f"{client_ip}:{request.url.path}"
-    request_window = request_windows[bucket_key]
+    bucket_key = f"ratelimit:{client_ip}:{request.url.path}"
 
-    while request_window and now - request_window[0] > 60:
-        request_window.popleft()
+    try:
+        request_count = await rate_limit_redis.incr(bucket_key)
+        if request_count == 1:
+            await rate_limit_redis.expire(bucket_key, RATE_LIMIT_WINDOW_SECONDS)
+    except redis.RedisError as exc:
+        logger.error("Rate limit Redis operation failed for key %s: %s", bucket_key, exc)
+        return JSONResponse(status_code=503, content={"detail": "Rate limiter unavailable"})
 
-    if len(request_window) >= settings.rate_limit_requests_per_minute:
+    if request_count > runtime_settings.rate_limit_requests_per_minute:
         return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
 
-    request_window.append(now)
     return await call_next(request)
 
 # CORS configuration

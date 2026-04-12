@@ -739,7 +739,7 @@ describe('Audit Logging', () => {
     );
     
     expect(audit.rows.length).toBe(1);
-    expect(audit.rows[0].actor_attorney_id).toBe(ATTORNEY_A.id);
+    expect(audit.rows[0].actor_advocate_id).toBe(ATTORNEY_A.id);
   });
   
   it('should log login attempts', async () => {

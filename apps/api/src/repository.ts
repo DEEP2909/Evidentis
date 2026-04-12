@@ -27,7 +27,8 @@ const TENANT_COLS = `id, name, slug, plan, region, bar_state, subscription_statu
   razorpay_subscription_id, logo_url, settings, created_at, updated_at`;
 
 const ATTORNEY_COLS = `id, tenant_id, email, display_name, role, practice_group, 
-  bar_number, bar_state, mfa_enabled, failed_login_attempts, locked_until, 
+  bar_number, bar_state, bar_council_enrollment_number, bar_council_state, bci_enrollment_number, phone_number,
+  mfa_enabled, failed_login_attempts, locked_until, 
   last_login_at, preferred_language, status, created_at`;
 
 const MATTER_COLS = `id, tenant_id, matter_code, matter_name, matter_type, client_name, 
@@ -54,7 +55,7 @@ const OBLIGATION_COLS = `id, tenant_id, matter_id, document_id, clause_id, oblig
 const PLAYBOOK_COLS = `id, tenant_id, name, description, practice_area, rules, is_active, 
   created_by, created_at`;
 
-const AUDIT_COLS = `id, tenant_id, actor_attorney_id, actor_api_key_id, event_type, 
+const AUDIT_COLS = `id, tenant_id, actor_advocate_id, actor_api_key_id, event_type, 
   object_type, object_id, ip_address, user_agent, metadata, created_at`;
 
 // ============================================================================
@@ -148,13 +149,20 @@ export const attorneyRepo = {
     role?: string;
     barNumber?: string;
     barState?: string;
+    barCouncilEnrollmentNumber?: string;
+    barCouncilState?: string;
   }) {
+    const barCouncilEnrollmentNumber = data.barCouncilEnrollmentNumber ?? data.barNumber;
+    const barCouncilState = data.barCouncilState ?? data.barState;
     const result = await pool.query(
-      `INSERT INTO attorneys (tenant_id, email, display_name, password_hash, role, bar_number, bar_state)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO attorneys (
+         tenant_id, email, display_name, password_hash, role, bar_number, bar_state,
+         bar_council_enrollment_number, bar_council_state
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${ATTORNEY_COLS}`,
       [tenantId, data.email.toLowerCase(), data.displayName, data.passwordHash, 
-       data.role || 'attorney', data.barNumber, data.barState]
+       data.role || 'advocate', data.barNumber, data.barState, barCouncilEnrollmentNumber, barCouncilState]
     );
     return result.rows[0];
   },
@@ -878,6 +886,8 @@ export const playbookRepo = {
 export const auditRepo = {
   async create(data: {
     tenantId: string;
+    actorAdvocateId?: string;
+    /** @deprecated Use actorAdvocateId */
     actorAttorneyId?: string;
     actorApiKeyId?: string;
     eventType: string;
@@ -888,10 +898,10 @@ export const auditRepo = {
     metadata?: any;
   }) {
     await pool.query(
-      `INSERT INTO audit_events (tenant_id, actor_attorney_id, actor_api_key_id, event_type, 
+      `INSERT INTO audit_events (tenant_id, actor_advocate_id, actor_api_key_id, event_type, 
         object_type, object_id, ip_address, user_agent, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [data.tenantId, data.actorAttorneyId, data.actorApiKeyId, data.eventType,
+      [data.tenantId, data.actorAdvocateId ?? data.actorAttorneyId, data.actorApiKeyId, data.eventType,
        data.objectType, data.objectId, data.ipAddress, data.userAgent, 
        JSON.stringify(data.metadata || {})]
     );
@@ -913,7 +923,7 @@ export const auditRepo = {
       params.push(eventType);
     }
     if (actorId) {
-      whereClause += ` AND actor_attorney_id = $${paramIndex++}`;
+      whereClause += ` AND actor_advocate_id = $${paramIndex++}`;
       params.push(actorId);
     }
 

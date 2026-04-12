@@ -122,8 +122,9 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - MODEL_CACHE_DIR=/models
-      - EMBEDDING_MODEL=all-MiniLM-L6-v2
-      - EMBEDDING_DIM=384
+      - EMBEDDING_MODEL=sentence-transformers/LaBSE
+      - EMBEDDING_DIM=768
+      - AI_SERVICE_INTERNAL_KEY=${AI_SERVICE_INTERNAL_KEY:-}
       - OCR_ENGINES=tesseract,easyocr
       - GPU_ENABLED=false
     volumes:
@@ -184,6 +185,7 @@ services:
       - DATABASE_URL=postgresql://evidentis:evidentis_dev_password@postgres:5432/evidentis
       - REDIS_URL=redis://redis:6379
       - AI_SERVICE_URL=http://ai-service:5000
+      - AI_SERVICE_INTERNAL_KEY=${AI_SERVICE_INTERNAL_KEY:-}
       - STORAGE_BACKEND=s3
       - S3_ENDPOINT=http://minio:9000
       - S3_BUCKET=evidentis-documents
@@ -222,6 +224,7 @@ services:
       - DATABASE_URL=postgresql://evidentis:evidentis_dev_password@postgres:5432/evidentis
       - REDIS_URL=redis://redis:6379
       - AI_SERVICE_URL=http://ai-service:5000
+      - AI_SERVICE_INTERNAL_KEY=${AI_SERVICE_INTERNAL_KEY:-}
       - STORAGE_BACKEND=s3
       - S3_ENDPOINT=http://minio:9000
       - S3_BUCKET=evidentis-documents

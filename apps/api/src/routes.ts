@@ -446,7 +446,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Log audit event
     await query(
-      `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, ip_address, user_agent)
+      `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, ip_address, user_agent)
        VALUES ($1, $2, 'auth.login', $3, $4)`,
       [attorney.tenant_id, attorney.id, request.ip, request.headers['user-agent']]
     );
@@ -496,7 +496,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Log audit event
     await query(
-      `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, ip_address, user_agent)
+      `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, ip_address, user_agent)
        VALUES ($1, $2, 'auth.logout', $3, $4)`,
       [authReq.tenantId, authReq.advocateId, request.ip, request.headers['user-agent']]
     );
@@ -823,7 +823,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         [otpRecord.advocate_id]
       );
       await tx.query(
-        `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, ip_address, user_agent)
+        `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, ip_address, user_agent)
          VALUES ($1, $2, 'auth.login.otp', $3, $4)`,
         [otpRecord.tenant_id, otpRecord.advocate_id, request.ip, request.headers['user-agent']]
       );
@@ -906,7 +906,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Log audit event
     await query(
-      `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, ip_address, metadata)
+      `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, ip_address, metadata)
        VALUES ($1, $2, 'auth.forgot_password', $3, $4)`,
       [attorney.tenant_id, attorney.id, request.ip, JSON.stringify({ email })]
     );
@@ -1150,7 +1150,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Log audit event
     await query(
-      `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, object_type, object_id, metadata)
+      `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, object_type, object_id, metadata)
        VALUES ($1, $2, 'matter.created', 'matter', $3, $4)`,
       [authReq.tenantId, authReq.advocateId, matter?.id, JSON.stringify(body)]
     );
@@ -1274,7 +1274,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Log audit event
     await query(
-      `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, object_type, object_id, metadata)
+      `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, object_type, object_id, metadata)
        VALUES ($1, $2, 'matter.updated', 'matter', $3, $4)`,
       [authReq.tenantId, authReq.advocateId, id, JSON.stringify(normalizedBody)]
     );
@@ -1819,7 +1819,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       const events = await query<{
         id: string;
-        actor_attorney_id: string | null;
+        actor_advocate_id: string | null;
         event_type: string;
         object_type: string | null;
         object_id: string | null;
@@ -1827,7 +1827,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         metadata: unknown;
         created_at: Date;
       }>(
-        `SELECT id, actor_attorney_id, event_type, object_type, object_id, 
+        `SELECT id, actor_advocate_id, event_type, object_type, object_id, 
                 ip_address, metadata, created_at
          FROM audit_events
          ${whereClause}
@@ -3274,7 +3274,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     );
 
     await query(
-      `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, object_type, object_id)
+      `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, object_type, object_id)
        VALUES ($1, $2, 'matter.archived', 'matter', $3)`,
       [authReq.tenantId, authReq.advocateId, id]
     );
@@ -3294,11 +3294,11 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       event_type: string;
       object_type: string | null;
       object_id: string | null;
-      actor_attorney_id: string | null;
+      actor_advocate_id: string | null;
       metadata: unknown;
       created_at: Date;
     }>(
-      `SELECT ae.id, ae.event_type, ae.object_type, ae.object_id, ae.actor_attorney_id, ae.metadata, ae.created_at
+      `SELECT ae.id, ae.event_type, ae.object_type, ae.object_id, ae.actor_advocate_id, ae.metadata, ae.created_at
        FROM audit_events ae
        WHERE ae.tenant_id = $1 AND (
          (ae.object_type = 'matter' AND ae.object_id = $2) OR

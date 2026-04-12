@@ -306,8 +306,9 @@ export const ADVOCATE_ROLES = [
 ] as const;
 export type AdvocateRole = typeof ADVOCATE_ROLES[number];
 
-export const ATTORNEY_ROLES = [...ADVOCATE_ROLES, 'attorney'] as const;
-export type AttorneyRole = typeof ATTORNEY_ROLES[number];
+/** @deprecated Use ADVOCATE_ROLES */
+export const ATTORNEY_ROLES = ADVOCATE_ROLES;
+export type AttorneyRole = AdvocateRole;
 
 export const ATTORNEY_STATUSES = ['active', 'suspended', 'pending_invite'] as const;
 export type AttorneyStatus = typeof ATTORNEY_STATUSES[number];
@@ -651,7 +652,6 @@ export interface Tenant {
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: Date | null;
   razorpayCustomerId: string | null;
-  paddleCustomerId?: string | null;
   logoUrl: string | null;
   settings: Record<string, unknown>;
   gstin: string | null;
@@ -1031,7 +1031,7 @@ export interface ResearchHistory {
 export interface AuditEvent {
   id: string;
   tenantId: string;
-  actorAttorneyId: string | null;
+  actorAdvocateId: string | null;
   actorApiKeyId: string | null;
   eventType: string;
   objectType: string | null;

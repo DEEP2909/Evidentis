@@ -644,8 +644,13 @@ const obligationExtractWorker = new Worker<ObligationExtractJob>(
 // ============================================================================
 
 async function callAiService(endpoint: string, data: any): Promise<any> {
+  const headers: Record<string, string> = {};
+  if (config.AI_SERVICE_INTERNAL_KEY) {
+    headers['X-Internal-Key'] = config.AI_SERVICE_INTERNAL_KEY;
+  }
   const response = await axios.post(`${config.AI_SERVICE_URL}${endpoint}`, data, {
     timeout: config.AI_SERVICE_TIMEOUT_MS || 60000,
+    headers,
   });
   return response.data;
 }

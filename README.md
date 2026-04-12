@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/license-Proprietary-red.svg" alt="License"/>
   <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg" alt="Node"/>
   <img src="https://img.shields.io/badge/python-%3E%3D3.11-blue.svg" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-481%20passed-brightgreen.svg" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-520%2B%20passing-brightgreen.svg" alt="Tests"/>
   <img src="https://img.shields.io/badge/coverage-%3E78%25%20(Python)%20%7C%20%3E65%25%20(Node)-brightgreen.svg" alt="Coverage"/>
 </p>
 
@@ -66,8 +66,15 @@ EvidentIS automates contract analysis, extracts key clauses, assesses risks agai
 ### 🔍 Legal Research
 - **Semantic Search**: Natural language queries across all documents
 - **RAG Pipeline**: Retrieval-augmented generation for accurate answers
-- **Citation Support**: Automatic legal citation formatting
+- **Citation Support**: Source-aware citations with chunk metadata and relevance scores
+- **Confidence Scoring**: Confidence is derived from retrieval quality and citation evidence (not hardcoded)
 - **Research History**: Track and revisit previous research sessions
+
+### 🇮🇳 India Legal Operations
+- **Bare Acts API**: Search central/state acts and section text
+- **Court Case Tracking**: Tenant-scoped CNR case records and hearing timelines
+- **GST Invoicing**: Tenant invoices with GST line-item and SAC support
+- **DPDP Workflows**: Consent capture and rights-request tracking endpoints
 
 ### ✏️ Contract Redlining
 - **AI Suggestions**: Intelligent clause modifications based on firm playbook
@@ -87,6 +94,7 @@ EvidentIS automates contract analysis, extracts key clauses, assesses risks agai
 - **MFA Support**: TOTP, SMS, Email verification
 - **SSO/SAML 2.0**: Enterprise identity provider integration
 - **SCIM 2.0**: Automated user provisioning
+- **AI Service Gatekeeping**: Internal API key forwarding + per-IP/per-route AI-service rate limiting
 
 ### 💳 Flexible Billing
 - **4 Pricing Tiers**: Starter, Growth, Professional, Enterprise
@@ -260,13 +268,13 @@ evidentis/
 │   │   │   ├── auth.ts      # JWT, MFA, session management
 │   │   │   ├── billing.ts   # Razorpay integration
 │   │   │   └── ...
-│   │   └── tests/           # API tests (325 tests)
+│   │   └── tests/           # API tests
 │   │
 │   ├── ai-service/          # FastAPI AI service (Python)
 │   │   ├── main.py          # FastAPI app
 │   │   ├── routers/         # OCR, embed, extract, assess, research
 │   │   ├── evaluation/      # AI model evaluation framework
-│   │   └── tests/           # AI tests (66 tests)
+│   │   └── tests/           # AI tests (105 tests)
 │   │
 │   ├── ai-worker/           # Celery background workers
 │   │   └── tasks/           # Async task definitions
@@ -274,7 +282,7 @@ evidentis/
 │   └── web/                 # Next.js frontend
 │       ├── app/             # App router pages
 │       ├── components/      # React components
-│       └── tests/           # Frontend tests (90 tests)
+│       └── tests/           # Frontend tests
 │
 ├── db/
 │   └── migrations/          # Database migrations (15 files)
@@ -316,10 +324,10 @@ npm run test:isolation --workspace=apps/api
 
 | Component | Tests | Coverage |
 |-----------|-------|----------|
-| API | 325 | >50% |
-| AI Service | 66 | >30% (structural exclusions) |
-| Frontend | 90 | >50% |
-| **Total** | **481** | **>50% / >30%** |
+| API | 325+ | >50% |
+| AI Service | 105 | >30% (structural exclusions) |
+| Frontend | 90+ | >50% |
+| **Total** | **520+** | **>50% / >30%** |
 
 ---
 
@@ -343,6 +351,27 @@ POST /auth/login
 }
 ```
 
+```bash
+# OTP login (India mobile)
+POST /auth/otp/send
+{
+  "phoneNumber": "+919876543210",
+  "purpose": "login",
+  "tenantSlug": "demo-firm"
+}
+
+POST /auth/otp/verify
+{
+  "phoneNumber": "+919876543210",
+  "otp": "123456",
+  "purpose": "login",
+  "tenantSlug": "demo-firm"
+}
+
+# API-prefixed aliases are also available:
+# /api/auth/otp/send and /api/auth/otp/verify
+```
+
 ### Documents
 
 ```bash
@@ -362,12 +391,39 @@ GET /documents/:id/clauses
 
 ```bash
 # Legal research query
-POST /research
+POST /api/research/query
 {
-  "query": "What are the liability caps in our vendor contracts?",
+  "question": "What are the liability caps in our vendor contracts?",
   "matterId": "uuid",
-  "limit": 10
+  "language": "hi"
 }
+```
+
+```bash
+# Streamed research (SSE)
+POST /api/research/stream
+{
+  "query": "What are termination remedies under this contract?",
+  "matterId": "uuid",
+  "language": "en"
+}
+
+# IndiaKanoon/local citation search proxy
+GET /api/research/indiankanoon?q=arbitration+award&limit=20
+```
+
+### India Legal Ops APIs
+
+```bash
+GET  /api/bare-acts
+GET  /api/bare-acts/:slug
+GET  /api/court-cases
+POST /api/court-cases
+GET  /api/hearings
+GET  /api/invoices
+POST /api/invoices
+GET  /api/dpdp/requests
+POST /api/dpdp/consent
 ```
 
 Full API documentation available at `/docs` when running the server.
@@ -383,7 +439,7 @@ Full API documentation available at `/docs` when running the server.
 
 ### Access Control
 - **Multi-Factor Authentication**: TOTP, SMS, Email
-- **Role-Based Access**: Admin, Partner, Associate, Paralegal, Client
+- **Role-Based Access**: Admin, Partner, Senior Advocate, Junior Advocate, Paralegal, Client
 - **Session Management**: 15-minute access tokens, secure refresh tokens
 
 ### Compliance

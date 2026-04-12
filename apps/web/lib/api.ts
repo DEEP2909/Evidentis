@@ -317,6 +317,7 @@ function normalizeObligationStatus(value: unknown): Obligation["status"] {
 }
 
 function mapAttorney(raw: Record<string, unknown>): Attorney {
+  const normalizedRole = raw.role === "attorney" ? "advocate" : raw.role;
   const normalizedState = asStateCode(
     raw.bar_council_state ?? raw.barCouncilState ?? raw.bar_state ?? raw.barState
   );
@@ -325,7 +326,7 @@ function mapAttorney(raw: Record<string, unknown>): Attorney {
     tenantId: String(raw.tenant_id ?? raw.tenantId ?? ""),
     email: String(raw.email ?? ""),
     displayName: String(raw.display_name ?? raw.displayName ?? ""),
-    role: asEnum(raw.role, ADVOCATE_ROLES, "attorney"),
+    role: asEnum(normalizedRole, ADVOCATE_ROLES, "advocate"),
     practiceGroup:
       (raw.practice_group as string | null) ?? (raw.practiceGroup as string | null) ?? null,
     barCouncilEnrollmentNumber:
@@ -355,6 +356,18 @@ function mapAttorney(raw: Record<string, unknown>): Attorney {
 }
 
 function mapMatter(raw: Record<string, unknown>): Matter {
+  const normalizedLeadAdvocateId =
+    (raw.lead_advocate_id as string | null) ??
+    (raw.leadAdvocateId as string | null) ??
+    (raw.lead_attorney_id as string | null) ??
+    (raw.leadAttorneyId as string | null) ??
+    null;
+  const normalizedDealValuePaise =
+    (raw.deal_value_paise as number | null) ??
+    (raw.dealValuePaise as number | null) ??
+    (raw.deal_value_cents as number | null) ??
+    (raw.dealValueCents as number | null) ??
+    null;
   return {
     id: String(raw.id ?? ""),
     tenantId: String(raw.tenant_id ?? raw.tenantId ?? ""),
@@ -367,11 +380,12 @@ function mapMatter(raw: Record<string, unknown>): Matter {
     status: asEnum(raw.status, MATTER_STATUSES, "open"),
     priority: asEnum(raw.priority, PRIORITIES, "normal"),
     healthScore: Number(raw.health_score ?? raw.healthScore ?? 0),
-    leadAdvocateId: (raw.lead_advocate_id as string | null) ?? (raw.leadAdvocateId as string | null) ?? null,
-    leadAttorneyId: (raw.lead_attorney_id as string | null) ?? (raw.leadAttorneyId as string | null) ?? null,
+    leadAdvocateId: normalizedLeadAdvocateId,
+    leadAttorneyId: normalizedLeadAdvocateId,
     targetCloseDate: parseDateOrNull(raw.target_close_date ?? raw.targetCloseDate),
     valueInPaise: (raw.value_in_paise as number | null) ?? null,
-    dealValueCents: (raw.deal_value_cents as number | null) ?? null,
+    dealValuePaise: normalizedDealValuePaise,
+    dealValueCents: normalizedDealValuePaise,
     notes: (raw.notes as string | null) ?? null,
     tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
     courtName: (raw.court_name as string | null) ?? null,
@@ -485,10 +499,10 @@ function toMatterType(practiceArea?: string): string {
   const key = practiceArea.trim().toLowerCase();
   if (key.includes("litigation")) return "litigation";
   if (key.includes("real")) return "real_estate";
-  if (key.includes("employment") || key.includes("labour")) return "employment";
-  if (key.includes("regulatory") || key.includes("compliance")) return "regulatory";
-  if (key.includes("ip")) return "ip";
-  if (key.includes("m&a") || key.includes("ma") || key.includes("acquisition")) return "ma_transaction";
+  if (key.includes("employment") || key.includes("labour")) return "labour_employment";
+  if (key.includes("regulatory") || key.includes("compliance")) return "regulatory_compliance";
+  if (key.includes("ip")) return "intellectual_property";
+  if (key.includes("m&a") || key.includes("ma") || key.includes("acquisition")) return "merger_acquisition";
   return "commercial_contract";
 }
 

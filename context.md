@@ -126,6 +126,37 @@
 ## Session 28 Verification
 - `npm run test:e2e:ci --workspace=@evidentis/web` ✅ (6 passed)
 
+## Latest Fixes (Session 29)
+- Completed full pass on current `issue.md` backlog and closed remaining implementation/security gaps:
+  - Added India operations API surfaces in `apps/api/src/routes.ts`:
+    - `/auth/otp/send`, `/auth/otp/verify` and `/api/auth/otp/*` aliases
+    - `/api/bare-acts`, `/api/bare-acts/:slug`
+    - `/api/court-cases` (GET/POST), `/api/hearings`
+    - `/api/invoices` (GET/POST)
+    - `/api/dpdp/requests`, `/api/dpdp/consent`
+    - `/api/research/indiankanoon`
+  - Hardened AI-service network boundary:
+    - Added optional `AI_SERVICE_INTERNAL_KEY` enforcement middleware in `apps/ai-service/main.py`.
+    - Added configurable per-IP/per-route request throttling (`RATE_LIMIT_REQUESTS_PER_MINUTE`).
+    - Updated API and worker outbound AI calls to forward `X-Internal-Key`.
+  - Improved research robustness and explainability in `apps/ai-service/routers/research.py`:
+    - Replaced hardcoded confidence with evidence-derived scoring.
+    - Expanded citation/chunk metadata model (source type/url, court, year, verification, language).
+    - Added explicit compatibility `/research/stream` route.
+    - Converted direct DB retrieval stub from silent empty return to explicit warning + clear not-implemented path.
+  - Expanded OCR runtime language-pack coverage in `apps/ai-service/Dockerfile` by installing major Indic Tesseract packs in both builder and runner stages.
+  - Added Indic translation tokenizer dependencies in `apps/ai-service/requirements.txt` (`sentencepiece`, `sacremoses`).
+  - Updated docs to match implemented behavior:
+    - `README.md` (research confidence/citations, OTP auth, India ops endpoints, AI service gatekeeping).
+    - `PRODUCT_DOCUMENTATION.md` (OCR pack details, OTP API, IndiaKanoon fallback/proxy, AI internal security, India ops endpoints).
+    - `issue.md` (Session 29 resolved-status ledger + verification snapshot).
+
+## Session 29 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run build --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `pytest apps/ai-service/tests -q` ✅ (105 passed)
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.

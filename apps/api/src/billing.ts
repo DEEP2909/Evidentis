@@ -40,15 +40,15 @@ export const PLANS = {
   },
   professional: {
     name: 'Professional',
-    priceInPaise: 1499900,
+    priceInPaise: 2499900,
     gstRatePercent: 18,
     features: {
-      maxAdvocates: 15,
-      maxDocumentsPerMonth: 500,
-      maxResearchQueriesPerMonth: 1000,
-      aiTier: 'hybrid',
-      languages: PRIMARY_LANGUAGE_CODES,
-      support: 'priority',
+      maxAdvocates: 30,
+      maxDocumentsPerMonth: 2000,
+      maxResearchQueriesPerMonth: 5000,
+      aiTier: 'premium_api',
+      languages: SUPPORTED_LANGUAGE_CODES,
+      support: 'dedicated',
     },
   },
   enterprise: {
@@ -94,8 +94,6 @@ export interface BillingStatus {
     researchLimit: number | null;
     advocatesActive: number;
     advocatesLimit: number | null;
-    attorneysActive: number;
-    attorneysLimit: number | null;
   };
 }
 
@@ -172,13 +170,13 @@ export async function createCheckoutSession(
     },
     callback_url: successUrl,
     callback_method: 'get',
-    notes: {
-      tenantId,
-      plan,
-      subtotalPaise: String(totals.subtotalPaise),
-      gstAmountPaise: String(totals.gstAmountPaise),
-      sacCode: '9982',
-    },
+      notes: {
+        tenantId,
+        plan,
+        subtotalPaise: String(totals.subtotalPaise),
+        gstAmountPaise: String(totals.gstAmountPaise),
+        sacCode: '998212',
+      },
   });
 
   await pool.query(
@@ -247,8 +245,6 @@ export async function getBillingStatus(tenantId: string): Promise<BillingStatus>
       researchLimit: quota.monthly_research_limit,
       advocatesActive: Number.parseInt(advocatesResult.rows[0]?.count ?? '0', 10),
       advocatesLimit: planConfig.features.maxAdvocates,
-      attorneysActive: Number.parseInt(advocatesResult.rows[0]?.count ?? '0', 10),
-      attorneysLimit: planConfig.features.maxAdvocates,
     },
   };
 }

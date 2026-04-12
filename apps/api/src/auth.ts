@@ -13,7 +13,7 @@ import { logger } from './logger.js';
 // ============================================================
 
 export interface TokenPayload extends JWTPayload {
-  sub: string; // Attorney ID
+  sub: string; // Advocate ID
   tenantId: string;
   email: string;
   role: string;
@@ -179,7 +179,7 @@ export async function createRefreshToken(
       sub: payloadOrSub,
       tenantId: 'legacy-tenant',
       email: 'legacy@example.com',
-      role: 'attorney',
+      role: 'advocate',
       tokenId: crypto.randomUUID(),
     });
   }

@@ -4,8 +4,14 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { randomInt } from 'node:crypto';
 import { z } from 'zod';
-import { SUPPORTED_LANGUAGE_CODES } from '@evidentis/shared';
+import {
+  ADVOCATE_ROLES,
+  INDIAN_STATE_CODES,
+  MATTER_TYPES,
+  SUPPORTED_LANGUAGE_CODES,
+} from '@evidentis/shared';
 import {
   verifyAccessToken,
   generateAccessToken,
@@ -26,13 +32,13 @@ import { query, queryOne, withTransaction } from './database.js';
 import { config, rateLimits } from './config.js';
 import { sendPasswordResetEmail, sendInvitationEmail } from './email.js';
 import { logger } from './logger.js';
-import { getCachedEmbedding, cacheEmbedding } from './embedding-cache.js';
+import { getCachedEmbedding, cacheEmbedding, assertEmbeddingDimension } from './embedding-cache.js';
 import { startDocumentPipeline, getPipelineStatus } from './orchestrator.js';
 import { buildAIContext, formatContextForPrompt } from './ai-context.js';
 import {
   enforceDocumentQuota,
   enforceResearchQuota,
-  enforceAttorneyLimit,
+  enforceAdvocateLimit,
   enforceActiveSubscription,
   incrementDocumentUsage,
   incrementResearchUsage,
@@ -44,7 +50,11 @@ import {
 
 interface AuthenticatedRequest extends FastifyRequest {
   tenantId: string;
+  advocateId: string;
+  advocateRole: string;
+  /** @deprecated Use advocateId */
   attorneyId: string;
+  /** @deprecated Use advocateRole */
   attorneyRole: string;
   tokenPayload: AccessTokenPayload;
 }
@@ -54,6 +64,8 @@ interface ResearchChunkRow {
   document_id: string;
   text_content: string;
   chunk_index: number;
+  page_from: number | null;
+  page_to: number | null;
   document_title: string;
   relevance_score: number;
 }
@@ -79,6 +91,8 @@ async function authenticateRequest(
     const payload = await verifyAccessToken(token);
 
     (request as AuthenticatedRequest).tenantId = payload.tenantId;
+    (request as AuthenticatedRequest).advocateId = payload.sub;
+    (request as AuthenticatedRequest).advocateRole = payload.role;
     (request as AuthenticatedRequest).attorneyId = payload.sub;
     (request as AuthenticatedRequest).attorneyRole = payload.role;
     (request as AuthenticatedRequest).tokenPayload = payload;
@@ -93,13 +107,89 @@ async function authenticateRequest(
 function requireRoles(...roles: string[]) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const authReq = request as AuthenticatedRequest;
-    if (!roles.includes(authReq.attorneyRole)) {
+    if (!roles.includes(authReq.advocateRole)) {
       return reply.status(403).send({
         success: false,
         error: { code: 'FORBIDDEN', message: 'Insufficient permissions' },
       });
     }
   };
+}
+
+function getAiServiceHeaders(base: Record<string, string> = {}): Record<string, string> {
+  const headers = { ...base };
+  if (config.AI_SERVICE_INTERNAL_KEY) {
+    headers['X-Internal-Key'] = config.AI_SERVICE_INTERNAL_KEY;
+  }
+  return headers;
+}
+
+function normalizeIndianPhoneNumber(value: string): string | null {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 10) {
+    return `+91${digits}`;
+  }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return `+91${digits.slice(1)}`;
+  }
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return `+${digits}`;
+  }
+  if (digits.length === 14 && digits.startsWith('0091')) {
+    return `+${digits.slice(2)}`;
+  }
+  return null;
+}
+
+function getPhoneLookupDigits(normalizedPhone: string): string[] {
+  const digits = normalizedPhone.replace(/\D/g, '');
+  const localNumber = digits.startsWith('91') ? digits.slice(2) : digits;
+  return Array.from(new Set([digits, localNumber]));
+}
+
+function maskPhoneNumber(normalizedPhone: string): string {
+  if (normalizedPhone.length <= 4) return normalizedPhone;
+  return `${normalizedPhone.slice(0, 3)}******${normalizedPhone.slice(-2)}`;
+}
+
+function generateOtpCode(): string {
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
+async function sendOtpViaMsg91(normalizedPhone: string, otpCode: string): Promise<'sent' | 'logged'> {
+  if (!config.MSG91_AUTH_KEY) {
+    logger.info({ phone: maskPhoneNumber(normalizedPhone), otpCode }, 'MSG91 auth key not configured; OTP logged');
+    return 'logged';
+  }
+
+  const response = await fetch(`${config.MSG91_BASE_URL}/v5/otp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      authkey: config.MSG91_AUTH_KEY,
+    },
+    body: JSON.stringify({
+      mobile: normalizedPhone.replace(/\D/g, ''),
+      otp: otpCode,
+      sender: config.MSG91_SENDER_ID,
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '');
+    throw new Error(`MSG91 request failed (${response.status}): ${errorBody || 'unknown error'}`);
+  }
+
+  return 'sent';
+}
+
+function toActSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
 }
 
 // ============================================================
@@ -135,17 +225,47 @@ const resetPasswordSchema = z
   });
 
 const supportedLanguageSchema = z.enum(SUPPORTED_LANGUAGE_CODES);
+const indianStateSchema = z.enum(INDIAN_STATE_CODES);
+
+function normalizeMatterType(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const key = value.trim().toLowerCase();
+
+  if (MATTER_TYPES.includes(key as (typeof MATTER_TYPES)[number])) {
+    return key;
+  }
+  if (key === 'ma_transaction' || key.includes('m&a') || key.includes('merger') || key.includes('acquisition')) {
+    return 'merger_acquisition';
+  }
+  if (key === 'ip' || key.includes('intellectual property')) {
+    return 'intellectual_property';
+  }
+  if (key === 'employment') {
+    return 'labour_employment';
+  }
+  if (key === 'regulatory') {
+    return 'regulatory_compliance';
+  }
+  if (key === 'commercial') {
+    return 'commercial_contract';
+  }
+  return key;
+}
 
 const matterCreateSchema = z.object({
   matterCode: z.string().min(1),
   matterName: z.string().min(1),
-  matterType: z.enum(['ma_transaction', 'commercial_contract', 'real_estate', 'litigation', 'ip', 'employment', 'regulatory']),
+  matterType: z.preprocess(normalizeMatterType, z.enum(MATTER_TYPES)),
   clientName: z.string().min(1),
   counterpartyName: z.string().optional(),
-  governingLawState: z.string().length(2).optional(),
+  governingLawState: indianStateSchema.optional(),
   priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+  leadAdvocateId: z.string().uuid().optional(),
+  /** @deprecated Use leadAdvocateId */
   leadAttorneyId: z.string().uuid().optional(),
   targetCloseDate: z.string().optional(),
+  dealValuePaise: z.number().int().positive().optional(),
+  /** @deprecated Use dealValuePaise */
   dealValueCents: z.number().int().positive().optional(),
   notes: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -157,8 +277,23 @@ const matterUpdateSchema = matterCreateSchema.partial().extend({
 
 const inviteSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['attorney', 'admin', 'partner', 'paralegal', 'senior_advocate', 'junior_advocate', 'client']).optional(),
+  role: z
+    .preprocess((value) => (value === 'attorney' ? 'advocate' : value), z.enum(ADVOCATE_ROLES))
+    .optional(),
   displayName: z.string().optional(),
+});
+
+const otpSendSchema = z.object({
+  phoneNumber: z.string().min(10).max(20),
+  purpose: z.enum(['login', 'mfa']).default('login'),
+  tenantSlug: z.string().min(1).max(120).optional(),
+});
+
+const otpVerifySchema = z.object({
+  phoneNumber: z.string().min(10).max(20),
+  otp: z.string().length(6),
+  purpose: z.enum(['login', 'mfa']).default('login'),
+  tenantSlug: z.string().min(1).max(120).optional(),
 });
 
 // ============================================================
@@ -363,7 +498,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     await query(
       `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, ip_address, user_agent)
        VALUES ($1, $2, 'auth.logout', $3, $4)`,
-      [authReq.tenantId, authReq.attorneyId, request.ip, request.headers['user-agent']]
+      [authReq.tenantId, authReq.advocateId, request.ip, request.headers['user-agent']]
     );
 
     reply.clearCookie('refreshToken', { path: '/auth/refresh' });
@@ -487,6 +622,261 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   // POST /auth/forgot-password
+  const sendOtpHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = otpSendSchema.parse(request.body);
+    const normalizedPhone = normalizeIndianPhoneNumber(body.phoneNumber);
+    if (!normalizedPhone) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_PHONE', message: 'Enter a valid Indian mobile number' },
+      });
+    }
+
+    const phoneVariants = getPhoneLookupDigits(normalizedPhone);
+    const params: unknown[] = [phoneVariants];
+    let tenantFilter = '';
+    if (body.tenantSlug) {
+      tenantFilter = ' AND t.slug = $2';
+      params.push(body.tenantSlug);
+    }
+
+    const attorney = await queryOne<{
+      id: string;
+      tenant_id: string;
+      email: string;
+      display_name: string;
+      role: string;
+      status: string;
+    }>(
+      `SELECT a.id, a.tenant_id, a.email, a.display_name, a.role, a.status
+       FROM attorneys a
+       JOIN tenants t ON t.id = a.tenant_id
+       WHERE regexp_replace(COALESCE(a.phone_number, ''), '[^0-9]', '', 'g') = ANY($1::text[])${tenantFilter}
+       ORDER BY a.created_at DESC
+       LIMIT 1`,
+      params
+    );
+
+    // Return generic success for unknown/suspended accounts to prevent user enumeration.
+    if (!attorney || attorney.status !== 'active') {
+      return {
+        success: true,
+        data: {
+          sent: true,
+          phoneMasked: maskPhoneNumber(normalizedPhone),
+          expiresInMinutes: config.OTP_EXPIRY_MINUTES,
+        },
+      };
+    }
+
+    const otpCode = generateOtpCode();
+    const otpHash = hashToken(`${normalizedPhone}:${body.purpose}:${otpCode}`);
+    const expiresAt = new Date(Date.now() + config.OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    await withTransaction(async (tx) => {
+      await tx.query(
+        `UPDATE advocate_otps
+         SET consumed_at = NOW()
+         WHERE phone_number = $1 AND purpose = $2 AND consumed_at IS NULL`,
+        [normalizedPhone, body.purpose]
+      );
+
+      await tx.query(
+        `INSERT INTO advocate_otps (tenant_id, advocate_id, phone_number, purpose, otp_hash, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [attorney.tenant_id, attorney.id, normalizedPhone, body.purpose, otpHash, expiresAt]
+      );
+
+      await tx.query(`UPDATE attorneys SET otp_last_sent_at = NOW() WHERE id = $1`, [attorney.id]);
+    });
+
+    let deliveryMode: 'sent' | 'logged' = 'logged';
+    try {
+      deliveryMode = await sendOtpViaMsg91(normalizedPhone, otpCode);
+    } catch (error) {
+      logger.error({ error, phone: maskPhoneNumber(normalizedPhone) }, 'Failed to send OTP via MSG91');
+      return reply.status(502).send({
+        success: false,
+        error: { code: 'OTP_DELIVERY_FAILED', message: 'Unable to deliver OTP right now' },
+      });
+    }
+
+    return {
+      success: true,
+      data: {
+        sent: true,
+        phoneMasked: maskPhoneNumber(normalizedPhone),
+        expiresInMinutes: config.OTP_EXPIRY_MINUTES,
+        deliveryMode,
+        ...(deliveryMode === 'logged' && config.NODE_ENV !== 'production' ? { otpPreview: otpCode } : {}),
+      },
+    };
+  };
+
+  fastify.post('/auth/otp/send', {
+    config: {
+      rateLimit: {
+        max: rateLimits.otp.requests,
+        timeWindow: rateLimits.otp.windowMs,
+      },
+    },
+  }, sendOtpHandler);
+  fastify.post('/api/auth/otp/send', {
+    config: {
+      rateLimit: {
+        max: rateLimits.otp.requests,
+        timeWindow: rateLimits.otp.windowMs,
+      },
+    },
+  }, sendOtpHandler);
+
+  const verifyOtpHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = otpVerifySchema.parse(request.body);
+    const normalizedPhone = normalizeIndianPhoneNumber(body.phoneNumber);
+    if (!normalizedPhone) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_PHONE', message: 'Enter a valid Indian mobile number' },
+      });
+    }
+
+    const params: unknown[] = [normalizedPhone, body.purpose];
+    let tenantFilter = '';
+    if (body.tenantSlug) {
+      tenantFilter = ' AND t.slug = $3';
+      params.push(body.tenantSlug);
+    }
+
+    const otpRecord = await queryOne<{
+      id: string;
+      tenant_id: string;
+      advocate_id: string;
+      otp_hash: string;
+      expires_at: Date;
+      email: string;
+      display_name: string;
+      role: string;
+      status: string;
+    }>(
+      `SELECT o.id, o.tenant_id, o.advocate_id, o.otp_hash, o.expires_at,
+              a.email, a.display_name, a.role, a.status
+       FROM advocate_otps o
+       JOIN attorneys a ON a.id = o.advocate_id
+       JOIN tenants t ON t.id = o.tenant_id
+       WHERE o.phone_number = $1
+         AND o.purpose = $2
+         AND o.consumed_at IS NULL${tenantFilter}
+       ORDER BY o.created_at DESC
+       LIMIT 1`,
+      params
+    );
+
+    if (!otpRecord) {
+      return reply.status(401).send({
+        success: false,
+        error: { code: 'INVALID_OTP', message: 'Invalid or expired OTP' },
+      });
+    }
+
+    if (new Date(otpRecord.expires_at).getTime() < Date.now()) {
+      await query(`UPDATE advocate_otps SET consumed_at = NOW() WHERE id = $1`, [otpRecord.id]);
+      return reply.status(401).send({
+        success: false,
+        error: { code: 'INVALID_OTP', message: 'Invalid or expired OTP' },
+      });
+    }
+
+    const expectedHash = hashToken(`${normalizedPhone}:${body.purpose}:${body.otp}`);
+    if (expectedHash !== otpRecord.otp_hash || otpRecord.status !== 'active') {
+      return reply.status(401).send({
+        success: false,
+        error: { code: 'INVALID_OTP', message: 'Invalid or expired OTP' },
+      });
+    }
+
+    const tokenId = generateSecureToken(16);
+    const accessToken = await generateAccessToken({
+      sub: otpRecord.advocate_id,
+      tenantId: otpRecord.tenant_id,
+      email: otpRecord.email,
+      role: otpRecord.role,
+    });
+    const refreshToken = await generateRefreshToken({
+      sub: otpRecord.advocate_id,
+      tenantId: otpRecord.tenant_id,
+      email: otpRecord.email,
+      role: otpRecord.role,
+      tokenId,
+    });
+
+    await withTransaction(async (tx) => {
+      await tx.query(`UPDATE advocate_otps SET consumed_at = NOW() WHERE id = $1`, [otpRecord.id]);
+      await tx.query(
+        `INSERT INTO refresh_tokens (attorney_id, tenant_id, token_hash, user_agent, ip_address)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [otpRecord.advocate_id, otpRecord.tenant_id, hashToken(refreshToken), request.headers['user-agent'], request.ip]
+      );
+      await tx.query(
+        `UPDATE attorneys
+         SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW()
+         WHERE id = $1`,
+        [otpRecord.advocate_id]
+      );
+      await tx.query(
+        `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, ip_address, user_agent)
+         VALUES ($1, $2, 'auth.login.otp', $3, $4)`,
+        [otpRecord.tenant_id, otpRecord.advocate_id, request.ip, request.headers['user-agent']]
+      );
+    });
+
+    reply.setCookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: config.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/auth/refresh',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+
+    return {
+      success: true,
+      data: {
+        accessToken,
+        attorney: {
+          id: otpRecord.advocate_id,
+          tenantId: otpRecord.tenant_id,
+          email: otpRecord.email,
+          displayName: otpRecord.display_name,
+          role: otpRecord.role,
+        },
+        advocate: {
+          id: otpRecord.advocate_id,
+          tenantId: otpRecord.tenant_id,
+          email: otpRecord.email,
+          displayName: otpRecord.display_name,
+          role: otpRecord.role,
+        },
+      },
+    };
+  };
+
+  fastify.post('/auth/otp/verify', {
+    config: {
+      rateLimit: {
+        max: rateLimits.otp.requests,
+        timeWindow: rateLimits.otp.windowMs,
+      },
+    },
+  }, verifyOtpHandler);
+  fastify.post('/api/auth/otp/verify', {
+    config: {
+      rateLimit: {
+        max: rateLimits.otp.requests,
+        timeWindow: rateLimits.otp.windowMs,
+      },
+    },
+  }, verifyOtpHandler);
+
+  // POST /auth/forgot-password
   fastify.post('/auth/forgot-password', async (request, reply) => {
     const { email } = forgotPasswordSchema.parse(request.body);
 
@@ -602,7 +992,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       `SELECT id, email, display_name, role, practice_group, bar_number, bar_state, 
               mfa_enabled, last_login_at
        FROM attorneys WHERE id = $1 AND tenant_id = $2`,
-      [authReq.attorneyId, authReq.tenantId]
+      [authReq.advocateId, authReq.tenantId]
     );
 
     const tenant = await queryOne<{
@@ -636,7 +1026,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     await query(
       `UPDATE attorneys SET mfa_secret = $1 WHERE id = $2 AND tenant_id = $3`,
-      [secret, authReq.attorneyId, authReq.tenantId]
+      [secret, authReq.advocateId, authReq.tenantId]
     );
 
     return {
@@ -731,12 +1121,14 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/matters', { preHandler: authenticateRequest }, async (request, reply) => {
     const authReq = request as AuthenticatedRequest;
     const body = matterCreateSchema.parse(request.body);
+    const leadAdvocateId = body.leadAdvocateId ?? body.leadAttorneyId ?? null;
+    const dealValuePaise = body.dealValuePaise ?? body.dealValueCents ?? null;
 
     const matter = await queryOne<{ id: string }>(
       `INSERT INTO matters (tenant_id, matter_code, matter_name, matter_type, client_name,
-                            counterparty_name, governing_law_state, priority, lead_attorney_id,
-                            target_close_date, deal_value_cents, notes, tags, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                            counterparty_name, governing_law_state, priority, lead_advocate_id, lead_attorney_id,
+                            target_close_date, deal_value_paise, deal_value_cents, notes, tags, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $11, $11, $12, $13, $14)
        RETURNING id`,
       [
         authReq.tenantId,
@@ -747,12 +1139,12 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         body.counterpartyName || null,
         body.governingLawState || null,
         body.priority || 'normal',
-        body.leadAttorneyId || null,
+        leadAdvocateId,
         body.targetCloseDate || null,
-        body.dealValueCents || null,
+        dealValuePaise,
         body.notes || null,
         body.tags || [],
-        authReq.attorneyId,
+        authReq.advocateId,
       ]
     );
 
@@ -760,7 +1152,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     await query(
       `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, object_type, object_id, metadata)
        VALUES ($1, $2, 'matter.created', 'matter', $3, $4)`,
-      [authReq.tenantId, authReq.attorneyId, matter?.id, JSON.stringify(body)]
+      [authReq.tenantId, authReq.advocateId, matter?.id, JSON.stringify(body)]
     );
 
     return reply.status(201).send({
@@ -785,8 +1177,10 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       status: string;
       priority: string;
       health_score: number;
+      lead_advocate_id: string | null;
       lead_attorney_id: string | null;
       target_close_date: Date | null;
+      deal_value_paise: number | null;
       deal_value_cents: number | null;
       notes: string | null;
       tags: string[];
@@ -794,8 +1188,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       updated_at: Date;
     }>(
       `SELECT id, matter_code, matter_name, matter_type, client_name, counterparty_name,
-              governing_law_state, status, priority, health_score, lead_attorney_id,
-              target_close_date, deal_value_cents, notes, tags, created_at, updated_at
+              governing_law_state, status, priority, health_score, lead_advocate_id, lead_attorney_id,
+              target_close_date, deal_value_paise, deal_value_cents, notes, tags, created_at, updated_at
        FROM matters WHERE id = $1 AND tenant_id = $2`,
       [id, authReq.tenantId]
     );
@@ -815,6 +1209,17 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     const authReq = request as AuthenticatedRequest;
     const { id } = request.params as { id: string };
     const body = matterUpdateSchema.parse(request.body);
+    const normalizedBody = { ...body } as Record<string, unknown>;
+    if (body.leadAdvocateId !== undefined || body.leadAttorneyId !== undefined) {
+      const resolvedLead = body.leadAdvocateId ?? body.leadAttorneyId ?? null;
+      normalizedBody.leadAdvocateId = resolvedLead;
+      normalizedBody.leadAttorneyId = resolvedLead;
+    }
+    if (body.dealValuePaise !== undefined || body.dealValueCents !== undefined) {
+      const resolvedValue = body.dealValuePaise ?? body.dealValueCents ?? null;
+      normalizedBody.dealValuePaise = resolvedValue;
+      normalizedBody.dealValueCents = resolvedValue;
+    }
 
     // Check matter exists and belongs to tenant
     const existing = await queryOne<{ id: string }>(
@@ -843,17 +1248,19 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       governingLawState: 'governing_law_state',
       status: 'status',
       priority: 'priority',
+      leadAdvocateId: 'lead_advocate_id',
       leadAttorneyId: 'lead_attorney_id',
       targetCloseDate: 'target_close_date',
+      dealValuePaise: 'deal_value_paise',
       dealValueCents: 'deal_value_cents',
       notes: 'notes',
       tags: 'tags',
     };
 
     for (const [key, column] of Object.entries(fieldMap)) {
-      if (body[key as keyof typeof body] !== undefined) {
+      if (normalizedBody[key] !== undefined) {
         updates.push(`${column} = $${paramIndex}`);
-        values.push(body[key as keyof typeof body]);
+        values.push(normalizedBody[key]);
         paramIndex++;
       }
     }
@@ -869,7 +1276,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     await query(
       `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, object_type, object_id, metadata)
        VALUES ($1, $2, 'matter.updated', 'matter', $3, $4)`,
-      [authReq.tenantId, authReq.attorneyId, id, JSON.stringify(body)]
+      [authReq.tenantId, authReq.advocateId, id, JSON.stringify(normalizedBody)]
     );
 
     return { success: true };
@@ -948,7 +1355,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       `INSERT INTO documents (tenant_id, matter_id, source_name, mime_type, doc_type, sha256, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [authReq.tenantId, matterId, filename, data.mimetype, docType, sha256Hash, authReq.attorneyId]
+      [authReq.tenantId, matterId, filename, data.mimetype, docType, sha256Hash, authReq.advocateId]
     );
 
     if (!document) {
@@ -1326,7 +1733,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
            resolved_by = CASE WHEN $1 = ANY($3::text[]) THEN $4 ELSE NULL END,
            resolved_at = CASE WHEN $1 = ANY($3::text[]) THEN NOW() ELSE NULL END
        WHERE id = $5 AND matter_id = $6 AND tenant_id = $7`,
-      [mappedStatus, body.notes || null, resolvedStatuses, authReq.attorneyId, flagId, id, authReq.tenantId]
+      [mappedStatus, body.notes || null, resolvedStatuses, authReq.advocateId, flagId, id, authReq.tenantId]
     );
 
     return { success: true, data: { id: flagId, status: mappedStatus } };
@@ -1339,7 +1746,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // POST /api/admin/attorneys (invite)
   fastify.post(
     '/api/admin/attorneys',
-    { preHandler: [authenticateRequest, requireRoles('admin', 'partner'), enforceAttorneyLimit] },
+    { preHandler: [authenticateRequest, requireRoles('admin', 'partner'), enforceAdvocateLimit] },
     async (request, reply) => {
       const authReq = request as AuthenticatedRequest;
       const body = inviteSchema.parse(request.body);
@@ -1364,7 +1771,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await query(
         `INSERT INTO invitations (tenant_id, email, role, token_hash, invited_by)
          VALUES ($1, $2, $3, $4, $5)`,
-        [authReq.tenantId, body.email.toLowerCase(), body.role || 'junior_advocate', tokenHash, authReq.attorneyId]
+        [authReq.tenantId, body.email.toLowerCase(), body.role || 'junior_advocate', tokenHash, authReq.advocateId]
       );
 
       // Get tenant and inviter info
@@ -1374,7 +1781,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       );
       const inviter = await queryOne<{ display_name: string }>(
         `SELECT display_name FROM attorneys WHERE id = $1`,
-        [authReq.attorneyId]
+        [authReq.advocateId]
       );
 
       // Send invitation email
@@ -1459,13 +1866,14 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       // Try cache first
       const cached = await getCachedEmbedding(cacheKey, 'sentence-transformers/LaBSE');
       if (cached) {
+        assertEmbeddingDimension(cached, 'research query cache');
         embeddings = [cached];
         logger.debug('Using cached embedding for research query');
       } else {
         // Fetch from AI service
         const embedRes = await fetch(`${config.AI_SERVICE_URL}/embed`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ texts: [question] }),
           signal: AbortSignal.timeout(config.AI_SERVICE_TIMEOUT_MS),
         });
@@ -1477,6 +1885,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         if (!result.embeddings || result.embeddings.length === 0) {
           throw new Error('No embeddings returned from AI service');
         }
+        assertEmbeddingDimension(result.embeddings[0], 'research query ai-service response');
         embeddings = result.embeddings;
         
         // Cache for future use
@@ -1489,14 +1898,14 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 2. Search for relevant chunks
       const searchQuery = matterId
-        ? `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, 
+        ? `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
                   d.source_name as document_title,
                   1 - (dc.embedding <=> $1::vector) as relevance_score
            FROM document_chunks dc
            JOIN documents d ON dc.document_id = d.id
            WHERE d.tenant_id = $2 AND d.matter_id = $3
            ORDER BY dc.embedding <=> $1::vector LIMIT 20`
-        : `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index,
+        : `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
                   d.source_name as document_title,
                   1 - (dc.embedding <=> $1::vector) as relevance_score
            FROM document_chunks dc
@@ -1529,10 +1938,21 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       usageStarted = true;
       const aiResponse = await fetch(`${config.AI_SERVICE_URL}/research`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ 
           query: question,
-          chunks: chunks.rows.map((c: any) => c.text_content),
+          chunks: chunks.rows.map((c, index) => ({
+            chunk_id: c.id,
+            document_id: c.document_id,
+            document_name: c.document_title,
+            text: c.text_content,
+            page_number: c.page_from ?? c.page_to ?? null,
+            relevance_score: Number(c.relevance_score) || 0,
+            source_type: 'tenant_document',
+            source_verified: true,
+            rank: index + 1,
+            language: responseLanguage,
+          })),
           context: contextPrompt || undefined,
           language: responseLanguage,
           stream: false,
@@ -1552,7 +1972,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         [
           authReq.tenantId, 
           matterId || null, 
-          authReq.attorneyId, 
+          authReq.advocateId, 
           question, 
           result.answer, 
           JSON.stringify(result.citations || []),
@@ -1565,10 +1985,12 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         data: {
           answer: result.answer,
           citations: result.citations || [],
-          sources: chunks.rows.map((c: any) => ({
+          sources: chunks.rows.map((c) => ({
             documentId: c.document_id,
             title: c.document_title,
             relevance: c.relevance_score,
+            pageFrom: c.page_from,
+            pageTo: c.page_to,
             snippet: c.text_content.slice(0, 200)
           })),
            confidence: result.confidence || 0.85
@@ -1623,18 +2045,20 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       
       const cached = await getCachedEmbedding(cacheKey, 'sentence-transformers/LaBSE');
       if (cached) {
+        assertEmbeddingDimension(cached, 'research stream cache');
         embeddings = [cached];
         logger.debug('Using cached embedding for research stream');
       } else {
         const embedRes = await fetch(`${config.AI_SERVICE_URL}/embed`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ texts: [question] }),
         });
         const result = await embedRes.json() as { embeddings?: number[][] };
         if (!result.embeddings || result.embeddings.length === 0) {
           throw new Error('No embeddings returned from AI service');
         }
+        assertEmbeddingDimension(result.embeddings[0], 'research stream ai-service response');
         embeddings = result.embeddings;
         await cacheEmbedding(cacheKey, 'sentence-transformers/LaBSE', embeddings[0]);
       }
@@ -1645,14 +2069,14 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 2. Search for relevant chunks
       const searchQuery = matterId
-        ? `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index,
+        ? `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
                   d.source_name as document_title,
                   1 - (dc.embedding <=> $1::vector) as relevance_score
            FROM document_chunks dc
            JOIN documents d ON dc.document_id = d.id
            WHERE d.tenant_id = $2 AND d.matter_id = $3
            ORDER BY dc.embedding <=> $1::vector LIMIT 20`
-        : `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index,
+        : `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
                   d.source_name as document_title,
                   1 - (dc.embedding <=> $1::vector) as relevance_score
            FROM document_chunks dc
@@ -1669,10 +2093,12 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       // 3. Send sources immediately
       sendEvent({ 
         type: 'sources', 
-        sources: chunks.rows.map((c: any) => ({ 
+        sources: chunks.rows.map((c) => ({ 
           documentId: c.document_id, 
           title: c.document_title, 
           relevance: c.relevance_score, 
+          pageFrom: c.page_from,
+          pageTo: c.page_to,
           snippet: c.text_content.slice(0, 200) 
         })) 
       });
@@ -1683,10 +2109,21 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       // 4. Stream synthesis from AI service (SSE)
       const aiResponse = await fetch(`${config.AI_SERVICE_URL}/research`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ 
           query: question, 
-          chunks: chunks.rows.map((c: any) => c.text_content),
+          chunks: chunks.rows.map((c, index) => ({
+            chunk_id: c.id,
+            document_id: c.document_id,
+            document_name: c.document_title,
+            text: c.text_content,
+            page_number: c.page_from ?? c.page_to ?? null,
+            relevance_score: Number(c.relevance_score) || 0,
+            source_type: 'tenant_document',
+            source_verified: true,
+            rank: index + 1,
+            language: responseLanguage,
+          })),
           language: responseLanguage,
           stream: true 
         }),
@@ -1704,6 +2141,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       const decoder = new TextDecoder();
       let fullAnswer = '';
       let buffer = '';
+      let citationsPayload: unknown[] = [];
 
       const processEvent = (rawEvent: string) => {
         const dataPayload = rawEvent
@@ -1741,6 +2179,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         if (Array.isArray(event.citations) && event.citations.length > 0) {
+          citationsPayload = event.citations;
           sendEvent({ type: 'citations', citations: event.citations });
         }
       };
@@ -1766,7 +2205,15 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await query(
         `INSERT INTO research_history (tenant_id, matter_id, attorney_id, question, answer, citations, sources_used)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [authReq.tenantId, matterId || null, authReq.attorneyId, question, fullAnswer, '[]', chunks.rows.length]
+        [
+          authReq.tenantId,
+          matterId || null,
+          authReq.advocateId,
+          question,
+          fullAnswer,
+          JSON.stringify(citationsPayload),
+          chunks.rows.length,
+        ]
       );
 
       reply.raw.write('data: [DONE]\n\n');
@@ -1807,6 +2254,597 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     
     const rows = await query(queryStr, params);
     return { success: true, data: rows.rows };
+  });
+
+  // GET /api/research/indiankanoon - Proxy/fallback legal case search
+  fastify.get('/api/research/indiankanoon', { preHandler: authenticateRequest }, async (request) => {
+    const authReq = request as AuthenticatedRequest;
+    const { q, limit = '20' } = z.object({
+      q: z.string().min(2),
+      limit: z.string().optional(),
+    }).parse(request.query);
+
+    const limitNum = Math.min(Math.max(Number.parseInt(limit || '20', 10) || 20, 1), 50);
+    const likeQuery = `%${q.trim()}%`;
+
+    const localResults = await query<{
+      id: string;
+      citation_number: string;
+      court: string;
+      judgment_date: string | null;
+      summary: string;
+      full_text_url: string | null;
+      language: string;
+    }>(
+      `SELECT id, citation_number, court, judgment_date, summary, full_text_url, language
+       FROM case_citations
+       WHERE tenant_id = $1
+         AND (citation_number ILIKE $2 OR summary ILIKE $2 OR court ILIKE $2)
+       ORDER BY judgment_date DESC NULLS LAST
+       LIMIT $3`,
+      [authReq.tenantId, likeQuery, limitNum]
+    );
+
+    if (config.INDIANKANOON_API_KEY) {
+      try {
+        const upstreamUrl = new URL('/search/', config.INDIANKANOON_BASE_URL);
+        upstreamUrl.searchParams.set('formInput', q.trim());
+        upstreamUrl.searchParams.set('pagenum', '0');
+
+        const upstreamResponse = await fetch(upstreamUrl.toString(), {
+          headers: {
+            Authorization: `Token ${config.INDIANKANOON_API_KEY}`,
+            'X-Api-Key': config.INDIANKANOON_API_KEY,
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (upstreamResponse.ok) {
+          const upstreamData = await upstreamResponse.json();
+          return {
+            success: true,
+            data: {
+              source: 'indiankanoon',
+              query: q,
+              results: upstreamData,
+            },
+          };
+        }
+
+        logger.warn(
+          { status: upstreamResponse.status },
+          'IndiaKanoon upstream request failed, returning tenant-local fallback results'
+        );
+      } catch (error) {
+        logger.warn({ error }, 'IndiaKanoon upstream request threw, returning tenant-local fallback results');
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        source: 'local',
+        query: q,
+        results: localResults.rows,
+      },
+    };
+  });
+
+  // ============================================================
+  // INDIA LEGAL OPERATIONS ROUTES
+  // ============================================================
+
+  // GET /api/bare-acts
+  fastify.get('/api/bare-acts', { preHandler: authenticateRequest }, async (request) => {
+    const queryParams = z.object({
+      language: supportedLanguageSchema.optional(),
+      search: z.string().optional(),
+      limit: z.string().optional(),
+      offset: z.string().optional(),
+    }).parse(request.query);
+
+    const limitNum = Math.min(Math.max(Number.parseInt(queryParams.limit || '50', 10) || 50, 1), 200);
+    const offsetNum = Math.max(Number.parseInt(queryParams.offset || '0', 10) || 0, 0);
+    const params: unknown[] = [];
+    let whereClause = 'WHERE is_active = TRUE';
+
+    if (queryParams.language) {
+      params.push(queryParams.language);
+      whereClause += ` AND language = $${params.length}`;
+    }
+    if (queryParams.search) {
+      params.push(`%${queryParams.search.trim()}%`);
+      whereClause += ` AND (title ILIKE $${params.length} OR short_title ILIKE $${params.length})`;
+    }
+
+    params.push(limitNum, offsetNum);
+    const rows = await query<{
+      id: string;
+      title: string;
+      short_title: string;
+      year: number;
+      act_number: string | null;
+      jurisdiction: string;
+      language: string;
+      full_text_url: string | null;
+    }>(
+      `SELECT id, title, short_title, year, act_number, jurisdiction, language, full_text_url
+       FROM bare_acts
+       ${whereClause}
+       ORDER BY year DESC, title ASC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+
+    return {
+      success: true,
+      data: rows.rows.map((act) => ({
+        id: act.id,
+        slug: toActSlug(act.short_title || act.title),
+        title: act.title,
+        shortTitle: act.short_title,
+        year: act.year,
+        actNumber: act.act_number,
+        jurisdiction: act.jurisdiction,
+        language: act.language,
+        fullTextUrl: act.full_text_url,
+      })),
+    };
+  });
+
+  // GET /api/bare-acts/:slug
+  fastify.get('/api/bare-acts/:slug', { preHandler: authenticateRequest }, async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const normalizedSlug = slug.trim().toLowerCase();
+
+    const act = await queryOne<{
+      id: string;
+      title: string;
+      short_title: string;
+      year: number;
+      act_number: string | null;
+      jurisdiction: string;
+      language: string;
+      full_text_url: string | null;
+    }>(
+      `SELECT id, title, short_title, year, act_number, jurisdiction, language, full_text_url
+       FROM bare_acts
+       WHERE is_active = TRUE
+         AND (
+           id::text = $1
+           OR lower(regexp_replace(COALESCE(short_title, title), '[^a-z0-9]+', '-', 'g')) = $1
+         )
+       LIMIT 1`,
+      [normalizedSlug]
+    );
+
+    if (!act) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'ACT_NOT_FOUND', message: 'Bare act not found' },
+      });
+    }
+
+    const sections = await query<{
+      id: string;
+      section_number: string;
+      section_title: string | null;
+      section_text: string;
+      subsections: unknown;
+      cross_references: string[] | null;
+      tags: string[] | null;
+    }>(
+      `SELECT id, section_number, section_title, section_text, subsections, cross_references, tags
+       FROM bare_act_sections
+       WHERE act_id = $1
+       ORDER BY section_number ASC`,
+      [act.id]
+    );
+
+    return {
+      success: true,
+      data: {
+        id: act.id,
+        slug: toActSlug(act.short_title || act.title),
+        title: act.title,
+        shortTitle: act.short_title,
+        year: act.year,
+        actNumber: act.act_number,
+        jurisdiction: act.jurisdiction,
+        language: act.language,
+        fullTextUrl: act.full_text_url,
+        sections: sections.rows.map((section) => ({
+          id: section.id,
+          sectionNumber: section.section_number,
+          sectionTitle: section.section_title,
+          sectionText: section.section_text,
+          subsections: section.subsections ?? [],
+          crossReferences: section.cross_references ?? [],
+          tags: section.tags ?? [],
+        })),
+      },
+    };
+  });
+
+  // GET /api/court-cases
+  fastify.get('/api/court-cases', { preHandler: authenticateRequest }, async (request) => {
+    const authReq = request as AuthenticatedRequest;
+    const queryParams = z.object({
+      matterId: z.string().uuid().optional(),
+      status: z.string().optional(),
+      limit: z.string().optional(),
+    }).parse(request.query);
+
+    const limitNum = Math.min(Math.max(Number.parseInt(queryParams.limit || '50', 10) || 50, 1), 200);
+    const params: unknown[] = [authReq.tenantId];
+    let whereClause = 'WHERE tenant_id = $1';
+
+    if (queryParams.matterId) {
+      params.push(queryParams.matterId);
+      whereClause += ` AND matter_id = $${params.length}`;
+    }
+    if (queryParams.status) {
+      params.push(queryParams.status);
+      whereClause += ` AND current_status = $${params.length}`;
+    }
+
+    params.push(limitNum);
+
+    const rows = await query<{
+      id: string;
+      matter_id: string | null;
+      cnr_number: string;
+      court_name: string;
+      court_complex: string | null;
+      case_type: string | null;
+      filing_date: string | null;
+      current_status: string | null;
+      next_hearing_date: string | null;
+      last_synced_at: string | null;
+      created_at: string;
+    }>(
+      `SELECT id, matter_id, cnr_number, court_name, court_complex, case_type,
+              filing_date, current_status, next_hearing_date, last_synced_at, created_at
+       FROM court_cases
+       ${whereClause}
+       ORDER BY next_hearing_date ASC NULLS LAST, created_at DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    return { success: true, data: rows.rows };
+  });
+
+  // POST /api/court-cases
+  fastify.post('/api/court-cases', { preHandler: authenticateRequest }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const body = z.object({
+      matterId: z.string().uuid().optional(),
+      cnrNumber: z.string().min(6).max(64),
+      courtName: z.string().min(2).max(200),
+      courtComplex: z.string().max(200).optional(),
+      caseType: z.string().max(120).optional(),
+      filingDate: z.string().optional(),
+      currentStatus: z.string().max(120).optional(),
+      nextHearingDate: z.string().optional(),
+    }).parse(request.body);
+
+    try {
+      const created = await queryOne<{ id: string }>(
+        `INSERT INTO court_cases (
+           tenant_id, matter_id, cnr_number, court_name, court_complex,
+           case_type, filing_date, current_status, next_hearing_date, last_synced_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8, $9::timestamptz, NOW())
+         RETURNING id`,
+        [
+          authReq.tenantId,
+          body.matterId || null,
+          body.cnrNumber.trim().toUpperCase(),
+          body.courtName.trim(),
+          body.courtComplex || null,
+          body.caseType || null,
+          body.filingDate || null,
+          body.currentStatus || 'pending_sync',
+          body.nextHearingDate || null,
+        ]
+      );
+
+      return reply.status(201).send({
+        success: true,
+        data: { id: created?.id, syncStatus: 'pending' },
+      });
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error && 'code' in error && (error as { code?: string }).code === '23505') {
+        return reply.status(409).send({
+          success: false,
+          error: { code: 'CNR_EXISTS', message: 'Court case with this CNR already exists' },
+        });
+      }
+      throw error;
+    }
+  });
+
+  // GET /api/hearings
+  fastify.get('/api/hearings', { preHandler: authenticateRequest }, async (request) => {
+    const authReq = request as AuthenticatedRequest;
+    const queryParams = z.object({
+      matterId: z.string().uuid().optional(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+      limit: z.string().optional(),
+    }).parse(request.query);
+
+    const limitNum = Math.min(Math.max(Number.parseInt(queryParams.limit || '100', 10) || 100, 1), 500);
+    const params: unknown[] = [authReq.tenantId];
+    let whereClause = 'WHERE hd.tenant_id = $1';
+
+    if (queryParams.matterId) {
+      params.push(queryParams.matterId);
+      whereClause += ` AND hd.matter_id = $${params.length}`;
+    }
+    if (queryParams.from) {
+      params.push(queryParams.from);
+      whereClause += ` AND hd.hearing_date >= $${params.length}::timestamptz`;
+    }
+    if (queryParams.to) {
+      params.push(queryParams.to);
+      whereClause += ` AND hd.hearing_date <= $${params.length}::timestamptz`;
+    }
+
+    params.push(limitNum);
+
+    const rows = await query<{
+      id: string;
+      court_case_id: string;
+      matter_id: string | null;
+      hearing_date: string;
+      purpose: string | null;
+      result: string | null;
+      next_date: string | null;
+      notes: string | null;
+      cnr_number: string | null;
+      court_name: string | null;
+      current_status: string | null;
+    }>(
+      `SELECT hd.id, hd.court_case_id, hd.matter_id, hd.hearing_date, hd.purpose,
+              hd.result, hd.next_date, hd.notes,
+              cc.cnr_number, cc.court_name, cc.current_status
+       FROM hearing_dates hd
+       LEFT JOIN court_cases cc ON cc.id = hd.court_case_id
+       ${whereClause}
+       ORDER BY hd.hearing_date ASC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    return { success: true, data: rows.rows };
+  });
+
+  // GET /api/invoices
+  fastify.get('/api/invoices', { preHandler: authenticateRequest }, async (request) => {
+    const authReq = request as AuthenticatedRequest;
+    const queryParams = z.object({
+      status: z.string().optional(),
+      limit: z.string().optional(),
+    }).parse(request.query);
+
+    const limitNum = Math.min(Math.max(Number.parseInt(queryParams.limit || '50', 10) || 50, 1), 200);
+    const params: unknown[] = [authReq.tenantId];
+    let whereClause = 'WHERE tenant_id = $1';
+
+    if (queryParams.status) {
+      params.push(queryParams.status);
+      whereClause += ` AND status = $${params.length}`;
+    }
+
+    params.push(limitNum);
+
+    const rows = await query<{
+      id: string;
+      matter_id: string | null;
+      client_name: string;
+      client_gstin: string | null;
+      firm_gstin: string | null;
+      invoice_number: string;
+      issue_date: string;
+      due_date: string;
+      subtotal_paise: string;
+      gst_rate: string;
+      gst_amount_paise: string;
+      total_paise: string;
+      status: string;
+      razorpay_payment_id: string | null;
+      created_at: string;
+    }>(
+      `SELECT id, matter_id, client_name, client_gstin, firm_gstin, invoice_number,
+              issue_date, due_date, subtotal_paise, gst_rate, gst_amount_paise,
+              total_paise, status, razorpay_payment_id, created_at
+       FROM invoices
+       ${whereClause}
+       ORDER BY issue_date DESC, created_at DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    return { success: true, data: rows.rows };
+  });
+
+  // POST /api/invoices
+  fastify.post('/api/invoices', { preHandler: authenticateRequest }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const body = z.object({
+      matterId: z.string().uuid().optional(),
+      clientName: z.string().min(2).max(200),
+      clientGstin: z.string().max(32).optional(),
+      invoiceNumber: z.string().max(64).optional(),
+      issueDate: z.string().optional(),
+      dueDate: z.string(),
+      gstRate: z.number().min(0).max(40).optional(),
+      status: z.enum(['draft', 'issued', 'paid', 'void']).optional(),
+      lineItems: z.array(z.object({
+        description: z.string().min(1).max(500),
+        quantity: z.number().positive().default(1),
+        unitAmountPaise: z.number().int().positive(),
+      })).min(1),
+    }).parse(request.body);
+
+    const issueDate = body.issueDate || new Date().toISOString().slice(0, 10);
+    const invoiceNumber = body.invoiceNumber?.trim() || `INV-${issueDate.replace(/-/g, '')}-${generateSecureToken(3).toUpperCase()}`;
+    const gstRate = body.gstRate ?? config.GST_RATE;
+    const subtotalPaise = body.lineItems.reduce(
+      (sum, item) => sum + Math.round(item.quantity * item.unitAmountPaise),
+      0
+    );
+    const gstAmountPaise = Math.round((subtotalPaise * gstRate) / 100);
+    const totalPaise = subtotalPaise + gstAmountPaise;
+
+    try {
+      const created = await withTransaction(async (tx) => {
+        const invoice = await tx.queryOne<{ id: string }>(
+          `INSERT INTO invoices (
+             tenant_id, matter_id, client_name, client_gstin, firm_gstin, invoice_number,
+             issue_date, due_date, subtotal_paise, gst_rate, gst_amount_paise, total_paise, status, created_by
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8::date, $9, $10, $11, $12, $13, $14)
+           RETURNING id`,
+          [
+            authReq.tenantId,
+            body.matterId || null,
+            body.clientName,
+            body.clientGstin || null,
+            config.FIRM_GSTIN || null,
+            invoiceNumber,
+            issueDate,
+            body.dueDate,
+            subtotalPaise,
+            gstRate,
+            gstAmountPaise,
+            totalPaise,
+            body.status || 'draft',
+            authReq.advocateId,
+          ]
+        );
+
+        for (const item of body.lineItems) {
+          const lineTotal = Math.round(item.quantity * item.unitAmountPaise);
+          await tx.query(
+            `INSERT INTO invoice_line_items (invoice_id, description, quantity, unit_amount_paise, total_amount_paise)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [invoice?.id, item.description, item.quantity, item.unitAmountPaise, lineTotal]
+          );
+        }
+
+        await tx.query(
+          `INSERT INTO gst_details (
+             invoice_id, sac_code, gst_rate, taxable_amount_paise, cgst_amount_paise, sgst_amount_paise, igst_amount_paise
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            invoice?.id,
+            '998212',
+            gstRate,
+            subtotalPaise,
+            Math.round(gstAmountPaise / 2),
+            Math.round(gstAmountPaise / 2),
+            0,
+          ]
+        );
+
+        return invoice;
+      });
+
+      return reply.status(201).send({
+        success: true,
+        data: {
+          id: created?.id,
+          invoiceNumber,
+          subtotalPaise,
+          gstAmountPaise,
+          totalPaise,
+          status: body.status || 'draft',
+        },
+      });
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error && 'code' in error && (error as { code?: string }).code === '23505') {
+        return reply.status(409).send({
+          success: false,
+          error: { code: 'INVOICE_NUMBER_EXISTS', message: 'Invoice number already exists for this tenant' },
+        });
+      }
+      throw error;
+    }
+  });
+
+  // GET /api/dpdp/requests
+  fastify.get('/api/dpdp/requests', { preHandler: authenticateRequest }, async (request) => {
+    const authReq = request as AuthenticatedRequest;
+    const rows = await query<{
+      id: string;
+      advocate_id: string | null;
+      request_type: string;
+      status: string;
+      details: string | null;
+      resolved_at: string | null;
+      created_at: string;
+    }>(
+      `SELECT id, advocate_id, request_type, status, details, resolved_at, created_at
+       FROM dpdp_requests
+       WHERE tenant_id = $1
+       ORDER BY created_at DESC`,
+      [authReq.tenantId]
+    );
+
+    return { success: true, data: rows.rows };
+  });
+
+  // POST /api/dpdp/consent
+  fastify.post('/api/dpdp/consent', { preHandler: authenticateRequest }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const body = z.object({
+      accepted: z.boolean(),
+      version: z.string().optional(),
+      details: z.string().max(1000).optional(),
+    }).parse(request.body);
+
+    if (!body.accepted) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'CONSENT_REQUIRED', message: 'DPDP consent must be accepted' },
+      });
+    }
+
+    const consentVersion = body.version || config.DPDP_CONSENT_VERSION;
+    const detailPayload = JSON.stringify({
+      consentVersion,
+      details: body.details || null,
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'] || null,
+    });
+
+    await withTransaction(async (tx) => {
+      await tx.query(
+        `UPDATE tenants
+         SET dpdp_consent_given_at = NOW(),
+             dpdp_consent_ip = $2::inet
+         WHERE id = $1`,
+        [authReq.tenantId, request.ip]
+      );
+      await tx.query(
+        `INSERT INTO dpdp_requests (tenant_id, advocate_id, request_type, status, details, resolved_at)
+         VALUES ($1, $2, 'consent', 'resolved', $3, NOW())`,
+        [authReq.tenantId, authReq.advocateId, detailPayload]
+      );
+    });
+
+    return {
+      success: true,
+      data: {
+        accepted: true,
+        version: consentVersion,
+        consentedAt: new Date().toISOString(),
+      },
+    };
   });
 
   // ============================================================
@@ -1901,8 +2939,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
             researchLimit: billingStatus.usage.researchLimit,
             advocates: billingStatus.usage.advocatesActive,
             advocatesLimit: billingStatus.usage.advocatesLimit,
-            attorneys: billingStatus.usage.attorneysActive,
-            attorneysLimit: billingStatus.usage.attorneysLimit,
           },
         },
       };
@@ -1929,7 +2965,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
            FROM attorneys a
            JOIN tenants t ON t.id = a.tenant_id
            WHERE a.id = $1 AND a.tenant_id = $2`,
-          [authReq.attorneyId, authReq.tenantId]
+          [authReq.advocateId, authReq.tenantId]
         );
 
         if (!billingContact) {
@@ -2111,7 +3147,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       const response = await fetch(`${config.AI_SERVICE_URL}/suggest-redline`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           documentId: id,
           tenantId: authReq.tenantId,
@@ -2240,7 +3276,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     await query(
       `INSERT INTO audit_events (tenant_id, actor_attorney_id, event_type, object_type, object_id)
        VALUES ($1, $2, 'matter.archived', 'matter', $3)`,
-      [authReq.tenantId, authReq.attorneyId, id]
+      [authReq.tenantId, authReq.advocateId, id]
     );
 
     return { success: true };
@@ -2373,7 +3409,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       `INSERT INTO share_links (tenant_id, matter_id, token_hash, access_level, watermark_text, expires_at, max_views, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
-      [authReq.tenantId, id, tokenHash, body.accessLevel, body.watermarkText || null, expiresAt, body.maxViews || 50, authReq.attorneyId]
+      [authReq.tenantId, id, tokenHash, body.accessLevel, body.watermarkText || null, expiresAt, body.maxViews || 50, authReq.advocateId]
     );
 
     const portalUrl = `${config.FRONTEND_URL}/portal/${token}`;
@@ -2604,7 +3640,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     const job = await addJob('report.generate', {
       tenantId: authReq.tenantId,
       matterId: id,
-      requestedBy: authReq.attorneyId,
+      requestedBy: authReq.advocateId,
       format: body.format,
       sections: body.sections,
     });
@@ -2748,7 +3784,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       if (body.status === 'completed') {
         updates.push(`completed_at = NOW()`);
         updates.push(`completed_by = $${paramIndex}`);
-        values.push(authReq.attorneyId);
+        values.push(authReq.advocateId);
         paramIndex++;
       }
     }
@@ -2888,7 +3924,9 @@ END:VCALENDAR`;
   // GET /api/ai/models - List available AI models
   fastify.get('/api/ai/models', { preHandler: [authenticateRequest, requireRoles('admin')] }, async (request, reply) => {
     try {
-      const response = await fetch(`${config.AI_SERVICE_URL}/models`);
+      const response = await fetch(`${config.AI_SERVICE_URL}/models`, {
+        headers: getAiServiceHeaders(),
+      });
       if (!response.ok) throw new Error('AI service unavailable');
       const models = await response.json();
       return { success: true, data: models };
@@ -3165,7 +4203,7 @@ END:VCALENDAR`;
         `UPDATE clause_suggestions 
          SET status = $1, reviewed_by = $2, reviewed_at = NOW(), review_notes = $3, final_text = $4
          WHERE id = $5 AND tenant_id = $6`,
-        [statusMap[body.action], authReq.attorneyId, body.notes || null, body.modifiedText || null, body.suggestionId, authReq.tenantId]
+        [statusMap[body.action], authReq.advocateId, body.notes || null, body.modifiedText || null, body.suggestionId, authReq.tenantId]
       );
     }
 
@@ -3184,7 +4222,7 @@ END:VCALENDAR`;
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         authReq.tenantId,
-        authReq.attorneyId,
+        authReq.advocateId,
         body.suggestionId ? 'suggestion' : 'clause',
         body.suggestionId || body.clauseId,
         body.action,

@@ -48,6 +48,8 @@ class Settings(BaseSettings):
 
     clause_extraction_threshold: float = Field(default=0.82)
     research_cache_ttl_seconds: int = Field(default=3600)
+    rate_limit_requests_per_minute: int = Field(default=120)
+    ai_service_internal_key: str = Field(default="")
 
     spacy_model: str = Field(default="en_core_web_sm")
     redis_url: str = Field(default="redis://localhost:6379")

@@ -5,6 +5,7 @@ Semantic legal research with RAG (Retrieval Augmented Generation).
 
 import json
 import logging
+import re
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
@@ -44,7 +45,7 @@ class ResearchQuery(BaseModel):
     max_results: int = Field(default=10, ge=1, le=50)
     include_citations: bool = Field(default=True)
     stream: bool = Field(default=False, description="Stream the response via SSE")
-    chunks: Optional[List[str]] = Field(default=None, description="Pre-retrieved chunk text from API layer")
+    chunks: Optional[List[str | Dict[str, Any]]] = Field(default=None, description="Pre-retrieved chunk payloads from API layer")
     context: Optional[str] = Field(default=None, description="Optional synthesized context from API layer")
     language: str = Field(default="en", max_length=16, description="Requested response language code")
 
@@ -57,6 +58,12 @@ class Citation(BaseModel):
     text_excerpt: str
     page_number: Optional[int] = None
     relevance_score: float
+    source_type: Optional[str] = None
+    source_url: Optional[str] = None
+    court_type: Optional[str] = None
+    judgment_year: Optional[int] = None
+    source_verified: bool = False
+    language: Optional[str] = None
 
 
 class ResearchResult(BaseModel):
@@ -77,10 +84,63 @@ class ChunkForRAG(BaseModel):
     text: str
     page_number: Optional[int]
     relevance_score: float
+    source_type: Optional[str] = None
+    source_url: Optional[str] = None
+    court_type: Optional[str] = None
+    judgment_year: Optional[int] = None
+    source_verified: bool = False
+    language: Optional[str] = None
+
+
+def _coerce_float(value: Any, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if parsed < 0:
+        return 0.0
+    if parsed > 1:
+        return 1.0
+    return parsed
+
+
+def _coerce_int(value: Any) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def score_answer_confidence(
+    answer: str,
+    chunks: List[ChunkForRAG],
+    jurisdiction: Optional[str],
+) -> float:
+    """Derive confidence from retrieval quality and answer evidence."""
+    if not answer.strip():
+        return 0.0
+    if not chunks:
+        return 0.2
+
+    avg_relevance = sum(chunk.relevance_score for chunk in chunks) / len(chunks)
+    source_coverage = min(len(chunks), 8) / 8
+    citation_bonus = 0.06 if re.search(r"\[Source\s+\d+\]", answer) else 0.0
+    jurisdiction_bonus = 0.04 if jurisdiction else 0.0
+    answer_quality = min(len(answer.strip()) / 500, 1.0) * 0.05
+
+    confidence = (
+        0.35
+        + (avg_relevance * 0.35)
+        + (source_coverage * 0.15)
+        + citation_bonus
+        + jurisdiction_bonus
+        + answer_quality
+    )
+    return round(max(0.05, min(confidence, 0.95)), 2)
 
 
 def build_chunks_from_payload(
-    chunks: Optional[List[str]],
+    chunks: Optional[List[str | Dict[str, Any]]],
     context: Optional[str],
     max_results: int,
 ) -> List[ChunkForRAG]:
@@ -96,14 +156,91 @@ def build_chunks_from_payload(
                 text=context.strip(),
                 page_number=None,
                 relevance_score=1.0,
+                source_type="gateway_context",
             )
         )
 
     if not chunks:
         return prepared_chunks
 
-    for index, chunk_text in enumerate(chunks[:max_results], start=1):
-        cleaned = chunk_text.strip()
+    for index, chunk_value in enumerate(chunks[:max_results], start=1):
+        if isinstance(chunk_value, dict):
+            raw_text = (
+                chunk_value.get("text")
+                or chunk_value.get("text_content")
+                or chunk_value.get("textExcerpt")
+                or chunk_value.get("text_excerpt")
+                or chunk_value.get("snippet")
+                or ""
+            )
+            cleaned = str(raw_text).strip()
+            if not cleaned:
+                continue
+
+            chunk_id = str(
+                chunk_value.get("chunk_id")
+                or chunk_value.get("chunkId")
+                or chunk_value.get("id")
+                or f"api-{index}"
+            )
+            document_id = str(
+                chunk_value.get("document_id")
+                or chunk_value.get("documentId")
+                or f"api-{index}"
+            )
+            document_name = str(
+                chunk_value.get("document_name")
+                or chunk_value.get("documentName")
+                or chunk_value.get("title")
+                or f"Retrieved Chunk {index}"
+            )
+            relevance_score = _coerce_float(
+                chunk_value.get("relevance_score", chunk_value.get("relevance")),
+                max(0.2, 1 - (index * 0.02)),
+            )
+            page_number = _coerce_int(chunk_value.get("page_number", chunk_value.get("pageNumber")))
+            judgment_year = _coerce_int(chunk_value.get("judgment_year", chunk_value.get("judgmentYear")))
+            source_verified = bool(chunk_value.get("source_verified", chunk_value.get("sourceVerified", False)))
+            source_type = (
+                str(chunk_value.get("source_type", chunk_value.get("sourceType")))
+                if chunk_value.get("source_type", chunk_value.get("sourceType")) is not None
+                else None
+            )
+            source_url = (
+                str(chunk_value.get("source_url", chunk_value.get("sourceUrl")))
+                if chunk_value.get("source_url", chunk_value.get("sourceUrl")) is not None
+                else None
+            )
+            court_type = (
+                str(chunk_value.get("court_type", chunk_value.get("courtType")))
+                if chunk_value.get("court_type", chunk_value.get("courtType")) is not None
+                else None
+            )
+            language = (
+                str(chunk_value.get("language"))
+                if chunk_value.get("language") is not None
+                else None
+            )
+
+            prepared_chunks.append(
+                ChunkForRAG(
+                    chunk_id=chunk_id,
+                    document_id=document_id,
+                    document_name=document_name,
+                    text=cleaned,
+                    page_number=page_number,
+                    relevance_score=relevance_score,
+                    source_type=source_type,
+                    source_url=source_url,
+                    court_type=court_type,
+                    judgment_year=judgment_year,
+                    source_verified=source_verified,
+                    language=language,
+                )
+            )
+            continue
+
+        cleaned = str(chunk_value).strip()
         if not cleaned:
             continue
 
@@ -115,6 +252,7 @@ def build_chunks_from_payload(
                 text=cleaned,
                 page_number=None,
                 relevance_score=max(0.2, 1 - (index * 0.02)),
+                source_type="gateway_chunk",
             )
         )
 
@@ -131,22 +269,23 @@ async def get_relevant_chunks(
 ) -> List[ChunkForRAG]:
     """
     Retrieve relevant document chunks using pgvector similarity search.
-    
-    In production, this would query the PostgreSQL database.
-    For now, we return a mock result structure.
+
+    This service currently expects chunks to be provided by the API layer.
     """
-    # TODO: In production, this would be:
-    # SELECT dc.id, dc.document_id, d.filename, dc.text, dc.page_number,
-    #        1 - (dc.embedding <=> $1::vector) as score
-    # FROM document_chunks dc
-    # JOIN documents d ON dc.document_id = d.id
-    # WHERE d.matter_id = $2
-    #   AND ($3::uuid[] IS NULL OR dc.document_id = ANY($3))
-    # ORDER BY dc.embedding <=> $1::vector
-    # LIMIT $4
-    
-    # Mock return for now - in actual deployment, would call the API service's DB
-    return []
+    if not pg_connection_string:
+        logger.warning(
+            "Research retrieval called without pg_connection_string. "
+            "API layer should pass pre-fetched chunks/context."
+        )
+        raise NotImplementedError(
+            "Direct DB retrieval is not configured for ai-service. "
+            "Pass chunks/context from the API layer."
+        )
+
+    raise NotImplementedError(
+        "Direct DB retrieval path is not implemented yet. "
+        "Pass chunks/context from the API layer."
+    )
 
 
 async def generate_research_answer_stream(
@@ -220,7 +359,14 @@ async def generate_research_answer_stream(
                 "document_name": c.document_name,
                 "chunk_id": c.chunk_id,
                 "excerpt": c.text[:200] + "..." if len(c.text) > 200 else c.text,
+                "page_number": c.page_number,
                 "relevance": c.relevance_score,
+                "source_type": c.source_type,
+                "source_url": c.source_url,
+                "court_type": c.court_type,
+                "judgment_year": c.judgment_year,
+                "source_verified": c.source_verified,
+                "language": c.language,
             }
             for c in chunks
         ]
@@ -281,7 +427,8 @@ async def generate_research_answer(
             config=LLM_RETRY_CONFIG,
         )
         answer = add_safety_guardrails(result.get("response", "").strip())
-        return answer, 0.8
+        confidence = score_answer_confidence(answer, chunks, jurisdiction)
+        return answer, confidence
     except RuntimeError as e:
         if str(e).startswith("Ollama error:"):
             return "Research service temporarily unavailable.", 0.0
@@ -333,14 +480,17 @@ async def research(
             raise HTTPException(status_code=500, detail="Failed to process query")
 
         # Get relevant chunks (would be DB call in production)
-        chunks = await get_relevant_chunks(
-            query_text,
-            query_embedding,
-            body.document_ids,
-            body.matter_id or "",
-            body.max_results,
-            ""  # Would be connection string
-        )
+        try:
+            chunks = await get_relevant_chunks(
+                query_text,
+                query_embedding,
+                body.document_ids,
+                body.matter_id or "",
+                body.max_results,
+                "",  # API layer should supply chunks/context in current architecture
+            )
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
     
     # Note: In production deployment, the chunks would be fetched by the API
     # and passed to this service, or this service would have DB access
@@ -383,6 +533,12 @@ async def research(
                 text_excerpt=c.text[:300] + "..." if len(c.text) > 300 else c.text,
                 page_number=c.page_number,
                 relevance_score=c.relevance_score,
+                source_type=c.source_type,
+                source_url=c.source_url,
+                court_type=c.court_type,
+                judgment_year=c.judgment_year,
+                source_verified=c.source_verified,
+                language=c.language,
             )
             for c in chunks
         ]
@@ -412,3 +568,13 @@ async def research(
             jurisdiction=body.jurisdiction,
             explanation=explanation,
         )
+
+
+@router.post("/stream")
+async def research_stream(
+    request: Request,
+    body: ResearchQuery,
+):
+    """Streaming alias endpoint for compatibility (`/research/stream`)."""
+    stream_body = body.model_copy(update={"stream": True})
+    return await research(request, stream_body)

@@ -69,7 +69,7 @@ interface DemoMatter {
   status: string;
   priority: string;
   healthScore: number;
-  dealValueCents?: number;
+  dealValuePaise?: number;
 }
 
 // ============================================================================
@@ -109,13 +109,13 @@ function createDemoAttorneys(tenants: DemoTenant[]): DemoAttorney[] {
     });
     
     // Associates
-    ['corporate', 'litigation', 'ip'].forEach((group, i) => {
+    ['corporate', 'litigation', 'intellectual_property'].forEach((group, i) => {
       attorneys.push({
         id: randomUUID(),
         tenantId: tenant.id,
         email: `${group}.associate@${tenant.slug}.com`,
         displayName: `${group.charAt(0).toUpperCase() + group.slice(1)} Associate`,
-        role: 'attorney',
+        role: 'advocate',
         practiceGroup: group.charAt(0).toUpperCase() + group.slice(1),
         barNumber: `${tenant.barState}${100000 + i}`,
         barState: tenant.barState,
@@ -140,14 +140,14 @@ function createDemoMatters(tenants: DemoTenant[], attorneys: DemoAttorney[]): De
   const matters: DemoMatter[] = [];
   
   const matterTemplates = [
-    { name: 'TechCorp Acquisition', type: 'ma_transaction', client: 'TechCorp Industries', counterparty: 'InnovateSoft LLC', value: 5000000000 },
+    { name: 'TechCorp Acquisition', type: 'merger_acquisition', client: 'TechCorp Industries', counterparty: 'InnovateSoft LLC', value: 5000000000 },
     { name: 'CloudService SaaS Agreement', type: 'commercial_contract', client: 'CloudService Inc', counterparty: 'DataPro Systems', value: 120000000 },
     { name: 'Downtown Office Lease', type: 'real_estate', client: 'Metro Properties', counterparty: 'Building Partners', value: 2500000000 },
     { name: 'Patent Dispute - Widget Tech', type: 'litigation', client: 'Widget Technologies', counterparty: 'CompetitorCo', value: 1000000000 },
-    { name: 'Software License Negotiation', type: 'ip', client: 'SoftDev Corp', counterparty: 'Enterprise Systems', value: 50000000 },
-    { name: 'Executive Employment Package', type: 'employment', client: 'FinanceGroup', counterparty: null, value: 5000000 },
-    { name: 'FDA Compliance Review', type: 'regulatory', client: 'PharmaCo', counterparty: null, value: null },
-    { name: 'Series B Financing', type: 'ma_transaction', client: 'StartupXYZ', counterparty: 'Venture Capital Partners', value: 25000000000 },
+    { name: 'Software License Negotiation', type: 'intellectual_property', client: 'SoftDev Corp', counterparty: 'Enterprise Systems', value: 50000000 },
+    { name: 'Executive Employment Package', type: 'labour_employment', client: 'FinanceGroup', counterparty: null, value: 5000000 },
+    { name: 'FDA Compliance Review', type: 'regulatory_compliance', client: 'PharmaCo', counterparty: null, value: null },
+    { name: 'Series B Financing', type: 'merger_acquisition', client: 'StartupXYZ', counterparty: 'Venture Capital Partners', value: 25000000000 },
     { name: 'Distribution Agreement - APAC', type: 'commercial_contract', client: 'GlobalDistrib', counterparty: 'APAC Partners', value: 80000000 },
     { name: 'Data Center Lease', type: 'real_estate', client: 'DataHost Inc', counterparty: 'Industrial Properties', value: 1500000000 },
   ];
@@ -171,7 +171,7 @@ function createDemoMatters(tenants: DemoTenant[], attorneys: DemoAttorney[]): De
         status: statuses[mi % statuses.length],
         priority: priorities[mi % priorities.length],
         healthScore: 60 + Math.floor(Math.random() * 40),
-        dealValueCents: template.value || undefined,
+        dealValuePaise: template.value || undefined,
       });
     });
   });
@@ -233,14 +233,14 @@ async function seedMatters(pool: Pool, matters: DemoMatter[], attorneys: DemoAtt
       `INSERT INTO matters (
         id, tenant_id, matter_code, matter_name, matter_type, client_name,
         counterparty_name, governing_law_state, status, priority, health_score,
-        deal_value_cents, lead_attorney_id, created_by, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+        deal_value_paise, deal_value_cents, lead_advocate_id, lead_attorney_id, created_by, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13, $13, $14, NOW(), NOW())
       ON CONFLICT DO NOTHING`,
       [
         matter.id, matter.tenantId, matter.matterCode, matter.matterName,
         matter.matterType, matter.clientName, matter.counterpartyName,
         matter.governingLawState, matter.status, matter.priority, matter.healthScore,
-        matter.dealValueCents, leadAttorney?.id, creator?.id
+        matter.dealValuePaise, leadAttorney?.id, creator?.id
       ]
     );
   }
@@ -252,10 +252,10 @@ async function seedPlaybooks(pool: Pool, tenants: DemoTenant[]): Promise<void> {
   console.log('  Seeding playbooks...');
   
   const playbookTemplates = [
-    { name: 'M&A Standard Playbook', matterTypes: ['ma_transaction'], description: 'Standard due diligence and negotiation playbook for M&A transactions' },
+    { name: 'M&A Standard Playbook', matterTypes: ['merger_acquisition'], description: 'Standard due diligence and negotiation playbook for M&A transactions' },
     { name: 'Commercial Contracts', matterTypes: ['commercial_contract'], description: 'Standard terms for commercial agreements' },
-    { name: 'Employment Agreements', matterTypes: ['employment'], description: 'Compliance-focused playbook for employment matters' },
-    { name: 'IP Licensing', matterTypes: ['ip'], description: 'Intellectual property licensing standards' },
+    { name: 'Employment Agreements', matterTypes: ['labour_employment'], description: 'Compliance-focused playbook for employment matters' },
+    { name: 'IP Licensing', matterTypes: ['intellectual_property'], description: 'Intellectual property licensing standards' },
   ];
   
   let count = 0;

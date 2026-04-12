@@ -7,6 +7,8 @@
 import { z } from 'zod';
 
 const isProductionEnv = process.env.NODE_ENV === 'production';
+const DEV_APP_ENCRYPTION_KEY =
+  'dev-only-key-do-not-use-in-production-00000000000000000000000000000000';
 
 const configSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -20,9 +22,12 @@ const configSchema = z.object({
   JWT_ISSUER: z.string().default('evidentis-india'),
   JWT_AUDIENCE: z.string().default('evidentis-india-api'),
 
-  APP_ENCRYPTION_KEY: isProductionEnv
-    ? z.string().min(64, 'APP_ENCRYPTION_KEY must be at least 64 chars in production')
-    : z.string().min(64).optional(),
+  APP_ENCRYPTION_KEY: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    isProductionEnv
+      ? z.string().min(64, 'APP_ENCRYPTION_KEY must be at least 64 chars in production')
+      : z.string().min(64).default(DEV_APP_ENCRYPTION_KEY)
+  ),
 
   DATABASE_URL: z.string().url(),
   DB_POOL_MAX: z.coerce.number().default(10),
@@ -46,6 +51,7 @@ const configSchema = z.object({
 
   AI_SERVICE_URL: z.string().url().default('http://localhost:5000'),
   AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(60000),
+  AI_SERVICE_INTERNAL_KEY: z.string().optional(),
 
   MALWARE_SCANNER: z.enum(['clamav', 'none']).default('clamav'),
   CLAMAV_HOST: z.string().default('localhost'),
@@ -70,7 +76,7 @@ const configSchema = z.object({
   ECOURTS_BASE_URL: z.string().url().default('https://services.ecourts.gov.in'),
 
   MSG91_AUTH_KEY: z.string().optional(),
-  MSG91_SENDER_ID: z.string().default('NYAYA'),
+  MSG91_SENDER_ID: z.string().default('EVDTIS'),
   MSG91_WHATSAPP_INTEGRATED_NUMBER: z.string().optional(),
   MSG91_BASE_URL: z.string().url().default('https://control.msg91.com/api'),
   OTP_EXPIRY_MINUTES: z.coerce.number().default(10),
@@ -81,6 +87,9 @@ const configSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default('gpt-4o'),
   OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
+  EMBEDDING_MODEL: z.string().default('sentence-transformers/LaBSE'),
+  EMBEDDING_DIM: z.coerce.number().default(768),
+  INDIC_TRANS_MODEL: z.string().default('ai4bharat/indictrans2-en-indic-1B'),
 
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),

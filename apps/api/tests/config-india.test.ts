@@ -11,7 +11,7 @@ describe('India API config defaults', () => {
   });
 
   it('exposes India integrations and compliance defaults', () => {
-    expect(config.MSG91_SENDER_ID).toBe('NYAYA');
+    expect(config.MSG91_SENDER_ID).toBe('EVDTIS');
     expect(config.GST_RATE).toBe(18);
     expect(config.DPDP_CONSENT_VERSION).toBe('1.0');
   });

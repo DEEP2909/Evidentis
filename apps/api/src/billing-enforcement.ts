@@ -107,7 +107,7 @@ export async function enforceResearchQuota(
 /**
  * Middleware to check advocate seat limit
  */
-export async function enforceAttorneyLimit(
+export async function enforceAdvocateLimit(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
@@ -118,29 +118,29 @@ export async function enforceAttorneyLimit(
   }
   
   const billingStatus = await getBillingStatus(tenantId);
-  const { attorneysActive, attorneysLimit } = billingStatus.usage;
+  const { advocatesActive, advocatesLimit } = billingStatus.usage;
   
   // Skip if unlimited (enterprise)
-  if (attorneysLimit === null) {
+  if (advocatesLimit === null) {
     return;
   }
   
-  if (attorneysActive >= attorneysLimit) {
+  if (advocatesActive >= advocatesLimit) {
     logger.warn({ 
       tenantId, 
-      current: attorneysActive,
-      limit: attorneysLimit 
+      current: advocatesActive,
+      limit: advocatesLimit 
     }, 'Advocate seat limit reached');
     
     return reply.status(402).send({
       success: false,
       error: {
         code: 'SEAT_LIMIT_REACHED',
-        message: `Your plan allows ${attorneysLimit} advocates. Please upgrade to add more team members.`,
+        message: `Your plan allows ${advocatesLimit} advocates. Please upgrade to add more team members.`,
         details: {
           type: 'advocate_seats',
-          current: attorneysActive,
-          limit: attorneysLimit,
+          current: advocatesActive,
+          limit: advocatesLimit,
           upgradeUrl: '/billing?action=upgrade',
         },
       },
@@ -315,8 +315,8 @@ export async function getBillingContext(tenantId: string): Promise<BillingContex
       documents: docQuota,
       research: researchQuota,
       advocates: {
-        current: billingStatus.usage.attorneysActive,
-        limit: billingStatus.usage.attorneysLimit,
+        current: billingStatus.usage.advocatesActive,
+        limit: billingStatus.usage.advocatesLimit,
       },
     },
   };

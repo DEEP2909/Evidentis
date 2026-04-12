@@ -3,7 +3,7 @@
 ## Enterprise Legal AI Platform - Full Technical & Product Reference
 
 **Version**: 1.0.0  
-**Last Updated**: April 11, 2026  
+**Last Updated**: April 12, 2026  
 **Classification**: Internal / Partner Documentation
 
 ---
@@ -62,7 +62,7 @@ To empower legal professionals with AI-driven tools that enhance productivity, r
 
 - **155+ Files** in the codebase
 - **50,000+ Lines of Code**
-- **481 Automated Tests**
+- **520+ Automated Tests**
 - **120+ API Endpoints**
 - **40+ React Components**
 - **26 Database Tables**
@@ -264,6 +264,7 @@ UPLOAD → QUARANTINE → SCAN → INGEST → CHUNK → EMBED → EXTRACT → AS
 ### 4.1.4 OCR Capabilities
 - **Engines**: Tesseract (primary), EasyOCR (optional), Google Vision (optional)
 - **Languages**: English + all scheduled Indian legal languages (23 total language codes in platform)
+- **Container Language Packs**: `eng, hin, ben, tam, tel, kan, mal, mar, guj, pan, ori, urd, san, asm`
 - **Accuracy**: 95%+ for clean documents
 - **Handwriting**: Limited support (best-effort)
 
@@ -756,7 +757,7 @@ evidentis/
 │   │   │   ├── saml.ts             # SAML 2.0
 │   │   │   ├── webauthn.ts         # Passkey/FIDO2
 │   │   │   └── websocket.ts        # Socket.io real-time
-│   │   ├── tests/                  # API tests (325 tests)
+│   │   ├── tests/                  # API tests (325+)
 │   │   ├── Dockerfile.api          # Production container
 │   │   └── package.json
 │   │
@@ -788,7 +789,7 @@ evidentis/
 │   │   │   └── scoring.py          # Metrics calculation
 │   │   ├── tests/
 │   │   │   ├── conftest.py         # Pytest config + mock app state fixture
-│   │   │   └── test_ai_service.py  # AI tests (66 tests)
+│   │   │   └── test_ai_service.py  # AI tests (105)
 │   │   ├── pytest.ini              # Pytest configuration
 │   │   ├── requirements.txt        # Python dependencies
 │   │   └── Dockerfile              # Production container
@@ -845,7 +846,7 @@ evidentis/
 │       │   ├── auth.ts             # Auth utilities
 │       │   ├── utils.ts            # Helpers
 │       │   └── websocket.tsx       # WebSocket provider
-│       ├── tests/                  # Frontend tests (90 tests)
+│       ├── tests/                  # Frontend tests (90+)
 │       ├── Dockerfile.web
 │       └── package.json
 │
@@ -1286,7 +1287,7 @@ POST /auth/login
 Content-Type: application/json
 
 {
-  "email": "attorney@firm.com",
+  "email": "advocate@firm.com",
   "password": "SecurePassword123!"
 }
 ```
@@ -1301,17 +1302,43 @@ Content-Type: application/json
     "expiresIn": 900,
     "attorney": {
       "id": "uuid",
-      "email": "attorney@firm.com",
-      "firstName": "John",
-      "lastName": "Doe",
-      "role": "associate",
+      "email": "advocate@firm.com",
+      "displayName": "Asha Sharma",
+      "role": "junior_advocate",
       "tenantId": "uuid"
     }
   }
 }
 ```
 
-### 7.2.2 Refresh Token
+### 7.2.2 OTP Send (Mobile Login)
+```http
+POST /auth/otp/send
+POST /api/auth/otp/send
+Content-Type: application/json
+
+{
+  "phoneNumber": "+919876543210",
+  "purpose": "login",
+  "tenantSlug": "demo-firm"
+}
+```
+
+### 7.2.3 OTP Verify (Issue JWT)
+```http
+POST /auth/otp/verify
+POST /api/auth/otp/verify
+Content-Type: application/json
+
+{
+  "phoneNumber": "+919876543210",
+  "otp": "123456",
+  "purpose": "login",
+  "tenantSlug": "demo-firm"
+}
+```
+
+### 7.2.4 Refresh Token
 ```http
 POST /auth/refresh
 Content-Type: application/json
@@ -1321,7 +1348,7 @@ Content-Type: application/json
 }
 ```
 
-### 7.2.3 MFA Verification
+### 7.2.5 MFA Verification
 ```http
 POST /auth/mfa/verify
 Content-Type: application/json
@@ -1412,7 +1439,8 @@ Content-Type: application/json
 
 {
   "question": "What are the standard indemnification terms?",
-  "matterId": "uuid"  // optional - scope to specific matter
+  "matterId": "uuid",  // optional - scope to specific matter
+  "language": "hi"     // optional - any supported Indian language code
 }
 
 Response:
@@ -1421,10 +1449,19 @@ Response:
   "data": {
     "answer": "Based on the documents analyzed...",
     "citations": [
-      { "source": "Contract A", "text": "The indemnifying party shall...", "page": 12 }
+      {
+        "document_id": "uuid",
+        "document_name": "Master Services Agreement",
+        "chunk_id": "uuid",
+        "text_excerpt": "The indemnifying party shall...",
+        "page_number": 12,
+        "relevance_score": 0.91,
+        "source_type": "tenant_document",
+        "source_verified": true
+      }
     ],
     "sources": [
-      { "documentId": "uuid", "title": "Master Agreement", "relevance": 0.92, "snippet": "..." }
+      { "documentId": "uuid", "title": "Master Agreement", "relevance": 0.92, "pageFrom": 12, "pageTo": 13, "snippet": "..." }
     ],
     "confidence": 0.87
   }
@@ -1439,12 +1476,14 @@ Content-Type: application/json
 
 {
   "query": "What are the termination rights?",
-  "matterId": "uuid"
+  "matterId": "uuid",
+  "language": "en"
 }
 
 // Server-Sent Events Response:
 data: {"type":"sources","sources":[...]}
 data: {"type":"token","content":"Based"}
+data: {"type":"citations","citations":[...]}
 data: {"type":"token","content":" on"}
 data: {"type":"token","content":" the"}
 ...
@@ -1470,6 +1509,34 @@ Response:
     }
   ]
 }
+```
+
+### 7.4.4 IndiaKanoon + Tenant Citation Search
+```http
+GET /api/research/indiankanoon?q=arbitration+award&limit=20
+Authorization: Bearer <token>
+```
+
+Response includes:
+- `source: "indiankanoon"` when upstream succeeds with API key
+- `source: "local"` when fallback uses tenant-scoped `case_citations`
+
+### 7.4.5 AI Service Internal Security
+- API forwards `X-Internal-Key` to AI service when `AI_SERVICE_INTERNAL_KEY` is configured.
+- AI service enforces the internal key for non-health paths.
+- AI service applies in-memory per-IP/per-route rate limiting (requests per minute configurable via `RATE_LIMIT_REQUESTS_PER_MINUTE`).
+
+### 7.4.6 India Legal Operations Endpoints
+```http
+GET  /api/bare-acts
+GET  /api/bare-acts/:slug
+GET  /api/court-cases
+POST /api/court-cases
+GET  /api/hearings
+GET  /api/invoices
+POST /api/invoices
+GET  /api/dpdp/requests
+POST /api/dpdp/consent
 ```
 
 ## 7.5 Matters API
@@ -2581,7 +2648,7 @@ app.addHook('preHandler', (req, reply, done) => {
           /         │(Functions)│         \
          /          └───────────┘          \
         └───────────────────────────────────┘
-                     481 Total
+                     520+ Total
 ```
 
 ## 16.2 Test Categories
@@ -2621,7 +2688,7 @@ app.addHook('preHandler', (req, reply, done) => {
 | `legal-rules.test.ts` | 43 | State rules |
 | `documents.test.ts` | 35 | Document ops |
 | `validation.test.ts` | 41 | Input validation |
-| `test_ai_service.py` | 66 | AI functions |
+| `test_ai_service.py` | 105 | AI functions |
 | `components.test.tsx` | 46 | React components |
 | `e2e.spec.ts` | 44 | User journeys |
 
@@ -2957,7 +3024,7 @@ See Section 6.1 for entity relationship diagram.
 ---
 
 **Document Version**: 1.0.0  
-**Last Updated**: April 11, 2026  
+**Last Updated**: April 12, 2026
 **Authors**: EvidentIS Engineering Team  
 **Classification**: Internal / Partner Documentation
 

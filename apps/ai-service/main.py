@@ -5,11 +5,14 @@ clause extraction, risk assessment, and semantic research.
 """
 
 import logging
+import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any, Deque, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config import get_settings
 from models.loader import ModelRegistry
@@ -25,6 +28,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+request_windows: dict[str, Deque[float]] = defaultdict(deque)
+INTERNAL_BYPASS_PATHS = {
+    "/",
+    "/health",
+    "/health/live",
+    "/health/ready",
+    "/health/version",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+}
 
 # Global model registry
 model_registry: ModelRegistry | None = None
@@ -65,6 +79,31 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def enforce_internal_access(request: Request, call_next):
+    if request.url.path in INTERNAL_BYPASS_PATHS:
+        return await call_next(request)
+
+    if settings.ai_service_internal_key:
+        request_key = request.headers.get("X-Internal-Key", "")
+        if request_key != settings.ai_service_internal_key:
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
+    now = time.monotonic()
+    client_ip = request.client.host if request.client else "unknown"
+    bucket_key = f"{client_ip}:{request.url.path}"
+    request_window = request_windows[bucket_key]
+
+    while request_window and now - request_window[0] > 60:
+        request_window.popleft()
+
+    if len(request_window) >= settings.rate_limit_requests_per_minute:
+        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+
+    request_window.append(now)
+    return await call_next(request)
 
 # CORS configuration
 # AI service is internal-only (called by API server, not browsers)

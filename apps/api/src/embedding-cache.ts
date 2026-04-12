@@ -52,6 +52,17 @@ interface CachedEmbedding {
 
 const EMBEDDING_TTL_SECONDS = 86400 * 30; // 30 days (embeddings rarely change)
 
+export function assertEmbeddingDimension(
+  vector: number[],
+  context: string
+): void {
+  if (vector.length !== config.EMBEDDING_DIM) {
+    throw new Error(
+      `Embedding dimension mismatch (${context}): expected ${config.EMBEDDING_DIM}, got ${vector.length}`
+    );
+  }
+}
+
 /**
  * Get cached embedding for text
  */
@@ -67,6 +78,13 @@ export async function getCachedEmbedding(
     if (!cached) return null;
     
     const parsed: CachedEmbedding = JSON.parse(cached);
+    try {
+      assertEmbeddingDimension(parsed.vector, `cache read for model ${model}`);
+    } catch (error) {
+      logger.warn({ key, model, error }, 'Discarding invalid embedding cache entry');
+      await client.del(key);
+      return null;
+    }
     logger.debug({ key, model }, 'Embedding cache hit');
     return parsed.vector;
   } catch (error) {
@@ -83,6 +101,7 @@ export async function cacheEmbedding(
   model: string,
   vector: number[]
 ): Promise<void> {
+  assertEmbeddingDimension(vector, `cache write for model ${model}`);
   try {
     const client = getRedis();
     const key = `${EMBEDDING_PREFIX}:${model}:${hashText(text)}`;

@@ -301,13 +301,13 @@ export const ADVOCATE_ROLES = [
   'junior_advocate',
   'paralegal',
   'client',
-  'attorney',
   'partner',
+  'advocate',
 ] as const;
 export type AdvocateRole = typeof ADVOCATE_ROLES[number];
 
-export const ATTORNEY_ROLES = ADVOCATE_ROLES;
-export type AttorneyRole = AdvocateRole;
+export const ATTORNEY_ROLES = [...ADVOCATE_ROLES, 'attorney'] as const;
+export type AttorneyRole = typeof ATTORNEY_ROLES[number];
 
 export const ATTORNEY_STATUSES = ['active', 'suspended', 'pending_invite'] as const;
 export type AttorneyStatus = typeof ATTORNEY_STATUSES[number];
@@ -327,10 +327,8 @@ export const MATTER_TYPES = [
   'constitutional',
   'arbitration',
   'regulatory_compliance',
-  'ma_transaction',
-  'ip',
-  'employment',
-  'regulatory',
+  'merger_acquisition',
+  'intellectual_property',
 ] as const;
 export type MatterType = typeof MATTER_TYPES[number];
 
@@ -701,9 +699,12 @@ export interface Matter {
   priority: Priority;
   healthScore: number;
   leadAdvocateId: string | null;
-  leadAttorneyId: string | null;
+  /** @deprecated Use leadAdvocateId */
+  leadAttorneyId?: string | null;
   targetCloseDate: Date | null;
   valueInPaise: number | null;
+  dealValuePaise?: number | null;
+  /** @deprecated Use dealValuePaise */
   dealValueCents?: number | null;
   notes: string | null;
   tags: string[];
@@ -1110,9 +1111,13 @@ export interface MatterCreateRequest {
   governingLawState?: IndianStateCode;
   priority?: Priority;
   leadAdvocateId?: string;
+  /** @deprecated Use leadAdvocateId */
   leadAttorneyId?: string;
   targetCloseDate?: string;
   valueInPaise?: number;
+  dealValuePaise?: number;
+  /** @deprecated Use dealValuePaise */
+  dealValueCents?: number;
   notes?: string;
   tags?: string[];
   courtName?: string;

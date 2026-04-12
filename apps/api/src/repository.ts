@@ -31,8 +31,8 @@ const ATTORNEY_COLS = `id, tenant_id, email, display_name, role, practice_group,
   last_login_at, preferred_language, status, created_at`;
 
 const MATTER_COLS = `id, tenant_id, matter_code, matter_name, matter_type, client_name, 
-  counterparty_name, governing_law_state, status, priority, health_score, lead_attorney_id, 
-  target_close_date, deal_value_cents, notes, tags, created_by, created_at, updated_at`;
+  counterparty_name, governing_law_state, status, priority, health_score, lead_advocate_id, lead_attorney_id, 
+  target_close_date, deal_value_paise, deal_value_cents, notes, tags, created_by, created_at, updated_at`;
 
 const DOCUMENT_COLS = `id, tenant_id, matter_id, source_name, mime_type, doc_type, 
   ingestion_status, security_status, file_uri, sha256, normalized_text, page_count, 
@@ -279,16 +279,18 @@ export const matterRepo = {
     clientName: string;
     counterpartyName?: string;
     governingLawState?: string;
+    leadAdvocateId?: string;
     leadAttorneyId?: string;
     createdBy: string;
   }) {
+    const leadAdvocateId = data.leadAdvocateId ?? data.leadAttorneyId ?? null;
     const result = await pool.query(
       `INSERT INTO matters (tenant_id, matter_code, matter_name, matter_type, client_name, 
-        counterparty_name, governing_law_state, lead_attorney_id, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        counterparty_name, governing_law_state, lead_advocate_id, lead_attorney_id, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9)
        RETURNING ${MATTER_COLS}`,
       [tenantId, data.matterCode, data.matterName, data.matterType, data.clientName,
-       data.counterpartyName, data.governingLawState, data.leadAttorneyId, data.createdBy]
+       data.counterpartyName, data.governingLawState, leadAdvocateId, data.createdBy]
     );
     return result.rows[0];
   },

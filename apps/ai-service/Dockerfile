@@ -11,6 +11,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     tesseract-ocr \
     tesseract-ocr-eng \
+    tesseract-ocr-hin \
+    tesseract-ocr-ben \
+    tesseract-ocr-tam \
+    tesseract-ocr-tel \
+    tesseract-ocr-kan \
+    tesseract-ocr-mal \
+    tesseract-ocr-mar \
+    tesseract-ocr-guj \
+    tesseract-ocr-pan \
+    tesseract-ocr-ori \
+    tesseract-ocr-urd \
+    tesseract-ocr-san \
+    tesseract-ocr-asm \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -37,6 +50,19 @@ FROM python:3.11-slim AS runner
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
+    tesseract-ocr-hin \
+    tesseract-ocr-ben \
+    tesseract-ocr-tam \
+    tesseract-ocr-tel \
+    tesseract-ocr-kan \
+    tesseract-ocr-mal \
+    tesseract-ocr-mar \
+    tesseract-ocr-guj \
+    tesseract-ocr-pan \
+    tesseract-ocr-ori \
+    tesseract-ocr-urd \
+    tesseract-ocr-san \
+    tesseract-ocr-asm \
     libgomp1 \
     libgl1 \
     libglib2.0-0 \

@@ -17,8 +17,7 @@ RUN groupadd --system --gid 1001 appgroup && \
 WORKDIR /app
 
 # Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir celery[redis] redis httpx pydantic pydantic-settings
+RUN pip install --no-cache-dir celery[redis] redis httpx pydantic pydantic-settings kombu
 
 # Copy application code
 COPY --chown=appuser:appgroup . .

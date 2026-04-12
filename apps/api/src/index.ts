@@ -267,28 +267,6 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
     await initializeWebSocket(app.server, config.REDIS_URL, config.JWT_PUBLIC_KEY_PATH);
   }
 
-  // ============================================================
-  // RAZORPAY WEBHOOK ROUTE
-  // ============================================================
-
-  // POST /webhooks/razorpay - Razorpay webhook handler
-  app.post('/webhooks/razorpay', async (request, reply) => {
-    const signature = request.headers['x-razorpay-signature'] as string;
-
-    if (!signature) {
-      return reply.status(400).send({ success: false, error: { message: 'Missing x-razorpay-signature header' } });
-    }
-
-    try {
-      const { handleRazorpayWebhook } = await import('./billing.js');
-      const result = await handleRazorpayWebhook(request.body as Buffer, signature);
-      return reply.status(200).send(result);
-    } catch (error) {
-      logger.error({ error }, 'Razorpay webhook error');
-      return reply.status(400).send({ success: false, error: { message: 'Webhook verification failed' } });
-    }
-  });
-
   return { app, redis };
 }
 

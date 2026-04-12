@@ -43,6 +43,7 @@ import {
   incrementDocumentUsage,
   incrementResearchUsage,
 } from './billing-enforcement.js';
+import { handleRazorpayWebhook } from './billing.js';
 
 // ============================================================
 // REQUEST TYPES
@@ -3971,6 +3972,28 @@ END:VCALENDAR`;
   // ============================================================
   // WEBHOOK ROUTES
   // ============================================================
+
+  // POST /webhooks/razorpay - Razorpay webhook handler
+  fastify.post('/webhooks/razorpay', async (request, reply) => {
+    const signature = request.headers['x-razorpay-signature'];
+    if (!signature || typeof signature !== 'string') {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'MISSING_SIGNATURE', message: 'Missing x-razorpay-signature header' },
+      });
+    }
+
+    try {
+      await handleRazorpayWebhook(request.body as Buffer, signature);
+      return reply.status(200).send({ received: true });
+    } catch (error) {
+      logger.error({ error }, 'Razorpay webhook error');
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_SIGNATURE', message: 'Webhook verification failed' },
+      });
+    }
+  });
 
   // GET /api/webhooks - List webhooks
   fastify.get('/api/webhooks', { preHandler: [authenticateRequest, requireRoles('admin')] }, async (request) => {

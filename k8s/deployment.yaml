@@ -139,6 +139,16 @@ spec:
               memory: "2Gi"
               cpu: "1000m"
           livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - celery -A celery_app inspect ping -d "celery@$HOSTNAME" --timeout=5
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3
+            timeoutSeconds: 10
+          livenessProbe:
             httpGet:
               path: /health
               port: 4000
@@ -646,6 +656,8 @@ spec:
             - INFO
             - --scheduler
             - celery.beat:PersistentScheduler
+            - --pidfile=/tmp/celerybeat.pid
+            - --schedule=/tmp/celerybeat-schedule
           env:
             - name: REDIS_URL
               valueFrom:
@@ -678,6 +690,60 @@ spec:
             limits:
               memory: "1Gi"
               cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - test -f /tmp/celerybeat.pid && kill -0 "$(cat /tmp/celerybeat.pid)"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3
+            timeoutSeconds: 10
+
+---
+# Celery Worker PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: celery-worker-pdb
+  namespace: evidentis
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: evidentis-celery-worker
+
+---
+# NetworkPolicy for Celery Worker
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: celery-worker-network-policy
+  namespace: evidentis
+spec:
+  podSelector:
+    matchLabels:
+      app: evidentis-celery-worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: evidentis-api
+      ports:
+        - port: 4000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: evidentis-ai-service
+      ports:
+        - port: 5000
+    - ports:
+        - port: 6379
 
 ---
 # Worker PodDisruptionBudget

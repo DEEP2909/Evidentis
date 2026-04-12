@@ -369,6 +369,29 @@
 - `npm run test:smoke --workspace=apps/api` ✅ (4 passed)
 - `python -m compileall apps/ai-worker` ✅
 
+## Latest Fixes (Session 41)
+- Completed remediation for the newly updated `issue.md` backlog:
+  - **Webhook routing alignment**:
+    - Added `POST /webhooks/razorpay` directly in `apps/api/src/routes.ts`.
+    - Removed duplicate inline webhook registration from `apps/api/src/index.ts`.
+    - Preserved raw-body parser path for Razorpay signature verification.
+  - **CI coverage scope restoration**:
+    - Restored `apps/api` `test:coverage:ci` to full-suite coverage execution (`vitest run --coverage`).
+  - **AI worker Docker build fix**:
+    - Removed invalid `COPY requirements.txt` step from `apps/ai-worker/Dockerfile`.
+    - Added missing `kombu` to installed runtime dependencies.
+  - **Kubernetes Celery hardening**:
+    - Added liveness probes for `celery-worker` and `celery-beat`.
+    - Added `celery-worker-pdb` (`minAvailable: 1`).
+    - Added `celery-worker-network-policy` with constrained egress (API 4000, AI 5000, Redis 6379).
+- Updated `issue.md` to Session 41 resolved ledger and verification snapshot.
+
+## Session 41 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅ (4 passed)
+- `python -m compileall apps/ai-worker` ✅
+- `npm run test:coverage:ci --workspace=apps/api` ⚠️ blocked locally after command restoration because local PostgreSQL lacks `pgvector` (`extension "vector" is not available`); CI node-check uses `pgvector/pgvector` service for this path.
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite with `npm run test:coverage:ci -w @evidentis/api`.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX.

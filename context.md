@@ -195,6 +195,20 @@
 - `ruff check .` (from `apps/ai-service`) ✅
 - `mypy main.py config.py domain_models.py explainability.py llm_safety.py prompts routers models evaluation --ignore-missing-imports` ✅
 
+## Latest Fixes (Session 32)
+- Resolved new CI `python-checks` failure caused by strict mypy typing in `apps/ai-service/tests/test_research_helpers.py`:
+  - Added explicit mixed payload typing for `build_chunks_from_payload` test input (`list[str | dict[str, Any]]`).
+  - Updated stream alias test to pass a type-safe request object via `cast(Request, SimpleNamespace())`.
+- Pushed fix to GitHub:
+  - Branch: `main`
+  - Commit: `84ab2d3`
+  - Remote: `origin` (`https://github.com/DEEP2909/Evidentis.git`)
+
+## Session 32 Verification
+- `mypy main.py config.py domain_models.py explainability.py llm_safety.py prompts routers models evaluation tests/test_ai_service.py tests/test_domain_models.py tests/test_explainability.py tests/test_llm_safety.py tests/test_router_logic.py tests/test_research_helpers.py --ignore-missing-imports` ✅
+- `pytest tests/ -v --tb=short --cov=. --cov-config=.coveragerc --cov-report=json` ✅
+- Python coverage total: **78.4%** ✅
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.

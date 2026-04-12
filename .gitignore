@@ -7,6 +7,7 @@ build/
 coverage/
 .coverage
 coverage.json
+apps/ai-service/coverage.json
 *.log
 .DS_Store
 Thumbs.db
@@ -18,7 +19,13 @@ pytest-cache-files-*/
 apps/ai-service/pytest-cache-files-*/
 .venv/
 venv/
+.venv-ai/
 *.pyc
+
+# Local runtime secrets/artifacts
+keys/
+storage/
+certs/
 
 # Environment files
 .env

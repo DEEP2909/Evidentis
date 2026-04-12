@@ -414,3 +414,48 @@
 - `npm run test:coverage:ci --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
+
+## Latest Fixes (Session 43)
+- Completed full remediation pass for the newly expanded `issue.md` audit ledger:
+  - **Tenant isolation hardening** (`apps/api/src/tenant-isolation.ts`):
+    - Replaced invalid tenant context query columns (`subscription_tier`, `features`) with schema-valid `plan` + `settings` handling.
+    - Removed invalid blanket `deleted_at` assumptions; limit checks now query active schema columns.
+    - Added strict table whitelist + identifier validation for dynamic tenant-scoped helpers to prevent SQL injection vectors.
+    - Added validated/whitelisted `orderBy` parsing to remove column-name injection risk.
+  - **Security/runtime config alignment**:
+    - `apps/api/src/config.ts` now supports `APP_ENCRYPTION_KEY_FILE` and enforces 64-char hex key format.
+    - `apps/api/src/security.ts` now validates key format/length and enforces password policy from configurable env values.
+    - `apps/api/src/security-hardening.ts` SQLi regex narrowed to high-signal patterns to reduce legal-text false positives.
+  - **Infra and compose production fixes** (`docker-compose.prod.yml`):
+    - Removed deprecated compose `version` field.
+    - Switched API auth env wiring to RS256 key-file paths + encryption secret file path.
+    - Updated secrets to `jwt_private_key`, `jwt_public_key`, `app_encryption_key`.
+    - Aligned Redis runtime to password-protected internal URL defaults and removed TLS-only Redis server mismatch.
+    - Added dashboard IP allowlist middleware for Traefik dashboard exposure control.
+    - Pinned OTEL collector image to `0.113.0`.
+  - **Schema and migration alignment**:
+    - Updated initial schema defaults for India runtime consistency (`region`, embedding vector/model defaults, paise fields, file size, AI cost fields).
+    - Added `20260412000019_schema-alignment-fixes.js` (region backfill/defaults, file size column, paise alignment, SAC default, `research_history.advocate_id` backfill).
+    - Added `20260412000020_drop-legacy-cost-usd.js` to remove legacy USD-only AI cost column post-backfill.
+    - Hardened `20260412000018_add-ai-model-cost-paise.js` for safe execution when legacy `cost_usd` is absent.
+  - **Billing correctness** (`apps/api/src/billing.ts`):
+    - Checkout no longer updates tenant plan before payment capture.
+    - Invoice creation now persists GST details with SAC code `998212`.
+  - **Reliability/performance fixes**:
+    - `apps/api/src/malware.ts` stream scanning now uses true ClamAV streaming (no full-buffer accumulation) and improved socket cleanup semantics.
+    - `apps/api/src/orchestrator.ts` `cancelPipeline()` now reuses singleton Redis queue connection (no throwaway connection churn).
+    - Worker metrics port moved from `9100` to `9101` (`apps/api/src/worker-main.ts`, `k8s/deployment.yaml`).
+    - `apps/ai-service/main.py` rate limiter now fails open on Redis outages, improves client IP fallback, and sets graceful shutdown timeout.
+    - `apps/api/src/storage.ts` filename sanitization now preserves Unicode letters/numbers.
+  - **Terminology/tests/docs cleanup**:
+    - India-context legal test text updates in `apps/api/tests/research.test.ts` and `apps/api/tests/matters.test.ts`.
+    - Email branding corrected and terminology normalized (`advocateName`) in `apps/api/src/email.ts`.
+    - `.gitignore` now includes `keys/`, `storage/`, `certs/`, `.venv-ai/`, and AI coverage artifact path.
+    - Deployment docs updated for key path/env alignment in `DEPLOYMENT_GUIDE.md`.
+    - `issue.md` rewritten as Session 43 resolved ledger.
+
+## Session 43 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:coverage:ci --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `pytest apps/ai-service/tests -q` ✅ (111 passed)

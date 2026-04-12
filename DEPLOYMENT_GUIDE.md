@@ -91,28 +91,30 @@ DATABASE_URL=postgresql://evidentis:SECURE_PASSWORD@db.yourdomain.com:5432/evide
 # =============================================================================
 # REDIS
 # =============================================================================
-REDIS_URL=rediss://default:SECURE_PASSWORD@redis.yourdomain.com:6379
+REDIS_URL=redis://:SECURE_PASSWORD@redis.yourdomain.com:6379
 
 # =============================================================================
 # AUTHENTICATION
 # =============================================================================
-# Generate with: openssl genrsa -out private.pem 2048 && openssl rsa -in private.pem -pubout -out public.pem
-JWT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
-JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-JWT_ACCESS_EXPIRY=15m
-JWT_REFRESH_EXPIRY=7d
+# Generate with: openssl genrsa -out keys/private.pem 2048 && openssl rsa -in keys/private.pem -pubout -out keys/public.pem
+JWT_PRIVATE_KEY_PATH=./keys/private.pem
+JWT_PUBLIC_KEY_PATH=./keys/public.pem
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_DAYS=7
 
 # =============================================================================
 # ENCRYPTION
 # =============================================================================
 # Generate with: openssl rand -hex 32
 APP_ENCRYPTION_KEY=your-64-character-hex-key-here
+# Optional when mounting Docker secrets:
+APP_ENCRYPTION_KEY_FILE=/run/secrets/app_encryption_key
 
 # =============================================================================
 # STORAGE (S3-compatible)
 # =============================================================================
 S3_BUCKET=evidentis-documents-production
-S3_REGION=us-east-1
+S3_REGION=centralindia
 S3_ENDPOINT=https://s3.amazonaws.com
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...

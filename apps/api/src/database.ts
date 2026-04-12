@@ -14,27 +14,40 @@ const { Pool } = pg;
 // CONNECTION POOL
 // ============================================================
 
-export const pool = new Pool({
-  connectionString: config.DATABASE_URL,
-  max: config.DB_POOL_MAX,
-  idleTimeoutMillis: config.DB_IDLE_TIMEOUT_MS,
-  connectionTimeoutMillis: config.DB_CONNECT_TIMEOUT_MS,
-  ssl: config.DB_SSL === 'true'
-    ? {
-        rejectUnauthorized: true,
-        ca: config.DB_SSL_CA ? fs.readFileSync(config.DB_SSL_CA, 'utf8') : undefined,
-      }
-    : false,
-});
+function createPool(connectionString = config.DATABASE_URL): pg.Pool {
+  return new Pool({
+    connectionString,
+    max: config.DB_POOL_MAX,
+    idleTimeoutMillis: config.DB_IDLE_TIMEOUT_MS,
+    connectionTimeoutMillis: config.DB_CONNECT_TIMEOUT_MS,
+    ssl: config.DB_SSL === 'true'
+      ? {
+          rejectUnauthorized: true,
+          ca: config.DB_SSL_CA ? fs.readFileSync(config.DB_SSL_CA, 'utf8') : undefined,
+        }
+      : false,
+  });
+}
 
-// Connection event handlers
-pool.on('connect', () => {
-  logger.debug('Database client connected');
-});
+function attachPoolEventHandlers(dbPool: pg.Pool): void {
+  dbPool.on('connect', () => {
+    logger.debug('Database client connected');
+  });
 
-pool.on('error', (err) => {
-  logger.error({ err }, 'Unexpected database pool error');
-});
+  dbPool.on('error', (err) => {
+    logger.error({ err }, 'Unexpected database pool error');
+  });
+}
+
+export let pool: pg.Pool = createPool();
+attachPoolEventHandlers(pool);
+
+export async function reinitializePool(connectionString?: string): Promise<void> {
+  const previousPool = pool;
+  pool = createPool(connectionString ?? config.DATABASE_URL);
+  attachPoolEventHandlers(pool);
+  await previousPool.end();
+}
 
 // ============================================================
 // QUERY HELPERS

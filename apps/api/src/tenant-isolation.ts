@@ -4,16 +4,180 @@
  * CRITICAL: Every database query MUST be filtered by tenant_id
  */
 
-import { FastifyInstance, type FastifyRequest, type FastifyReply, type FastifyPluginCallback } from 'fastify';
+import { type FastifyRequest, type FastifyReply, type FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
 import { logger } from './logger.js';
 import { pool } from './database.js';
+
+type SortDirection = 'ASC' | 'DESC';
+
+interface TenantTableConfig {
+  supportsSoftDelete: boolean;
+  sortableColumns: Set<string>;
+}
+
+const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
+  attorneys: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'updated_at', 'display_name', 'email', 'status']),
+  },
+  matters: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'updated_at', 'matter_name', 'matter_code', 'status']),
+  },
+  documents: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'updated_at', 'source_name', 'ingestion_status']),
+  },
+  document_chunks: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'chunk_index']),
+  },
+  clauses: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'clause_type', 'confidence']),
+  },
+  flags: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'severity', 'status']),
+  },
+  playbooks: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'name', 'version']),
+  },
+  playbook_rules: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'clause_type', 'priority']),
+  },
+  obligations: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'deadline', 'status', 'priority']),
+  },
+  clause_suggestions: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'status', 'confidence']),
+  },
+  review_actions: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'action_type']),
+  },
+  audit_events: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'event_type', 'object_type']),
+  },
+  workflow_jobs: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'updated_at', 'status', 'job_type']),
+  },
+  research_history: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at']),
+  },
+  ai_model_events: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'task_type', 'model_name']),
+  },
+  tenant_ai_quotas: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['updated_at', 'quota_reset_at']),
+  },
+  api_keys: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'last_used_at']),
+  },
+  invitations: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'expires_at']),
+  },
+  password_reset_tokens: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'expires_at']),
+  },
+  mfa_enrollments: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at']),
+  },
+  refresh_tokens: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'expires_at', 'revoked_at']),
+  },
+  passkeys: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'last_used_at']),
+  },
+  sso_configurations: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'updated_at']),
+  },
+  scim_tokens: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'expires_at', 'last_used_at']),
+  },
+  share_links: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'expires_at']),
+  },
+  webhooks: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at']),
+  },
+  court_cases: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'last_synced_at', 'next_hearing_date']),
+  },
+  hearing_dates: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'hearing_date', 'next_date']),
+  },
+  invoices: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'issue_date', 'due_date', 'status']),
+  },
+};
+
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function assertSafeIdentifier(identifier: string, label: string): string {
+  if (!IDENTIFIER_PATTERN.test(identifier)) {
+    throw new Error(`Invalid ${label}: ${identifier}`);
+  }
+  return identifier;
+}
+
+function getTenantTableConfig(table: string): TenantTableConfig {
+  const normalized = table.trim().toLowerCase();
+  if (!TENANT_TABLE_CONFIG[normalized]) {
+    throw new Error(`Unsupported tenant-scoped table: ${table}`);
+  }
+  return TENANT_TABLE_CONFIG[normalized];
+}
+
+function getSafeTableName(table: string): string {
+  const normalized = table.trim().toLowerCase();
+  getTenantTableConfig(normalized);
+  return quoteIdentifier(normalized);
+}
+
+function parseOrderBy(orderBy: string, sortableColumns: Set<string>): { column: string; direction: SortDirection } {
+  const [rawColumn, rawDirection] = orderBy.trim().split(/\s+/, 2);
+  const column = assertSafeIdentifier(rawColumn, 'orderBy column').toLowerCase();
+  if (!sortableColumns.has(column)) {
+    throw new Error(`Unsupported orderBy column: ${column}`);
+  }
+  const direction = rawDirection?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+  return { column, direction };
+}
 
 // Extend FastifyRequest to include tenant context
 declare module 'fastify' {
   interface FastifyRequest {
     tenantId: string;
     tenantContext: TenantContext;
+    getTenantQuery: () => ReturnType<typeof createTenantScopedQuery>;
   }
 }
 
@@ -75,10 +239,15 @@ const TIER_LIMITS: Record<string, TenantLimits> = {
  */
 async function loadTenantContext(tenantId: string): Promise<TenantContext | null> {
   try {
-    const result = await pool.query(
-      `SELECT id, name, subscription_tier, features, created_at 
-       FROM tenants 
-       WHERE id = $1 AND deleted_at IS NULL`,
+    const result = await pool.query<{
+      id: string;
+      name: string;
+      plan: string | null;
+      settings: unknown;
+    }>(
+      `SELECT id, name, plan, settings
+       FROM tenants
+       WHERE id = $1`,
       [tenantId]
     );
 
@@ -87,13 +256,23 @@ async function loadTenantContext(tenantId: string): Promise<TenantContext | null
     }
 
     const tenant = result.rows[0];
-    const tier = tenant.subscription_tier || 'starter';
+    const tierCandidate = tenant.plan || 'starter';
+    const tier = tierCandidate in TIER_LIMITS ? tierCandidate : 'starter';
+    const tenantSettings =
+      tenant.settings && typeof tenant.settings === 'object'
+        ? (tenant.settings as Record<string, unknown>)
+        : {};
+    const featuresCandidate = tenantSettings.features;
+    const features =
+      Array.isArray(featuresCandidate)
+        ? featuresCandidate.filter((value): value is string => typeof value === 'string')
+        : [];
 
     return {
       tenantId: tenant.id,
       tenantName: tenant.name,
-      tier,
-      features: tenant.features || [],
+      tier: tier as TenantContext['tier'],
+      features,
       limits: TIER_LIMITS[tier] || TIER_LIMITS.starter,
     };
   } catch (error) {
@@ -111,8 +290,14 @@ export async function validateTenantOwnership(
   resourceId: string
 ): Promise<boolean> {
   try {
+    const tableConfig = getTenantTableConfig(table);
+    const safeTableName = getSafeTableName(table);
+    const whereClauses = ['id = $1', 'tenant_id = $2'];
+    if (tableConfig.supportsSoftDelete) {
+      whereClauses.push('deleted_at IS NULL');
+    }
     const result = await pool.query(
-      `SELECT 1 FROM ${table} WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      `SELECT 1 FROM ${safeTableName} WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
       [resourceId, tenantId]
     );
     return result.rows.length > 0;
@@ -130,9 +315,9 @@ export function createTenantScopedQuery(tenantId: string) {
     /**
      * Execute a query with automatic tenant_id filtering
      */
-    async query<T = any>(
+    async query<T = unknown>(
       sql: string,
-      params: any[] = []
+      params: unknown[] = []
     ): Promise<T[]> {
       // Verify the query includes tenant_id filter
       if (!sql.toLowerCase().includes('tenant_id')) {
@@ -146,9 +331,15 @@ export function createTenantScopedQuery(tenantId: string) {
     /**
      * Find by ID with tenant scope
      */
-    async findById<T = any>(table: string, id: string): Promise<T | null> {
+    async findById<T = unknown>(table: string, id: string): Promise<T | null> {
+      const tableConfig = getTenantTableConfig(table);
+      const safeTableName = getSafeTableName(table);
+      const whereClauses = ['id = $1', 'tenant_id = $2'];
+      if (tableConfig.supportsSoftDelete) {
+        whereClauses.push('deleted_at IS NULL');
+      }
       const result = await pool.query(
-        `SELECT * FROM ${table} WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        `SELECT * FROM ${safeTableName} WHERE ${whereClauses.join(' AND ')}`,
         [id, tenantId]
       );
       return result.rows[0] || null;
@@ -157,31 +348,41 @@ export function createTenantScopedQuery(tenantId: string) {
     /**
      * Find many with tenant scope
      */
-    async findMany<T = any>(
+    async findMany<T = unknown>(
       table: string,
-      conditions: Record<string, any> = {},
+      conditions: Record<string, unknown> = {},
       options: { limit?: number; offset?: number; orderBy?: string } = {}
     ): Promise<T[]> {
-      const whereConditions = ['tenant_id = $1', 'deleted_at IS NULL'];
-      const params: any[] = [tenantId];
+      const tableConfig = getTenantTableConfig(table);
+      const safeTableName = getSafeTableName(table);
+      const whereConditions = ['tenant_id = $1'];
+      if (tableConfig.supportsSoftDelete) {
+        whereConditions.push('deleted_at IS NULL');
+      }
+      const params: unknown[] = [tenantId];
       let paramIndex = 2;
 
       for (const [key, value] of Object.entries(conditions)) {
-        whereConditions.push(`${key} = $${paramIndex}`);
+        const safeKey = assertSafeIdentifier(key, 'condition column');
+        whereConditions.push(`${quoteIdentifier(safeKey)} = $${paramIndex}`);
         params.push(value);
         paramIndex++;
       }
 
-      let sql = `SELECT * FROM ${table} WHERE ${whereConditions.join(' AND ')}`;
+      let sql = `SELECT * FROM ${safeTableName} WHERE ${whereConditions.join(' AND ')}`;
       
       if (options.orderBy) {
-        sql += ` ORDER BY ${options.orderBy}`;
+        const parsedOrder = parseOrderBy(options.orderBy, tableConfig.sortableColumns);
+        sql += ` ORDER BY ${quoteIdentifier(parsedOrder.column)} ${parsedOrder.direction}`;
       }
-      if (options.limit) {
-        sql += ` LIMIT ${options.limit}`;
+      if (typeof options.limit === 'number') {
+        sql += ` LIMIT $${paramIndex}`;
+        params.push(options.limit);
+        paramIndex++;
       }
-      if (options.offset) {
-        sql += ` OFFSET ${options.offset}`;
+      if (typeof options.offset === 'number') {
+        sql += ` OFFSET $${paramIndex}`;
+        params.push(options.offset);
       }
 
       const result = await pool.query(sql, params);
@@ -191,14 +392,16 @@ export function createTenantScopedQuery(tenantId: string) {
     /**
      * Insert with tenant scope
      */
-    async insert<T = any>(table: string, data: Record<string, any>): Promise<T> {
+    async insert<T = unknown>(table: string, data: Record<string, unknown>): Promise<T> {
+      const safeTableName = getSafeTableName(table);
       const dataWithTenant = { ...data, tenant_id: tenantId };
       const columns = Object.keys(dataWithTenant);
       const values = Object.values(dataWithTenant);
       const placeholders = columns.map((_, i) => `$${i + 1}`);
+      const safeColumns = columns.map((column) => quoteIdentifier(assertSafeIdentifier(column, 'insert column')));
 
       const result = await pool.query(
-        `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
+        `INSERT INTO ${safeTableName} (${safeColumns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
         values
       );
       return result.rows[0] as T;
@@ -207,18 +410,28 @@ export function createTenantScopedQuery(tenantId: string) {
     /**
      * Update with tenant scope
      */
-    async update<T = any>(
+    async update<T = unknown>(
       table: string,
       id: string,
-      data: Record<string, any>
+      data: Record<string, unknown>
     ): Promise<T | null> {
+      if (Object.keys(data).length === 0) {
+        return this.findById<T>(table, id);
+      }
+
+      const tableConfig = getTenantTableConfig(table);
+      const safeTableName = getSafeTableName(table);
       const updates = Object.entries(data)
-        .map(([key], i) => `${key} = $${i + 3}`)
+        .map(([key], i) => `${quoteIdentifier(assertSafeIdentifier(key, 'update column'))} = $${i + 3}`)
         .join(', ');
       const values = [id, tenantId, ...Object.values(data)];
+      const whereClauses = ['id = $1', 'tenant_id = $2'];
+      if (tableConfig.supportsSoftDelete) {
+        whereClauses.push('deleted_at IS NULL');
+      }
 
       const result = await pool.query(
-        `UPDATE ${table} SET ${updates}, updated_at = NOW() WHERE id = $1 AND tenant_id = $2 RETURNING *`,
+        `UPDATE ${safeTableName} SET ${updates}, updated_at = NOW() WHERE ${whereClauses.join(' AND ')} RETURNING *`,
         values
       );
       return result.rows[0] || null;
@@ -228,8 +441,18 @@ export function createTenantScopedQuery(tenantId: string) {
      * Soft delete with tenant scope
      */
     async softDelete(table: string, id: string): Promise<boolean> {
+      const tableConfig = getTenantTableConfig(table);
+      const safeTableName = getSafeTableName(table);
+      if (tableConfig.supportsSoftDelete) {
+        const result = await pool.query(
+          `UPDATE ${safeTableName} SET deleted_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+          [id, tenantId]
+        );
+        return (result.rowCount || 0) > 0;
+      }
+
       const result = await pool.query(
-        `UPDATE ${table} SET deleted_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+        `DELETE FROM ${safeTableName} WHERE id = $1 AND tenant_id = $2`,
         [id, tenantId]
       );
       return (result.rowCount || 0) > 0;
@@ -303,7 +526,7 @@ export async function checkTenantLimits(
     case 'documents': {
       limit = context.limits.maxDocuments;
       const docResult = await pool.query(
-        'SELECT COUNT(*) FROM documents WHERE tenant_id = $1 AND deleted_at IS NULL',
+        'SELECT COUNT(*) FROM documents WHERE tenant_id = $1',
         [tenantId]
       );
       current = Number.parseInt(docResult.rows[0].count, 10);
@@ -313,7 +536,7 @@ export async function checkTenantLimits(
     case 'matters': {
       limit = context.limits.maxMatters;
       const matterResult = await pool.query(
-        'SELECT COUNT(*) FROM matters WHERE tenant_id = $1 AND deleted_at IS NULL',
+        'SELECT COUNT(*) FROM matters WHERE tenant_id = $1',
         [tenantId]
       );
       current = Number.parseInt(matterResult.rows[0].count, 10);
@@ -323,7 +546,7 @@ export async function checkTenantLimits(
     case 'users': {
       limit = context.limits.maxUsers;
       const userResult = await pool.query(
-        'SELECT COUNT(*) FROM attorneys WHERE tenant_id = $1 AND deleted_at IS NULL',
+        'SELECT COUNT(*) FROM attorneys WHERE tenant_id = $1',
         [tenantId]
       );
       current = Number.parseInt(userResult.rows[0].count, 10);
@@ -333,10 +556,10 @@ export async function checkTenantLimits(
     case 'storage': {
       limit = context.limits.maxStorageBytes;
       const storageResult = await pool.query(
-        'SELECT COALESCE(SUM(file_size_bytes), 0) FROM documents WHERE tenant_id = $1 AND deleted_at IS NULL',
+        'SELECT COALESCE(SUM(file_size_bytes), 0) AS total_bytes FROM documents WHERE tenant_id = $1',
         [tenantId]
       );
-      current = Number.parseInt(storageResult.rows[0].coalesce, 10);
+      current = Number.parseInt(storageResult.rows[0].total_bytes, 10);
       break;
     }
   }

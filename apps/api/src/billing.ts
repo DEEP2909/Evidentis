@@ -181,10 +181,9 @@ export async function createCheckoutSession(
 
   await pool.query(
     `UPDATE tenants
-     SET razorpay_customer_id = COALESCE(razorpay_customer_id, $2),
-         plan = $3
+     SET razorpay_customer_id = COALESCE(razorpay_customer_id, $2)
      WHERE id = $1`,
-    [tenantId, paymentLink.customer?.email ?? advocateEmail, plan]
+    [tenantId, paymentLink.customer?.email ?? advocateEmail]
   );
 
   return {
@@ -365,8 +364,19 @@ export async function createInvoiceForPlan(tenantId: string, plan: PlanType, cre
     [tenantId, 'Tenant Billing Account', invoiceNumber, totals.subtotalPaise, totals.gstRatePercent, totals.gstAmountPaise, totals.totalPaise, createdBy]
   );
 
+  const invoiceId = invoice.rows[0]?.id;
+  if (invoiceId) {
+    await pool.query(
+      `INSERT INTO gst_details (
+         invoice_id, sac_code, gst_rate, taxable_amount_paise, cgst_amount_paise, sgst_amount_paise, igst_amount_paise
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [invoiceId, '998212', totals.gstRatePercent, totals.subtotalPaise, 0, 0, totals.gstAmountPaise]
+    );
+  }
+
   return {
-    id: invoice.rows[0]?.id,
+    id: invoiceId,
     invoiceNumber,
     ...totals,
   };

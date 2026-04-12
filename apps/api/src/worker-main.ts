@@ -12,7 +12,7 @@ import { collectDefaultMetrics, Gauge, Registry, Counter } from 'prom-client';
 
 const HEARTBEAT_PATH = '/tmp/worker-heartbeat';
 const HEARTBEAT_INTERVAL_MS = 30_000;
-const METRICS_PORT = 9100;
+const METRICS_PORT = 9101;
 const METRICS_INTERVAL_MS = 15_000;
 
 const register = new Registry();

@@ -649,7 +649,7 @@ describe('Clauses API', () => {
         payload: {
           clauseId: clauseResult.rows[0].id,
           action: 'reject',
-          note: 'This clause is unenforceable in California',
+          note: 'This clause is unenforceable under applicable Indian labour law',
         },
       });
       

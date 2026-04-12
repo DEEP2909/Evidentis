@@ -475,7 +475,7 @@ spec:
         app: evidentis-worker
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9100"
+        prometheus.io/port: "9101"
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: evidentis-api
@@ -487,7 +487,7 @@ spec:
           image: evidentis/api:latest
           command: ["node", "dist/worker-main.js"]
           ports:
-            - containerPort: 9100
+            - containerPort: 9101
               name: metrics
           envFrom:
             - secretRef:

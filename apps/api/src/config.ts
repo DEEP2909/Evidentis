@@ -4,11 +4,12 @@
  * IndiaKanoon, eCourts, and data-localisation defaults.
  */
 
+import fs from 'node:fs';
 import { z } from 'zod';
 
 const isProductionEnv = process.env.NODE_ENV === 'production';
 const DEV_APP_ENCRYPTION_KEY =
-  'dev-only-key-do-not-use-in-production-00000000000000000000000000000000';
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 const configSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -22,12 +23,8 @@ const configSchema = z.object({
   JWT_ISSUER: z.string().default('evidentis-india'),
   JWT_AUDIENCE: z.string().default('evidentis-india-api'),
 
-  APP_ENCRYPTION_KEY: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    isProductionEnv
-      ? z.string().min(64, 'APP_ENCRYPTION_KEY must be at least 64 chars in production')
-      : z.string().min(64).default(DEV_APP_ENCRYPTION_KEY)
-  ),
+  APP_ENCRYPTION_KEY: z.string().optional(),
+  APP_ENCRYPTION_KEY_FILE: z.string().optional(),
 
   DATABASE_URL: z.string().url(),
   DB_POOL_MAX: z.coerce.number().default(10),
@@ -143,7 +140,35 @@ function loadConfig() {
     process.exit(1);
   }
 
-  return result.data;
+  const parsedConfig = result.data;
+  let encryptionKey = parsedConfig.APP_ENCRYPTION_KEY?.trim();
+
+  if (!encryptionKey && parsedConfig.APP_ENCRYPTION_KEY_FILE) {
+    try {
+      encryptionKey = fs.readFileSync(parsedConfig.APP_ENCRYPTION_KEY_FILE, 'utf8').trim();
+    } catch (error) {
+      console.error(`Failed to read APP_ENCRYPTION_KEY_FILE (${parsedConfig.APP_ENCRYPTION_KEY_FILE}):`, error);
+      process.exit(1);
+    }
+  }
+
+  if (!encryptionKey) {
+    if (isProductionEnv) {
+      console.error('APP_ENCRYPTION_KEY is required in production (or set APP_ENCRYPTION_KEY_FILE).');
+      process.exit(1);
+    }
+    encryptionKey = DEV_APP_ENCRYPTION_KEY;
+  }
+
+  if (!/^[A-Fa-f0-9]{64}$/.test(encryptionKey)) {
+    console.error('APP_ENCRYPTION_KEY must be a 64-character hex string (32 bytes).');
+    process.exit(1);
+  }
+
+  return {
+    ...parsedConfig,
+    APP_ENCRYPTION_KEY: encryptionKey,
+  };
 }
 
 export const config = loadConfig();

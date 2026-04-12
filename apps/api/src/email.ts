@@ -107,7 +107,7 @@ function wrapTemplate(content: string): string {
 <body>
   <div class="container">
     <div class="header">
-      <div class="logo">Lex<span>OS</span></div>
+      <div class="logo">Evident<span>IS</span></div>
     </div>
     <div class="content">
       ${content}
@@ -129,11 +129,11 @@ function wrapTemplate(content: string): string {
 export async function sendPasswordResetEmail(
   email: string,
   resetUrl: string,
-  attorneyName: string
+  advocateName: string
 ): Promise<void> {
   const html = wrapTemplate(`
     <h2>Reset Your Password</h2>
-    <p>Hi ${attorneyName},</p>
+    <p>Hi ${advocateName},</p>
     <p>We received a request to reset the password for your EvidentIS account. Click the button below to set a new password:</p>
     <p style="text-align: center;">
       <a href="${resetUrl}" class="button">Reset Password</a>
@@ -178,11 +178,11 @@ export async function sendInvitationEmail(
 
 export async function sendMFAEnabledEmail(
   email: string,
-  attorneyName: string
+  advocateName: string
 ): Promise<void> {
   const html = wrapTemplate(`
     <h2>Two-Factor Authentication Enabled</h2>
-    <p>Hi ${attorneyName},</p>
+    <p>Hi ${advocateName},</p>
     <p>Two-factor authentication has been successfully enabled for your EvidentIS account. Your account is now more secure.</p>
     <p>From now on, you'll need to enter a code from your authenticator app when signing in.</p>
     <div class="warning">
@@ -200,7 +200,7 @@ export async function sendMFAEnabledEmail(
 
 export async function sendObligationReminderEmail(
   email: string,
-  attorneyName: string,
+  advocateName: string,
   obligationDescription: string,
   matterName: string,
   deadlineDate: string,
@@ -210,7 +210,7 @@ export async function sendObligationReminderEmail(
   
   const html = wrapTemplate(`
     <h2>Upcoming Obligation Reminder</h2>
-    <p>Hi ${attorneyName},</p>
+    <p>Hi ${advocateName},</p>
     <p>This is a reminder about an upcoming obligation for matter <strong>${matterName}</strong>:</p>
     <div class="${urgencyClass}" style="background: #F1F5F9; border-radius: 6px; padding: 16px; margin: 16px 0;">
       <p style="margin: 0;"><strong>Obligation:</strong> ${obligationDescription}</p>
@@ -230,7 +230,7 @@ export async function sendObligationReminderEmail(
 
 export async function sendDocumentProcessedEmail(
   email: string,
-  attorneyName: string,
+  advocateName: string,
   documentName: string,
   matterName: string,
   flagCount: number,
@@ -242,7 +242,7 @@ export async function sendDocumentProcessedEmail(
 
   const html = wrapTemplate(`
     <h2>Document Analysis Complete</h2>
-    <p>Hi ${attorneyName},</p>
+    <p>Hi ${advocateName},</p>
     <p>The document <strong>${documentName}</strong> for matter <strong>${matterName}</strong> has been fully analyzed.</p>
     ${flagSummary}
     <p style="text-align: center;">

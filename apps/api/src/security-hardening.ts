@@ -241,7 +241,13 @@ export function validateFileUpload(
 // SQL injection patterns
 const SQL_INJECTION_PATTERNS = [
   /(\%27)|(\')|(\-\-)|(\%23)|(#)/i,
-  /\b(union|select|insert|update|delete|drop|truncate|exec|execute)\b/i,
+  /\bunion\s+select\b/i,
+  /\binsert\s+into\b/i,
+  /\bupdate\s+[a-z_][a-z0-9_]*\s+set\b/i,
+  /\bdelete\s+from\b/i,
+  /\bdrop\s+(table|database|schema)\b/i,
+  /\btruncate\s+table\b/i,
+  /\bexec(?:ute)?\s*\(/i,
   /(\%00)/i,
   /\bor\b\s*\d+\s*=\s*\d+/i,
   /\band\b\s*\d+\s*=\s*\d+/i,

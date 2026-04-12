@@ -1359,10 +1359,10 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Insert document record
     const document = await queryOne<{ id: string }>(
-      `INSERT INTO documents (tenant_id, matter_id, source_name, mime_type, doc_type, sha256, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO documents (tenant_id, matter_id, source_name, mime_type, doc_type, sha256, file_size_bytes, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
-      [authReq.tenantId, matterId, filename, data.mimetype, docType, sha256Hash, authReq.advocateId]
+      [authReq.tenantId, matterId, filename, data.mimetype, docType, sha256Hash, buffer.length, authReq.advocateId]
     );
 
     if (!document) {
@@ -1974,8 +1974,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 4. Save to research history
       await query(
-        `INSERT INTO research_history (tenant_id, matter_id, attorney_id, question, answer, citations, sources_used)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, attorney_id, question, answer, citations, sources_used)
+         VALUES ($1, $2, $3, $3, $4, $5, $6, $7)`,
         [
           authReq.tenantId, 
           matterId || null, 
@@ -2210,8 +2210,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 5. Persist to research_history
       await query(
-        `INSERT INTO research_history (tenant_id, matter_id, attorney_id, question, answer, citations, sources_used)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, attorney_id, question, answer, citations, sources_used)
+         VALUES ($1, $2, $3, $3, $4, $5, $6, $7)`,
         [
           authReq.tenantId,
           matterId || null,

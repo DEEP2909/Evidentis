@@ -318,7 +318,7 @@ export function generateDocumentKey(
 ): string {
   // Sanitize filename
   const sanitized = filename
-    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/[^\p{L}\p{N}._-]/gu, '_')
     .replace(/_{2,}/g, '_');
 
   return `${prefix}/${tenantId}/${documentId}/${sanitized}`;

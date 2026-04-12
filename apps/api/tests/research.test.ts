@@ -364,7 +364,7 @@ describe('Flag Management', () => {
     const flags = [
       { severity: 'critical', rule_id: 'rule1', description: 'Uncapped indemnity' },
       { severity: 'high', rule_id: 'rule2', description: 'Weak limitation of liability' },
-      { severity: 'medium', rule_id: 'rule3', description: 'Non-compete in California' },
+      { severity: 'medium', rule_id: 'rule3', description: 'Non-compete risk in Karnataka' },
       { severity: 'low', rule_id: 'rule4', description: 'Missing notice period' },
     ];
     
@@ -836,14 +836,14 @@ describe('Redline and Suggestions', () => {
 // ============================================================================
 
 describe('Legal Rules Integration', () => {
-  it('should flag non-compete in California matter', async () => {
-    // Create California matter
+  it('should flag non-compete in Karnataka matter', async () => {
+    // Create Karnataka matter
     const matterId = '00000000-0000-0000-0000-000000000460';
     await pool.query(
       `INSERT INTO matters (id, tenant_id, matter_code, matter_name, matter_type, client_name, lead_attorney_id, governing_law_state)
-       VALUES ($1, $2, $3, $4, 'employment', 'Test Client', $5, 'CA')
+       VALUES ($1, $2, $3, $4, 'employment', 'Test Client', $5, 'KA')
        ON CONFLICT DO NOTHING`,
-      [matterId, TEST_TENANT.id, 'CA-TEST-460', 'CA Test', TEST_ATTORNEY.id]
+      [matterId, TEST_TENANT.id, 'KA-TEST-460', 'KA Test', TEST_ATTORNEY.id]
     );
     
     // Create document with non-compete
@@ -872,11 +872,11 @@ describe('Legal Rules Integration', () => {
     expect(response.statusCode).toBe(200);
   });
   
-  it('should validate CCPA requirements for California data privacy', async () => {
+  it('should validate DPDP-oriented requirements for India data privacy', async () => {
     // This tests the legal-rules.ts integration
     const response = await app.inject({
       method: 'GET',
-      url: '/api/legal-rules/CA/data_privacy',
+      url: '/api/legal-rules/DL/data_privacy',
       headers: { authorization: `Bearer ${token}` },
     });
     
@@ -949,13 +949,13 @@ describe('Contradiction Detection', () => {
     // Add potentially contradictory clauses
     await pool.query(
       `INSERT INTO clauses (tenant_id, document_id, clause_type, text, confidence_score, page_number)
-       VALUES ($1, $2, 'governing_law', 'This agreement shall be governed by New York law', 0.9, 1)`,
+       VALUES ($1, $2, 'governing_law', 'This agreement shall be governed by Delhi law', 0.9, 1)`,
       [TEST_TENANT.id, documentId]
     );
     
     await pool.query(
       `INSERT INTO clauses (tenant_id, document_id, clause_type, text, confidence_score, page_number)
-       VALUES ($1, $2, 'governing_law', 'California law applies exclusively', 0.9, 5)`,
+       VALUES ($1, $2, 'governing_law', 'Maharashtra law applies exclusively', 0.9, 5)`,
       [TEST_TENANT.id, documentId]
     );
   });

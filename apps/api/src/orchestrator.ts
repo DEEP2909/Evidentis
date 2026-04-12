@@ -87,6 +87,7 @@ function getFlowProducer(): FlowProducer {
 // ============================================================================
 
 let statusClient: Redis | null = null;
+let queueConnection: Redis | null = null;
 
 function getStatusClient(): Redis {
   if (!statusClient) {
@@ -97,6 +98,17 @@ function getStatusClient(): Redis {
     });
   }
   return statusClient;
+}
+
+function getQueueConnection(): Redis {
+  if (!queueConnection) {
+    queueConnection = new Redis(config.REDIS_URL, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      lazyConnect: true,
+    });
+  }
+  return queueConnection;
 }
 
 // ============================================================================
@@ -266,8 +278,7 @@ export async function cancelPipeline(
   tenantId: string,
   documentId: string
 ): Promise<boolean> {
-  const client = getStatusClient();
-  const connection = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
+  const connection = getQueueConnection();
   
   try {
     // Get current status
@@ -329,8 +340,6 @@ export async function cancelPipeline(
   } catch (error) {
     logger.error({ tenantId, documentId, error }, 'Failed to cancel pipeline');
     return false;
-  } finally {
-    await connection.quit();
   }
 }
 
@@ -346,5 +355,9 @@ export async function closeOrchestrator(): Promise<void> {
   if (statusClient) {
     await statusClient.quit();
     statusClient = null;
+  }
+  if (queueConnection) {
+    await queueConnection.quit();
+    queueConnection = null;
   }
 }

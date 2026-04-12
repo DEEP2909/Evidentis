@@ -98,10 +98,17 @@ async def enforce_internal_access(request: Request, call_next):
 
     rate_limit_redis = getattr(request.app.state, "rate_limit_redis", None)
     if rate_limit_redis is None:
-        logger.error("Rate limiter unavailable: Redis client missing on app state")
-        return JSONResponse(status_code=503, content={"detail": "Rate limiter unavailable"})
+        logger.warning("Rate limiter unavailable: Redis client missing on app state; allowing request")
+        return await call_next(request)
 
-    client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    client_ip = (
+        request.client.host
+        if request.client and request.client.host
+        else (forwarded_for.split(",")[0].strip() if forwarded_for else request.headers.get("x-real-ip", "unknown"))
+    )
+    if not client_ip:
+        client_ip = f"unknown:{request.url.path}"
     bucket_key = f"ratelimit:{client_ip}:{request.url.path}"
 
     try:
@@ -109,8 +116,8 @@ async def enforce_internal_access(request: Request, call_next):
         if request_count == 1:
             await rate_limit_redis.expire(bucket_key, RATE_LIMIT_WINDOW_SECONDS)
     except redis.RedisError as exc:
-        logger.error("Rate limit Redis operation failed for key %s: %s", bucket_key, exc)
-        return JSONResponse(status_code=503, content={"detail": "Rate limiter unavailable"})
+        logger.warning("Rate limit Redis operation failed for key %s: %s; allowing request", bucket_key, exc)
+        return await call_next(request)
 
     if request_count > runtime_settings.rate_limit_requests_per_minute:
         return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
@@ -221,4 +228,5 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
+        timeout_graceful_shutdown=30,
     )

@@ -1,6 +1,6 @@
 /* eslint-disable camelcase */
 /**
- * Add paise-denominated AI model cost tracking.
+ * Remove legacy USD-denominated AI cost column after paise migration.
  */
 
 exports.shorthands = undefined;
@@ -24,6 +24,9 @@ exports.up = (pgm) => {
         SET estimated_cost_paise = ROUND(COALESCE(cost_usd, 0)::numeric * 8300)::bigint
         WHERE estimated_cost_paise = 0
           AND cost_usd IS NOT NULL;
+
+        ALTER TABLE ai_model_events
+          DROP COLUMN cost_usd;
       END IF;
     END
     $$;
@@ -33,7 +36,6 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   pgm.sql(`
     ALTER TABLE ai_model_events
-      DROP COLUMN IF EXISTS estimated_cost_paise,
-      DROP COLUMN IF EXISTS cost_currency;
+      ADD COLUMN IF NOT EXISTS cost_usd numeric(10,6);
   `);
 };

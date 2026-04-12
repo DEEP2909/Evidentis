@@ -207,8 +207,9 @@ async function seedAttorneys(pool: Pool, attorneys: DemoAttorney[]): Promise<voi
     await pool.query(
       `INSERT INTO attorneys (
         id, tenant_id, email, display_name, role, practice_group,
-        bar_number, bar_state, password_hash, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', NOW())
+        bar_number, bar_state, bar_council_enrollment_number, bar_council_state,
+        password_hash, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $7, $8, $9, 'active', NOW())
       ON CONFLICT (tenant_id, email) DO NOTHING`,
       [
         attorney.id, attorney.tenantId, attorney.email, attorney.displayName,

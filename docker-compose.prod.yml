@@ -71,6 +71,7 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       # AI Service
       AI_SERVICE_URL: http://ai-service:8000
+      AI_SERVICE_INTERNAL_KEY: ${AI_SERVICE_INTERNAL_KEY}
       # S3 Storage
       S3_BUCKET: ${S3_BUCKET}
       S3_REGION: ${S3_REGION:-centralindia}

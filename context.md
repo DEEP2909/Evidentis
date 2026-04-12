@@ -271,3 +271,24 @@
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.
 - Continue expanding legal datasets, citation coverage, and retrieval evaluation for Indian case law and state-specific rules.
+
+## Latest Fixes (Session 36)
+- Completed remediation for the newly updated `issue.md` backlog (5/5 fixed):
+  - `k8s/deployment.yaml` ExternalSecret no longer references Paddle and now injects India production integrations and AI internal service auth secret:
+    - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
+    - `MSG91_AUTH_KEY`, `INDIANKANOON_API_KEY`, `ECOURTS_API_KEY`
+    - `AI_SERVICE_INTERNAL_KEY`
+  - `k8s/deployment.yaml` ai-service Deployment env now pins runtime embedding config and enables internal-key enforcement:
+    - `EMBEDDING_MODEL=sentence-transformers/LaBSE`
+    - `EMBEDDING_DIM=768`
+    - `AI_SERVICE_INTERNAL_KEY` from `evidentis-secrets`
+  - `docker-compose.prod.yml` API service now receives `AI_SERVICE_INTERNAL_KEY` so API -> AI calls can authenticate with `X-Internal-Key`.
+  - `/auth/me` profile query in `apps/api/src/routes.ts` now returns canonical advocate profile fields:
+    - `bar_council_enrollment_number`, `bar_council_state`, `bci_enrollment_number`
+    - `phone_number`, `preferred_language`
+  - `scripts/seed.ts` `seedAttorneys` now writes canonical enrollment fields (`bar_council_enrollment_number`, `bar_council_state`) in addition to compatibility columns.
+
+## Session 36 Verification
+- `npm run typecheck --workspace=apps/api` passed.
+- `npm run test:smoke --workspace=apps/api` passed.
+- `npm run typecheck --workspace=apps/web` passed.

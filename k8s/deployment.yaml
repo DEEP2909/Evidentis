@@ -45,30 +45,34 @@ spec:
       remoteRef:
         key: evidentis/production/encryption
         property: key
-    - secretKey: PADDLE_VENDOR_ID
+    - secretKey: RAZORPAY_KEY_ID
       remoteRef:
-        key: evidentis/production/paddle
-        property: vendor_id
-    - secretKey: PADDLE_API_KEY
+        key: evidentis/production/razorpay
+        property: key_id
+    - secretKey: RAZORPAY_KEY_SECRET
       remoteRef:
-        key: evidentis/production/paddle
-        property: api_key
-    - secretKey: PADDLE_WEBHOOK_SECRET
+        key: evidentis/production/razorpay
+        property: key_secret
+    - secretKey: RAZORPAY_WEBHOOK_SECRET
       remoteRef:
-        key: evidentis/production/paddle
+        key: evidentis/production/razorpay
         property: webhook_secret
-    - secretKey: PADDLE_PRICE_STARTER
+    - secretKey: MSG91_AUTH_KEY
       remoteRef:
-        key: evidentis/production/paddle
-        property: price_starter
-    - secretKey: PADDLE_PRICE_GROWTH
+        key: evidentis/production/msg91
+        property: auth_key
+    - secretKey: INDIANKANOON_API_KEY
       remoteRef:
-        key: evidentis/production/paddle
-        property: price_growth
-    - secretKey: PADDLE_PRICE_PROFESSIONAL
+        key: evidentis/production/indiankanoon
+        property: api_key
+    - secretKey: ECOURTS_API_KEY
       remoteRef:
-        key: evidentis/production/paddle
-        property: price_professional
+        key: evidentis/production/ecourts
+        property: api_key
+    - secretKey: AI_SERVICE_INTERNAL_KEY
+      remoteRef:
+        key: evidentis/production/ai-service
+        property: internal_key
 
 ---
 # ConfigMap for non-sensitive configuration
@@ -238,8 +242,17 @@ spec:
           env:
             - name: OLLAMA_BASE_URL
               value: "http://ollama:11434"
+            - name: EMBEDDING_MODEL
+              value: "sentence-transformers/LaBSE"
+            - name: EMBEDDING_DIM
+              value: "768"
             - name: GPU_ENABLED
               value: "false"
+            - name: AI_SERVICE_INTERNAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: evidentis-secrets
+                  key: AI_SERVICE_INTERNAL_KEY
           resources:
             requests:
               memory: "2Gi"

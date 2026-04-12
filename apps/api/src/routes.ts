@@ -986,11 +986,17 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       practice_group: string | null;
       bar_number: string | null;
       bar_state: string | null;
+      bar_council_enrollment_number: string | null;
+      bar_council_state: string | null;
+      bci_enrollment_number: string | null;
+      phone_number: string | null;
+      preferred_language: string;
       mfa_enabled: boolean;
       last_login_at: Date | null;
     }>(
-      `SELECT id, email, display_name, role, practice_group, bar_number, bar_state, 
-              mfa_enabled, last_login_at
+      `SELECT id, email, display_name, role, practice_group, bar_number, bar_state,
+              bar_council_enrollment_number, bar_council_state, bci_enrollment_number,
+              phone_number, preferred_language, mfa_enabled, last_login_at
        FROM attorneys WHERE id = $1 AND tenant_id = $2`,
       [authReq.advocateId, authReq.tenantId]
     );

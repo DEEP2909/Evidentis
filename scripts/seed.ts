@@ -7,7 +7,7 @@
  */
 
 import { Pool } from 'pg';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 
 // ============================================================================
@@ -77,9 +77,9 @@ interface DemoMatter {
 // ============================================================================
 
 const demoTenants: DemoTenant[] = [
-  { id: randomUUID(), name: 'Acme Legal Partners LLP', slug: 'acme-legal', plan: 'professional', barState: 'MH' },
-  { id: randomUUID(), name: 'Pacific Coast Law Group', slug: 'pacific-coast', plan: 'growth', barState: 'DL' },
-  { id: randomUUID(), name: 'Midwest Corporate Counsel', slug: 'midwest-corp', plan: 'starter', barState: 'KA' },
+  { id: randomUUID(), name: 'Sharma & Associates LLP', slug: 'sharma-associates', plan: 'professional', barState: 'MH' },
+  { id: randomUUID(), name: 'Delhi Corporate Law Group', slug: 'delhi-corporate', plan: 'growth', barState: 'DL' },
+  { id: randomUUID(), name: 'Bengaluru Legal Counsel', slug: 'bengaluru-legal', plan: 'starter', barState: 'KA' },
 ];
 
 function createDemoAttorneys(tenants: DemoTenant[]): DemoAttorney[] {
@@ -301,27 +301,50 @@ async function seedObligations(pool: Pool, matters: DemoMatter[], attorneys: Dem
     { description: 'Execute final agreement', daysFromNow: 30, status: 'pending' },
     { description: 'Deliver closing documents', daysFromNow: 45, status: 'pending' },
     { description: 'Complete due diligence review', daysFromNow: -5, status: 'overdue' },
-    { description: 'Submit regulatory filing', daysFromNow: 15, status: 'acknowledged' },
+    { description: 'Submit regulatory filing', daysFromNow: 15, status: 'in_progress' },
     { description: 'Obtain board approval', daysFromNow: 7, status: 'pending' },
   ];
   
   let count = 0;
   for (const matter of matters.slice(0, 15)) {
-    const assignee = attorneys.find(a => a.tenantId === matter.tenantId && a.role === 'attorney');
+    const assignee = attorneys.find(a => a.tenantId === matter.tenantId && a.role === 'advocate');
+    const creator = attorneys.find(a => a.tenantId === matter.tenantId && a.role === 'admin');
     
     const template = obligationTemplates[count % obligationTemplates.length];
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + template.daysFromNow);
+
+    const existingDocument = await pool.query<{ id: string }>(
+      `SELECT id FROM documents WHERE tenant_id = $1 AND matter_id = $2 ORDER BY created_at ASC LIMIT 1`,
+      [matter.tenantId, matter.id]
+    );
+
+    let documentId = existingDocument.rows[0]?.id;
+    if (!documentId) {
+      documentId = randomUUID();
+      const sourceName = `${matter.matterCode}-seed-document.txt`;
+      const sha256 = createHash('sha256')
+        .update(`${matter.id}:${template.description}:${sourceName}`)
+        .digest('hex');
+
+      await pool.query(
+        `INSERT INTO documents (
+          id, tenant_id, matter_id, source_name, mime_type, doc_type, sha256, created_by, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, 'text/plain', 'contract', $5, $6, NOW(), NOW())
+        ON CONFLICT DO NOTHING`,
+        [documentId, matter.tenantId, matter.id, sourceName, sha256, creator?.id || assignee?.id || null]
+      );
+    }
     
     await pool.query(
       `INSERT INTO obligations (
-        id, tenant_id, matter_id, description, deadline, status,
-        assigned_attorney_id, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        id, tenant_id, document_id, matter_id, obligation_type, description, responsible_party,
+        deadline, status, completed_by, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, 'milestone', $5, 'client', $6, $7, $8, NOW(), NOW())
       ON CONFLICT DO NOTHING`,
       [
-        randomUUID(), matter.tenantId, matter.id, template.description,
-        deadline.toISOString(), template.status, assignee?.id
+        randomUUID(), matter.tenantId, documentId, matter.id, template.description,
+        deadline.toISOString(), template.status, assignee?.id || null
       ]
     );
     

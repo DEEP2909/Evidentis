@@ -450,10 +450,13 @@ export async function jitProvisionUser(
   providerUserId: string,
   provider: string
 ): Promise<{ id: string; created: boolean }> {
+  const normalizedEmail = email.toLowerCase();
+  const displayName = name.trim() || normalizedEmail.split('@')[0];
+
   // Check if user exists
   const existing = await pool.query(
     `SELECT id FROM attorneys WHERE email = $1 AND tenant_id = $2`,
-    [email, tenantId]
+    [normalizedEmail, tenantId]
   );
 
   if (existing.rows.length > 0) {
@@ -473,24 +476,20 @@ export async function jitProvisionUser(
   }
 
   // Create new user
-  const nameParts = name.split(' ');
-  const firstName = nameParts[0] || '';
-  const lastName = nameParts.slice(1).join(' ') || '';
-
   const result = await pool.query(
     `INSERT INTO attorneys (
-       tenant_id, email, first_name, last_name, role, 
-       is_active, created_at, password_hash
+       tenant_id, email, display_name, role,
+       status, created_at, password_hash
      )
-     VALUES ($1, $2, $3, $4, $5, true, NOW(), 'SSO_USER')
+     VALUES ($1, $2, $3, $4, 'active', NOW(), 'SSO_USER')
      RETURNING id`,
-    [tenantId, email, firstName, lastName, tenant.rows[0].default_role || 'attorney']
+    [tenantId, normalizedEmail, displayName, tenant.rows[0].default_role || 'advocate']
   );
 
   // Link SSO identity
   await linkSSOIdentity(result.rows[0].id, provider, providerUserId, tenantId);
 
-  logger.info({ tenantId, email, provider }, 'User JIT provisioned via SSO');
+  logger.info({ tenantId, email: normalizedEmail, provider }, 'User JIT provisioned via SSO');
 
   return { id: result.rows[0].id, created: true };
 }

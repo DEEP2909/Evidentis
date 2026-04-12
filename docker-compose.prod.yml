@@ -73,16 +73,13 @@ services:
       AI_SERVICE_URL: http://ai-service:8000
       # S3 Storage
       S3_BUCKET: ${S3_BUCKET}
-      S3_REGION: ${AWS_REGION:-us-east-1}
+      S3_REGION: ${S3_REGION:-centralindia}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      # Paddle
-      PADDLE_VENDOR_ID: ${PADDLE_VENDOR_ID}
-      PADDLE_API_KEY: ${PADDLE_API_KEY}
-      PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET}
-      PADDLE_PRICE_STARTER: ${PADDLE_PRICE_STARTER}
-      PADDLE_PRICE_GROWTH: ${PADDLE_PRICE_GROWTH}
-      PADDLE_PRICE_PROFESSIONAL: ${PADDLE_PRICE_PROFESSIONAL}
+      # Razorpay
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
       # Telemetry
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318}
       OTEL_SERVICE_NAME: evidentis-api
@@ -113,8 +110,8 @@ services:
       - jwt_secret
       - jwt_refresh_secret
       - encryption_key
-      - paddle_api_key
-      - paddle_webhook_secret
+      - razorpay_key_secret
+      - razorpay_webhook_secret
     networks:
       - internal
       - traefik
@@ -207,8 +204,8 @@ services:
       # OpenAI
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       # Embedding model
-      EMBEDDING_MODEL: text-embedding-3-large
-      EMBEDDING_DIMENSIONS: 3072
+      EMBEDDING_MODEL: sentence-transformers/LaBSE
+      EMBEDDING_DIM: 768
       # LLM
       LLM_MODEL: gpt-4o
       LLM_TEMPERATURE: 0.1
@@ -570,9 +567,9 @@ secrets:
     external: true
   encryption_key:
     external: true
-  paddle_api_key:
+  razorpay_key_secret:
     external: true
-  paddle_webhook_secret:
+  razorpay_webhook_secret:
     external: true
   postgres_password:
     external: true

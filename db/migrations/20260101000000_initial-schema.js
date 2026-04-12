@@ -61,7 +61,7 @@ exports.up = (pgm) => {
     },
     email: { type: 'text', notNull: true },
     display_name: { type: 'text', notNull: true },
-    role: { type: 'text', notNull: true, default: "'attorney'" },
+    role: { type: 'text', notNull: true, default: "'advocate'" },
     practice_group: { type: 'text' },
     bar_number: { type: 'text' },
     bar_state: { type: 'text' },

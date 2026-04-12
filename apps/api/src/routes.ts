@@ -3947,13 +3947,15 @@ END:VCALENDAR`;
       model: string;
       total_tokens: number;
       total_requests: number;
-      estimated_cost_cents: number;
+      estimated_cost_paise: number;
     }>(
-      `SELECT model, SUM(tokens_used) as total_tokens, COUNT(*) as total_requests,
-              SUM(estimated_cost_cents) as estimated_cost_cents
+      `SELECT model_name as model,
+              SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)) as total_tokens,
+              COUNT(*) as total_requests,
+              SUM(estimated_cost_paise) as estimated_cost_paise
        FROM ai_model_events
-       WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
-       GROUP BY model`,
+        WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
+       GROUP BY model_name`,
       [authReq.tenantId, startDate, endDate]
     );
 

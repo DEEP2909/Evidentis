@@ -242,6 +242,31 @@
 - `mypy main.py config.py domain_models.py explainability.py llm_safety.py prompts routers models evaluation tests/test_ai_service.py tests/test_domain_models.py tests/test_explainability.py tests/test_llm_safety.py tests/test_router_logic.py tests/test_research_helpers.py --ignore-missing-imports` ✅
 - `pytest apps/ai-service/tests -q` ✅ (111 passed)
 
+## Latest Fixes (Session 35)
+- Completed remediation for the next updated `issue.md` backlog (6/6 fixed):
+  - `docker-compose.prod.yml` now uses Razorpay env/secrets, `S3_REGION` default `centralindia`, and AI embedding config `sentence-transformers/LaBSE` + `EMBEDDING_DIM=768`.
+  - `apps/api/src/scim.ts` no longer reintroduces `attorney`:
+    - group roles now use `advocate` and `client`
+    - role-removal fallback is now `advocate`
+    - SCIM audit `objectType` values switched to `advocate`.
+  - `apps/api/src/sso.ts` JIT provisioning now uses valid attorneys schema columns (`display_name`, `status`) and defaults to `advocate` (not `attorney`).
+  - Role defaults normalized:
+    - patched legacy migration defaults in `20260101000000_initial-schema.js`, `20260101000001_auth-tables.js`, and `20260401000006_add-sso.js`
+    - added `20260412000017_fix-default-role.js` for existing DBs.
+  - `scripts/seed.ts` repaired:
+    - India-aligned tenant names
+    - assignee lookup uses role `advocate`
+    - obligations insert now uses valid schema columns and ensures document linkage.
+  - AI cost analytics repaired:
+    - route query now uses valid `ai_model_events` fields (`model_name`, token totals)
+    - paise-denominated cost metric wired with new migration `20260412000018_add-ai-model-cost-paise.js`.
+
+## Session 35 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `npm run migrate:up --workspace=apps/api` ⚠️ blocked in this shell due missing `DATABASE_URL`
+
 ## Next Suggested Steps
 - Stand up local Postgres and Redis, then run the full API integration suite end to end.
 - Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.

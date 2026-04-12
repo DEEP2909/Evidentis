@@ -391,7 +391,7 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
     await auditRepo.create({
       tenantId,
       eventType: 'user.created.scim',
-      objectType: 'attorney',
+      objectType: 'advocate',
       objectId: result.rows[0].id,
       metadata: { email, externalId: data.externalId },
     });
@@ -442,7 +442,7 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
     await auditRepo.create({
       tenantId,
       eventType: 'user.updated.scim',
-      objectType: 'attorney',
+      objectType: 'advocate',
       objectId: id,
     });
     
@@ -519,7 +519,7 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
     await auditRepo.create({
       tenantId,
       eventType: 'user.patched.scim',
-      objectType: 'attorney',
+      objectType: 'advocate',
       objectId: id,
     });
     
@@ -553,7 +553,7 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
     await auditRepo.create({
       tenantId,
       eventType: 'user.deleted.scim',
-      objectType: 'attorney',
+      objectType: 'advocate',
       objectId: id,
     });
     
@@ -571,7 +571,7 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
     const query = request.query as { startIndex?: string; count?: string };
     
     // EvidentIS uses roles, not explicit groups, but we expose them as SCIM groups
-    const roles = ['admin', 'partner', 'attorney', 'paralegal', 'client_portal'];
+    const roles = ['admin', 'partner', 'advocate', 'paralegal', 'client'];
     
     const resources = roles.map((role, index) => ({
       schemas: ['urn:ietf:params:scim:schemas:core:2.0:Group'],
@@ -643,11 +643,11 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
             );
           }
         } else if (op.op === 'remove') {
-          // Remove members from role (set to default 'attorney')
+          // Remove members from role (set to default 'advocate')
           const memberMatch = op.path?.match(/members\[value eq "([^"]+)"\]/);
           if (memberMatch) {
             await pool.query(
-              `UPDATE attorneys SET role = 'attorney', updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+              `UPDATE attorneys SET role = 'advocate', updated_at = now() WHERE tenant_id = $1 AND id = $2`,
               [tenantId, memberMatch[1]]
             );
           }

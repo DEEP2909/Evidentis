@@ -26,7 +26,7 @@ exports.up = (pgm) => {
     is_enabled: { type: 'boolean', notNull: true, default: false },
     enforce_sso: { type: 'boolean', notNull: true, default: false }, // Require SSO for all users
     auto_provision: { type: 'boolean', notNull: true, default: true }, // JIT provisioning
-    default_role: { type: 'text', notNull: true, default: "'attorney'" },
+    default_role: { type: 'text', notNull: true, default: "'advocate'" },
     allowed_domains: { type: 'text[]', default: '{}' },
     created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
     updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },

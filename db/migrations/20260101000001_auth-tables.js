@@ -63,7 +63,7 @@ exports.up = (pgm) => {
       onDelete: 'CASCADE',
     },
     email: { type: 'text', notNull: true },
-    role: { type: 'text', notNull: true, default: "'attorney'" },
+    role: { type: 'text', notNull: true, default: "'advocate'" },
     token_hash: { type: 'text', notNull: true, unique: true },
     status: { type: 'text', notNull: true, default: "'pending'" },
     invited_by: {

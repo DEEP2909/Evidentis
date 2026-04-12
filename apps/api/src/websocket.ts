@@ -16,7 +16,7 @@ import type { Server as HttpServer } from 'http';
 
 interface AuthenticatedSocket extends Socket {
   user: {
-    attorneyId: string;
+    advocateId: string;
     tenantId: string;
     email: string;
     role: string;
@@ -76,7 +76,7 @@ interface NotificationEvent {
 }
 
 interface PresenceEvent {
-  attorneyId: string;
+  advocateId: string;
   email: string;
   displayName: string;
   status: 'online' | 'away' | 'busy';
@@ -140,7 +140,7 @@ export async function initializeWebSocket(
     if (devModeNoAuth) {
       console.warn('WebSocket: Dev mode - allowing unauthenticated connection');
       (socket as AuthenticatedSocket).user = {
-        attorneyId: 'dev-user',
+        advocateId: 'dev-user',
         tenantId: 'dev-tenant',
         email: 'dev@localhost',
         role: 'admin',
@@ -160,7 +160,7 @@ export async function initializeWebSocket(
       }
       const { payload } = await jwtVerify(token, publicKey);
       (socket as AuthenticatedSocket).user = {
-        attorneyId: payload.sub as string,
+        advocateId: payload.sub as string,
         tenantId: payload.tenantId as string,
         email: payload.email as string,
         role: payload.role as string,
@@ -174,15 +174,15 @@ export async function initializeWebSocket(
   // Connection handler
   io.on('connection', (socket: Socket) => {
     const authSocket = socket as AuthenticatedSocket;
-    const { tenantId, attorneyId, email } = authSocket.user;
+    const { tenantId, advocateId, email } = authSocket.user;
 
-    console.log(`WebSocket: User connected - ${email} (${attorneyId})`);
+    console.log(`WebSocket: User connected - ${email} (${advocateId})`);
 
     // Join tenant room for tenant-wide events
     socket.join(`tenant:${tenantId}`);
 
     // Join user-specific room for direct messages
-    socket.join(`user:${attorneyId}`);
+    socket.join(`user:${advocateId}`);
 
     // Handle room subscriptions
     socket.on('subscribe:matter', (matterId: string) => {
@@ -206,7 +206,7 @@ export async function initializeWebSocket(
     // Presence updates
     socket.on('presence:update', (data: { status: string; matterId?: string; documentId?: string }) => {
       const presenceEvent: PresenceEvent = {
-        attorneyId,
+        advocateId,
         email,
         displayName: email.split('@')[0], // Simplified; use actual display name
         status: data.status as 'online' | 'away' | 'busy',
@@ -221,7 +221,7 @@ export async function initializeWebSocket(
     // Document collaboration - cursor/selection sharing
     socket.on('document:cursor', (data: { documentId: string; position: number; selection?: { start: number; end: number } }) => {
       socket.to(`document:${tenantId}:${data.documentId}`).emit('document:cursor', {
-        attorneyId,
+        advocateId,
         email,
         ...data,
       });
@@ -230,7 +230,7 @@ export async function initializeWebSocket(
     // Typing indicator
     socket.on('typing:start', (data: { matterId: string; context: 'comment' | 'note' }) => {
       socket.to(`matter:${tenantId}:${data.matterId}`).emit('typing:start', {
-        attorneyId,
+        advocateId,
         email,
         ...data,
       });
@@ -238,7 +238,7 @@ export async function initializeWebSocket(
 
     socket.on('typing:stop', (data: { matterId: string }) => {
       socket.to(`matter:${tenantId}:${data.matterId}`).emit('typing:stop', {
-        attorneyId,
+        advocateId,
         ...data,
       });
     });
@@ -254,7 +254,7 @@ export async function initializeWebSocket(
       
       // Notify tenant of user going offline
       socket.to(`tenant:${tenantId}`).emit('presence:changed', {
-        attorneyId,
+        advocateId,
         email,
         status: 'offline',
       });
@@ -331,14 +331,14 @@ export function emitMatterEvent(tenantId: string, event: MatterEvent): void {
 
 export function emitNotification(
   tenantId: string, 
-  attorneyId: string | null, 
+  advocateId: string | null, 
   event: NotificationEvent
 ): void {
   if (!io) return;
 
-  if (attorneyId) {
+  if (advocateId) {
     // Send to specific user
-    io.to(`user:${attorneyId}`).emit('notification', event);
+    io.to(`user:${advocateId}`).emit('notification', event);
   } else {
     // Broadcast to tenant
     io.to(`tenant:${tenantId}`).emit('notification', event);
@@ -376,8 +376,8 @@ export function getConnectedUsers(tenantId: string): string[] {
   const userIds: string[] = [];
   for (const socketId of room) {
     const socket = io.sockets.sockets.get(socketId) as AuthenticatedSocket | undefined;
-    if (socket?.user?.attorneyId) {
-      userIds.push(socket.user.attorneyId);
+    if (socket?.user?.advocateId) {
+      userIds.push(socket.user.advocateId);
     }
   }
 
@@ -393,10 +393,10 @@ export function getSocketStats(): { connected: number; rooms: number } {
   };
 }
 
-export function disconnectUser(attorneyId: string): void {
+export function disconnectUser(advocateId: string): void {
   if (!io) return;
 
-  const room = io.sockets.adapter.rooms.get(`user:${attorneyId}`);
+  const room = io.sockets.adapter.rooms.get(`user:${advocateId}`);
   if (room) {
     for (const socketId of room) {
       const socket = io.sockets.sockets.get(socketId);

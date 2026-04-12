@@ -1,6 +1,7 @@
 # EvidentIS AI Worker - Obligation Reminder Tasks
-# Handles deadline notifications and overdue alerts
+# Handles deadline notifications and overdue alerts for Indian advocates
 
+import os
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
@@ -9,7 +10,7 @@ from celery import shared_task
 
 logger = logging.getLogger(__name__)
 
-API_SERVICE_URL = 'http://api:3000'
+API_SERVICE_URL = os.getenv('API_SERVICE_URL', 'http://api:4000')
 
 
 @shared_task(bind=True)
@@ -99,10 +100,8 @@ def send_obligation_reminder(
             
             obligation = response.json()
             
-            # Get assigned attorneys
+            # Get assigned advocates
             assignees = obligation.get('assignees', [])
-            if not assignees:
-                assignees = [obligation.get('responsible_attorney')]
             
             # Determine notification priority
             priority = 'normal'
@@ -252,8 +251,6 @@ def send_overdue_alert(
             
             # Get assignees and matter lead
             assignees = obligation.get('assignees', [])
-            if obligation.get('responsible_attorney'):
-                assignees.append(obligation['responsible_attorney'])
             
             # Get matter lead for escalation
             matter_response = client.get(
@@ -266,8 +263,8 @@ def send_overdue_alert(
             
             if matter_response.status_code == 200:
                 matter = matter_response.json()
-                if matter.get('lead_attorney_id'):
-                    assignees.append(matter['lead_attorney_id'])
+                if matter.get('lead_advocate_id'):
+                    assignees.append(matter['lead_advocate_id'])
             
             # Send urgent notification
             days_overdue = calculate_days_overdue(obligation.get('due_date'))

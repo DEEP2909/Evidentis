@@ -29,7 +29,7 @@ app.conf.update(
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
-    timezone='UTC',
+    timezone='Asia/Kolkata',
     enable_utc=True,
     
     # Task execution settings

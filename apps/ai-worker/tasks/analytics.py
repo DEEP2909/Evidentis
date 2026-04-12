@@ -1,6 +1,7 @@
 # EvidentIS AI Worker - Analytics Tasks
 # Handles analytics aggregation and computation
 
+import os
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
@@ -10,7 +11,7 @@ from celery import shared_task
 
 logger = logging.getLogger(__name__)
 
-API_SERVICE_URL = 'http://api:3000'
+API_SERVICE_URL = os.getenv('API_SERVICE_URL', 'http://api:4000')
 
 
 @shared_task(bind=True)

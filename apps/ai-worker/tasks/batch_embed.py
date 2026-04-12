@@ -1,6 +1,7 @@
 # EvidentIS AI Worker - Batch Embedding Tasks
 # Handles bulk document embedding and re-embedding operations
 
+import os
 import asyncio
 import logging
 from typing import List, Dict, Any, Optional
@@ -12,8 +13,8 @@ from celery.exceptions import MaxRetriesExceededError
 logger = logging.getLogger(__name__)
 
 # AI Service URL
-AI_SERVICE_URL = 'http://ai-service:8000'
-API_SERVICE_URL = 'http://api:3000'
+AI_SERVICE_URL = os.getenv('AI_SERVICE_URL', 'http://ai-service:8000')
+API_SERVICE_URL = os.getenv('API_SERVICE_URL', 'http://api:4000')
 
 
 @shared_task(bind=True, max_retries=5, default_retry_delay=120)

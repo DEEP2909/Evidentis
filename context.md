@@ -292,3 +292,27 @@
 - `npm run typecheck --workspace=apps/api` passed.
 - `npm run test:smoke --workspace=apps/api` passed.
 - `npm run typecheck --workspace=apps/web` passed.
+
+## Latest Fixes (Session 37)
+- Completed full remediation of the `issue.md` backlog (6 documented issues + 2 additional found during audit, 8/8 fixed):
+  - **AI-worker API_SERVICE_URL port fix** (all 5 task files): Changed hardcoded `http://api:3000` (Next.js frontend) to env-configurable `os.getenv('API_SERVICE_URL', 'http://api:4000')`. All background tasks (obligation reminders, analytics, reports, embeddings, cleanup) were silently failing by hitting the frontend instead of the API server.
+  - **Celery timezone fix** (`celery_app.py`): Changed `timezone='UTC'` to `timezone='Asia/Kolkata'` so beat schedules fire at intended IST business hours. Obligation reminders now fire at 8:00 AM IST (was 1:30 PM), cleanup at 3:00 AM IST (was 8:30 AM during peak hours).
+  - **Obligation field name fix** (`obligation_remind.py`): Removed `responsible_attorney` lookups (column doesn't exist in schema; was always None). Changed `lead_attorney_id` to `lead_advocate_id` (canonical column).
+  - **Analytics query column fixes** (`routes.ts`): Fixed `review_actions WHERE attorney_id` to `reviewer_id` (matching schema). Fixed `matters WHERE lead_attorney_id` to include both `lead_advocate_id OR lead_attorney_id` for pre/post-migration coverage.
+  - **Review actions INSERT fix** (`routes.ts`): Corrected column names from `attorney_id, action, notes` to `reviewer_id, action_type, note` (matching the actual `review_actions` schema).
+  - **WebSocket advocateId rename** (`websocket.ts`): Renamed `attorneyId` → `advocateId` in `AuthenticatedSocket` interface, `PresenceEvent` interface, auth middleware, JWT extraction, connection/presence/cursor/typing handlers, `emitNotification`, `disconnectUser`, and `getConnectedUsers`.
+  - **Docker Compose env vars**: Added `API_SERVICE_URL` to ai-worker environment in `docker-compose.yml` (dev: `http://api:4000`) and both ai-worker + celery-beat in `docker-compose.prod.yml` (prod: `http://api:3001`).
+- Rewrote `issue.md` as a resolved-status ledger with Session 37 verification snapshot.
+
+## Session 37 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `npm run test:smoke --workspace=apps/api` ✅ (2 passed)
+- Zero remaining `http://api:3000` references in ai-worker ✅
+- Zero remaining `attorneyId` references in websocket.ts ✅
+- Zero remaining `responsible_attorney` references in ai-worker ✅
+
+## Next Suggested Steps
+- Stand up local Postgres and Redis, then run the full API integration suite end to end.
+- Add more India-specific API and web tests around state-level compliance variations, billing flows, and multilingual UX for all supported Indian languages.
+- Continue expanding legal datasets, citation coverage, and retrieval evaluation for Indian case law and state-specific rules.

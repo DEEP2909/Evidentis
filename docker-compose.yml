@@ -153,6 +153,7 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - AI_SERVICE_URL=http://ai-service:5000
+      - API_SERVICE_URL=http://api:4000
     depends_on:
       redis:
         condition: service_healthy

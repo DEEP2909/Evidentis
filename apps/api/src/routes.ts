@@ -3910,8 +3910,8 @@ END:VCALENDAR`;
         flags_resolved: number;
       }>(
         `SELECT a.id, a.display_name, a.role,
-                (SELECT COUNT(*) FROM matters WHERE lead_attorney_id = a.id) as matters_count,
-                (SELECT COUNT(*) FROM review_actions WHERE attorney_id = a.id) as documents_reviewed,
+                (SELECT COUNT(*) FROM matters WHERE lead_advocate_id = a.id OR lead_attorney_id = a.id) as matters_count,
+                (SELECT COUNT(*) FROM review_actions WHERE reviewer_id = a.id) as documents_reviewed,
                 (SELECT COUNT(*) FROM flags WHERE reviewed_by = a.id AND status != 'open') as flags_resolved
          FROM attorneys a
          WHERE a.tenant_id = $1 AND a.status = 'active'
@@ -4226,7 +4226,7 @@ END:VCALENDAR`;
 
     // Log review action
     await query(
-      `INSERT INTO review_actions (tenant_id, attorney_id, object_type, object_id, action, notes)
+      `INSERT INTO review_actions (tenant_id, reviewer_id, object_type, object_id, action_type, note)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         authReq.tenantId,

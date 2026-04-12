@@ -1313,7 +1313,6 @@ Content-Type: application/json
 
 ### 7.2.2 OTP Send (Mobile Login)
 ```http
-POST /auth/otp/send
 POST /api/auth/otp/send
 Content-Type: application/json
 
@@ -1326,7 +1325,6 @@ Content-Type: application/json
 
 ### 7.2.3 OTP Verify (Issue JWT)
 ```http
-POST /auth/otp/verify
 POST /api/auth/otp/verify
 Content-Type: application/json
 

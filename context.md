@@ -487,3 +487,31 @@
 - `npm run test:coverage:ci --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
 - `pytest apps/ai-service/tests -q` ✅ (111 passed)
+
+## Latest Fixes (Session 45)
+- Completed full remediation pass for the latest 4-item `issue.md` backlog:
+  - **Production compose build fix** (`docker-compose.prod.yml`):
+    - corrected Dockerfile paths to existing files:
+      - `apps/api/Dockerfile.api`
+      - `apps/web/Dockerfile.web`
+  - **OTP route surface cleanup** (`apps/api/src/routes.ts`):
+    - removed duplicate non-prefixed OTP endpoints:
+      - `/auth/otp/send`
+      - `/auth/otp/verify`
+    - retained canonical `/api/auth/otp/send` and `/api/auth/otp/verify`.
+  - **GST-compliant invoice numbering** (`apps/api/src/routes.ts`):
+    - replaced random `INV-*` fallback numbering in `/api/invoices` with sequential FY format:
+      - `EVD/YYYY-YY/NNNN`
+    - added transaction-scoped advisory locking per tenant + FY to prevent sequence collisions under concurrency.
+  - **AI typing dependency alignment** (`apps/ai-service/requirements.txt`):
+    - added `types-redis==4.6.0.20241004` for explicit Redis typing stubs.
+  - **Documentation updates**:
+    - rewrote `issue.md` as Session 45 resolved ledger with verification snapshot.
+
+## Session 45 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run test:coverage:ci --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `pip install types-redis==4.6.0.20241004` ✅
+- `pytest apps/ai-service/tests -q` ✅ (111 passed)

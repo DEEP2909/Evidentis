@@ -714,14 +714,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     };
   };
 
-  fastify.post('/auth/otp/send', {
-    config: {
-      rateLimit: {
-        max: rateLimits.otp.requests,
-        timeWindow: rateLimits.otp.windowMs,
-      },
-    },
-  }, sendOtpHandler);
   fastify.post('/api/auth/otp/send', {
     config: {
       rateLimit: {
@@ -860,14 +852,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     };
   };
 
-  fastify.post('/auth/otp/verify', {
-    config: {
-      rateLimit: {
-        max: rateLimits.otp.requests,
-        timeWindow: rateLimits.otp.windowMs,
-      },
-    },
-  }, verifyOtpHandler);
   fastify.post('/api/auth/otp/verify', {
     config: {
       rateLimit: {
@@ -2697,7 +2681,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     }).parse(request.body);
 
     const issueDate = body.issueDate || new Date().toISOString().slice(0, 10);
-    const invoiceNumber = body.invoiceNumber?.trim() || `INV-${issueDate.replace(/-/g, '')}-${generateSecureToken(3).toUpperCase()}`;
+    const customInvoiceNumber = body.invoiceNumber?.trim();
     const gstRate = body.gstRate ?? config.GST_RATE;
     const subtotalPaise = body.lineItems.reduce(
       (sum, item) => sum + Math.round(item.quantity * item.unitAmountPaise),
@@ -2708,6 +2692,34 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     try {
       const created = await withTransaction(async (tx) => {
+        let invoiceNumber = customInvoiceNumber;
+        if (!invoiceNumber) {
+          const parsedIssueDate = new Date(issueDate);
+          if (Number.isNaN(parsedIssueDate.getTime())) {
+            throw new Error('Invalid invoice issue date');
+          }
+
+          const issueYear = parsedIssueDate.getUTCFullYear();
+          const issueMonth = parsedIssueDate.getUTCMonth() + 1;
+          const fyStartYear = issueMonth >= 4 ? issueYear : issueYear - 1;
+          const fyEndYearShort = String((fyStartYear + 1) % 100).padStart(2, '0');
+          const fyLabel = `${fyStartYear}-${fyEndYearShort}`;
+          const prefix = `EVD/${fyLabel}/`;
+
+          await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice:${authReq.tenantId}:${fyLabel}`]);
+
+          const sequenceResult = await tx.queryOne<{ max_seq: number | null }>(
+            `SELECT COALESCE(MAX(NULLIF(substring(invoice_number FROM '([0-9]{4,})$'), '')::integer), 0) AS max_seq
+             FROM invoices
+             WHERE tenant_id = $1
+               AND invoice_number LIKE $2`,
+            [authReq.tenantId, `${prefix}%`]
+          );
+
+          const nextSequence = (sequenceResult?.max_seq ?? 0) + 1;
+          invoiceNumber = `${prefix}${String(nextSequence).padStart(4, '0')}`;
+        }
+
         const invoice = await tx.queryOne<{ id: string }>(
           `INSERT INTO invoices (
              tenant_id, matter_id, client_name, client_gstin, firm_gstin, invoice_number,
@@ -2758,14 +2770,17 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
           ]
         );
 
-        return invoice;
+        return {
+          id: invoice?.id,
+          invoiceNumber,
+        };
       });
 
       return reply.status(201).send({
         success: true,
         data: {
           id: created?.id,
-          invoiceNumber,
+          invoiceNumber: created?.invoiceNumber,
           subtotalPaise,
           gstAmountPaise,
           totalPaise,

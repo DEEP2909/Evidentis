@@ -24,7 +24,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: apps/api/Dockerfile.api
       args:
         NODE_ENV: production
     image: evidentis/api:${EVIDENTIS_VERSION:-latest}
@@ -120,7 +120,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: apps/web/Dockerfile.web
       args:
         NODE_ENV: production
         NEXT_PUBLIC_API_URL: https://api.${DOMAIN}

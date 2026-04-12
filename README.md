@@ -353,23 +353,20 @@ POST /auth/login
 
 ```bash
 # OTP login (India mobile)
-POST /auth/otp/send
+POST /api/auth/otp/send
 {
   "phoneNumber": "+919876543210",
   "purpose": "login",
   "tenantSlug": "demo-firm"
 }
 
-POST /auth/otp/verify
+POST /api/auth/otp/verify
 {
   "phoneNumber": "+919876543210",
   "otp": "123456",
   "purpose": "login",
   "tenantSlug": "demo-firm"
 }
-
-# API-prefixed aliases are also available:
-# /api/auth/otp/send and /api/auth/otp/verify
 ```
 
 ### Documents

@@ -557,3 +557,25 @@
 - `npm run test:coverage:ci --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
 - `pytest apps/ai-service/tests -q` ✅ (111 passed)
+
+## Latest Fixes (Session 48)
+- Completed remediation pass for the latest `issue.md` backlog:
+  - **Tenant isolation coverage expansion** (`apps/api/src/tenant-isolation.ts`):
+    - added missing India/operations tables into `TENANT_TABLE_CONFIG` (including `notifications`, `dpdp_requests`, `advocate_otps`, `cause_lists`, `section_bookmarks`, `case_citations`, `saved_judgments`, `legal_notices`, `invoice_line_items`, `gst_details`, `scim_sync_logs`, and global legal corpus tables).
+    - introduced explicit tenant scope metadata by table (`column`, `parent`, `global`) to prevent incorrect hardcoded `tenant_id` assumptions.
+    - hardened scoped helper operations (`findById`, `findMany`, `validateTenantOwnership`, `insert`, `update`, `softDelete`) to honor declared scope mode.
+    - added parent-scope join enforcement for tables with indirect tenant ownership (`invoice_line_items`, `gst_details` via `invoices`).
+    - blocked tenant-scoped helper writes to global tables (`bare_acts`, `bare_act_sections`, `legal_templates`, `privacy_notices`, `citation_networks`).
+  - **SCIM sync log alignment**:
+    - explicitly registered `scim_sync_logs` as tenant-scoped in isolation config.
+  - **Deployment compliance documentation** (`DEPLOYMENT_GUIDE.md`):
+    - added production note that `MSG91_SENDER_ID` must exactly match approved 6-character TRAI/DLT sender ID.
+  - **Documentation update**:
+    - rewrote `issue.md` as Session 48 resolved ledger with verification snapshot.
+
+## Session 48 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run test:coverage:ci --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `pytest apps/ai-service/tests -q` ✅ (111 passed)

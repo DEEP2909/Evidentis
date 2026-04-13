@@ -6,6 +6,8 @@ This guide covers deployment to **AWS**, **Google Cloud Platform (GCP)**, and **
 
 **EvidentIS** stands for **Evidence-Based Intelligent Decision System**.
 
+> **India SMS compliance note (MSG91 + DLT):** Before enabling OTP/SMS in production, register your sender ID on TRAI/DLT and set `MSG91_SENDER_ID` to the exact approved 6-character sender ID. Values in `.env.example` are placeholders and must match your approved DLT registration.
+
 ---
 
 ## Table of Contents

@@ -1,15 +1,19 @@
 # EvidentIS Issue Ledger
 
-> **Audit date:** 2026-04-13 (Session 47)  
-> **Scope:** CSP consistency, degraded limiter clarity, migration rollback ownership
+> **Audit date:** 2026-04-13 (Session 48)  
+> **Scope:** tenant isolation table coverage, SCIM log isolation registration, MSG91 DLT deployment guidance
 
-## Session 47 Results
+## Session 48 Results
 
 | ID | Severity | Status | Resolution |
 |----|----------|--------|------------|
-| 1 | Low | ✅ Fixed | `apps/api/src/security-hardening.ts` now uses `setHeaderIfMissing` for `Content-Security-Policy`, matching the same pattern as all other headers. |
-| 2 | Low | ✅ Fixed | Added explicit warning comment in `apps/ai-service/main.py` documenting degraded local limiter scope (process-local fallback, Redis is source-of-truth for shared limits). |
-| 3 | Moderate | ✅ Fixed | Updated `db/migrations/20260412000019_schema-alignment-fixes.js` down migration to avoid dropping `deal_value_paise` since ownership remains with migration `20260411000015_add-matter-paise.js`. |
+| 1 | Major | ✅ Fixed | Expanded `TENANT_TABLE_CONFIG` in `apps/api/src/tenant-isolation.ts` to include missing India tables and explicit scope metadata (`column`, `parent`, `global`). Added tenant-safe handling for FK-scoped tables (`invoice_line_items`, `gst_details`) and explicit global-table protections (`bare_acts`, `bare_act_sections`, `legal_templates`, `privacy_notices`, `citation_networks`). |
+| 2 | Moderate | ✅ Fixed | Added `scim_sync_logs` to tenant isolation config with `tenantScope: { mode: 'column', column: 'tenant_id' }` and sortable fields. |
+| 3 | Minor | ✅ Fixed | Updated `DEPLOYMENT_GUIDE.md` with explicit MSG91 + DLT compliance note: production `MSG91_SENDER_ID` must exactly match approved 6-character TRAI/DLT sender ID. |
+
+## Additional Hardening in This Pass
+
+- Refactored tenant-scoped query helpers (`findById`, `findMany`, `validateTenantOwnership`, `insert`, `update`, `softDelete`) to honor per-table scope mode, including parent-table joins for tenant resolution and explicit write rejection for global tables.
 
 ## Verification Snapshot
 

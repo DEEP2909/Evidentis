@@ -29,6 +29,9 @@ interface TenantTableConfig {
 }
 
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const TENANT_TABLE_ALIASES: Record<string, string> = {
+  sso_configs: 'sso_configurations',
+};
 
 const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   attorneys: {
@@ -66,11 +69,6 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
     sortableColumns: new Set(['created_at', 'name', 'version']),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
-  playbook_rules: {
-    supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'clause_type', 'priority']),
-    tenantScope: { mode: 'column', column: 'tenant_id' },
-  },
   obligations: {
     supportsSoftDelete: false,
     sortableColumns: new Set(['created_at', 'deadline', 'status', 'priority']),
@@ -104,6 +102,21 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   ai_model_events: {
     supportsSoftDelete: false,
     sortableColumns: new Set(['created_at', 'task_type', 'model_name']),
+    tenantScope: { mode: 'column', column: 'tenant_id' },
+  },
+  analytics_daily: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['date', 'created_at']),
+    tenantScope: { mode: 'column', column: 'tenant_id' },
+  },
+  analytics_matters: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['date', 'matter_id', 'created_at']),
+    tenantScope: { mode: 'column', column: 'tenant_id' },
+  },
+  user_activity: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'action']),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   tenant_ai_quotas: {
@@ -141,9 +154,24 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
     sortableColumns: new Set(['created_at', 'last_used_at']),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
+  webauthn_credentials: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'last_used_at']),
+    tenantScope: { mode: 'column', column: 'tenant_id' },
+  },
   sso_configurations: {
     supportsSoftDelete: false,
     sortableColumns: new Set(['created_at', 'updated_at']),
+    tenantScope: { mode: 'column', column: 'tenant_id' },
+  },
+  domain_verifications: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'domain']),
+    tenantScope: { mode: 'column', column: 'tenant_id' },
+  },
+  identity_links: {
+    supportsSoftDelete: false,
+    sortableColumns: new Set(['created_at', 'provider']),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   scim_tokens: {
@@ -270,6 +298,11 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   },
 };
 
+function normalizeTenantTableName(table: string): string {
+  const normalized = table.trim().toLowerCase();
+  return TENANT_TABLE_ALIASES[normalized] ?? normalized;
+}
+
 function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
@@ -282,7 +315,7 @@ function assertSafeIdentifier(identifier: string, label: string): string {
 }
 
 function getTenantTableConfig(table: string): TenantTableConfig {
-  const normalized = table.trim().toLowerCase();
+  const normalized = normalizeTenantTableName(table);
   if (!TENANT_TABLE_CONFIG[normalized]) {
     throw new Error(`Unsupported tenant-scoped table: ${table}`);
   }
@@ -290,7 +323,7 @@ function getTenantTableConfig(table: string): TenantTableConfig {
 }
 
 function getSafeTableName(table: string): string {
-  const normalized = table.trim().toLowerCase();
+  const normalized = normalizeTenantTableName(table);
   getTenantTableConfig(normalized);
   return quoteIdentifier(normalized);
 }

@@ -601,3 +601,22 @@
 - `npm run typecheck --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
 - `npm run test:smoke --workspace=apps/api` ✅
+
+## Latest Fixes (Session 50)
+- Completed remediation pass for updated `issue.md` tenant-isolation/schema drift items:
+  - **SSO table naming normalization**:
+    - added migration `db/migrations/20260413000021_normalize-sso-config-table.js` to safely rename legacy `sso_configs` -> `sso_configurations` where required (with safe down-path reversal).
+    - added tenant table alias mapping in `apps/api/src/tenant-isolation.ts` so helper calls using legacy `sso_configs` resolve to canonical `sso_configurations`.
+  - **Missing tenant table registrations fixed** (`apps/api/src/tenant-isolation.ts`):
+    - added `analytics_daily`, `analytics_matters`, `domain_verifications`, `identity_links`, `user_activity`, and `webauthn_credentials` to `TENANT_TABLE_CONFIG`.
+    - each added with tenant column scoping and sortable columns aligned to issue expectations.
+  - **playbook_rules config/runtime mismatch addressed**:
+    - removed `playbook_rules` from `TENANT_TABLE_CONFIG` because no migration creates this table in current schema, preventing helper-level runtime relation failures.
+    - retained existing playbook runtime behavior on `playbooks.rules` JSON path.
+  - **Documentation updates**:
+    - rewrote `issue.md` as Session 50 resolved ledger with concrete fixes and verification snapshot.
+
+## Session 50 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run migrate:up --workspace=apps/api` ⚠️ blocked in this shell due missing `DATABASE_URL`.

@@ -1,28 +1,79 @@
-# EvidentIS Issue Ledger
+# Session 50 Issue Remediation Ledger (Resolved)
 
-> **Audit date:** 2026-04-13 (Session 48)  
-> **Scope:** tenant isolation table coverage, SCIM log isolation registration, MSG91 DLT deployment guidance
+## Scope
+- Source of truth: latest `issue.md` update (3 reported issues).
+- Goal: fix all listed issues end-to-end, update docs only where needed, and keep tenant isolation/runtime behavior safe.
 
-## Session 48 Results
+## Resolved Issues
 
-| ID | Severity | Status | Resolution |
-|----|----------|--------|------------|
-| 1 | Major | ✅ Fixed | Expanded `TENANT_TABLE_CONFIG` in `apps/api/src/tenant-isolation.ts` to include missing India tables and explicit scope metadata (`column`, `parent`, `global`). Added tenant-safe handling for FK-scoped tables (`invoice_line_items`, `gst_details`) and explicit global-table protections (`bare_acts`, `bare_act_sections`, `legal_templates`, `privacy_notices`, `citation_networks`). |
-| 2 | Moderate | ✅ Fixed | Added `scim_sync_logs` to tenant isolation config with `tenantScope: { mode: 'column', column: 'tenant_id' }` and sortable fields. |
-| 3 | Minor | ✅ Fixed | Updated `DEPLOYMENT_GUIDE.md` with explicit MSG91 + DLT compliance note: production `MSG91_SENDER_ID` must exactly match approved 6-character TRAI/DLT sender ID. |
+### 1) `sso_configs` vs `sso_configurations` naming drift
+**Problem**  
+- Migrations originally created `sso_configs` (`20260401000006_add-sso.js`) while runtime code (`sso.ts`, `saml.ts`, tenant isolation config) uses `sso_configurations`.
+- This could break tenant helper usage when passed the legacy table name and create environment drift.
 
-## Additional Hardening in This Pass
+**Fix implemented**
+1. Added migration: `db/migrations/20260413000021_normalize-sso-config-table.js`
+   - `up`: renames `sso_configs` -> `sso_configurations` when needed (idempotent).
+   - `down`: renames back only when safe (idempotent).
+2. Added tenant table alias in `apps/api/src/tenant-isolation.ts`:
+   - `sso_configs` -> `sso_configurations`
+   - Ensures helper calls using either name map to canonical runtime behavior.
 
-- Refactored tenant-scoped query helpers (`findById`, `findMany`, `validateTenantOwnership`, `insert`, `update`, `softDelete`) to honor per-table scope mode, including parent-table joins for tenant resolution and explicit write rejection for global tables.
+**Result**
+- Schema and runtime naming are aligned.
+- Tenant-scoped helper no longer fails for legacy `sso_configs` input.
+
+---
+
+### 2) Missing tenant-scoped tables in `TENANT_TABLE_CONFIG`
+**Problem**  
+The following tenant tables existed in migrations but were not registered in tenant helper config:
+- `analytics_daily`
+- `analytics_matters`
+- `domain_verifications`
+- `identity_links`
+- `user_activity`
+- `webauthn_credentials`
+
+This could cause `Unsupported tenant-scoped table` errors if helper methods were used for these tables.
+
+**Fix implemented**
+- Added all six tables to `apps/api/src/tenant-isolation.ts` with `tenantScope: column(tenant_id)` and appropriate sortable columns.
+
+**Result**
+- Tenant helper coverage now matches schema for these tables.
+
+---
+
+### 3) `playbook_rules` exists in config but no migration creates it
+**Problem**  
+- `playbook_rules` was present in tenant helper config.
+- No migration creates it, causing potential runtime relation errors if helper used there.
+
+**Fix implemented**
+- Removed `playbook_rules` from `TENANT_TABLE_CONFIG` in `apps/api/src/tenant-isolation.ts`.
+- This prevents false confidence from helper-level table registration for a relation that has no migration-backed schema.
+
+**Current risk status**
+- Tenant helper behavior is now aligned with actual migrated schema surface.
+- Existing playbook runtime paths continue using `playbooks.rules` JSON storage.
+
+---
+
+## Files Changed
+- `apps/api/src/tenant-isolation.ts`
+  - Added table alias normalization (`sso_configs` -> `sso_configurations`).
+  - Added missing tenant table registrations:
+    - `analytics_daily`
+    - `analytics_matters`
+    - `domain_verifications`
+    - `identity_links`
+    - `user_activity`
+    - `webauthn_credentials`
+- `db/migrations/20260413000021_normalize-sso-config-table.js`
+  - New idempotent SSO table normalization migration.
 
 ## Verification Snapshot
-
 - `npm run typecheck --workspace=apps/api` ✅
 - `npm run test:smoke --workspace=apps/api` ✅
-- `npm run test:coverage:ci --workspace=apps/api` ✅
-- `npm run typecheck --workspace=apps/web` ✅
-- `pytest apps/ai-service/tests -q` ✅ (111 passed)
 
-## Remaining Open Issues
-
-None from this pass.

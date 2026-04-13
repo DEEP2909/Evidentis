@@ -620,3 +620,24 @@
 - `npm run typecheck --workspace=apps/api` ✅
 - `npm run test:smoke --workspace=apps/api` ✅
 - `npm run migrate:up --workspace=apps/api` ⚠️ blocked in this shell due missing `DATABASE_URL`.
+
+## Latest Fixes (Session 51)
+- Completed remediation pass for updated deployment/config `issue.md` backlog:
+  - **Deployment domain correction** (`DEPLOYMENT_GUIDE.md`):
+    - replaced all `evidnetis.tech` references with `evidentis.tech` across DNS/TLS/webhook/health/env examples.
+    - removed misleading typo note and aligned guide to actual production domain.
+  - **Production DB SSL hardening** (`docker-compose.prod.yml`):
+    - changed API `DB_SSL` default from `${DB_SSL:-false}` to `${DB_SSL:-true}`.
+    - retained optional `DB_SSL_CA` override path.
+  - **Next.js production env clarity** (`docker-compose.prod.yml`):
+    - removed runtime `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` from `web.environment`.
+    - kept `NEXT_PUBLIC_*` only in `web.build.args` to match Next.js build-time inlining behavior.
+  - **Production env template completeness** (`.env.example`):
+    - added production keys: `DOMAIN`, `NEXTAUTH_SECRET`, `ACME_EMAIL`, `EVIDENTIS_VERSION`.
+  - **Documentation update**:
+    - rewrote `issue.md` as Session 51 resolved ledger with verification snapshot.
+
+## Session 51 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `npm run test:smoke --workspace=apps/api` ✅

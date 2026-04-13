@@ -1,79 +1,78 @@
-# Session 50 Issue Remediation Ledger (Resolved)
+# Session 51 Issue Remediation Ledger (Resolved)
 
 ## Scope
-- Source of truth: latest `issue.md` update (3 reported issues).
-- Goal: fix all listed issues end-to-end, update docs only where needed, and keep tenant isolation/runtime behavior safe.
+- Source of truth: latest `issue.md` update (4 deployment/docs issues).
+- Goal: fix all listed items, keep production behavior safe, update docs only where needed.
 
 ## Resolved Issues
 
-### 1) `sso_configs` vs `sso_configurations` naming drift
-**Problem**  
-- Migrations originally created `sso_configs` (`20260401000006_add-sso.js`) while runtime code (`sso.ts`, `saml.ts`, tenant isolation config) uses `sso_configurations`.
-- This could break tenant helper usage when passed the legacy table name and create environment drift.
+### 1) `DEPLOYMENT_GUIDE.md` domain typo (`evidnetis.tech`)
+**Problem**
+- Deployment guide contained `evidnetis.tech` (typo) in multiple production-critical places.
+- This could cause wrong DNS/TLS/webhook setup in production.
 
 **Fix implemented**
-1. Added migration: `db/migrations/20260413000021_normalize-sso-config-table.js`
-   - `up`: renames `sso_configs` -> `sso_configurations` when needed (idempotent).
-   - `down`: renames back only when safe (idempotent).
-2. Added tenant table alias in `apps/api/src/tenant-isolation.ts`:
-   - `sso_configs` -> `sso_configurations`
-   - Ensures helper calls using either name map to canonical runtime behavior.
+- Replaced all `evidnetis` references with `evidentis` in `DEPLOYMENT_GUIDE.md`.
+- Updated all affected sections (title, DNS table, env examples, health URLs, webhook URLs, troubleshooting, Kubernetes note).
 
 **Result**
-- Schema and runtime naming are aligned.
-- Tenant-scoped helper no longer fails for legacy `sso_configs` input.
+- Deployment runbook now consistently targets the correct domain: `evidentis.tech`.
 
 ---
 
-### 2) Missing tenant-scoped tables in `TENANT_TABLE_CONFIG`
-**Problem**  
-The following tenant tables existed in migrations but were not registered in tenant helper config:
-- `analytics_daily`
-- `analytics_matters`
-- `domain_verifications`
-- `identity_links`
-- `user_activity`
-- `webauthn_credentials`
-
-This could cause `Unsupported tenant-scoped table` errors if helper methods were used for these tables.
+### 2) `docker-compose.prod.yml` DB SSL default risk
+**Problem**
+- API DB SSL default was `${DB_SSL:-false}` in production compose.
+- If unset, DB traffic could run unencrypted.
 
 **Fix implemented**
-- Added all six tables to `apps/api/src/tenant-isolation.ts` with `tenantScope: column(tenant_id)` and appropriate sortable columns.
+- Changed API env default to:
+  - `DB_SSL: ${DB_SSL:-true}`
+  - preserved `DB_SSL_CA: ${DB_SSL_CA:-}`.
 
 **Result**
-- Tenant helper coverage now matches schema for these tables.
+- Production defaults now enforce encrypted DB connections unless explicitly overridden.
 
 ---
 
-### 3) `playbook_rules` exists in config but no migration creates it
-**Problem**  
-- `playbook_rules` was present in tenant helper config.
-- No migration creates it, causing potential runtime relation errors if helper used there.
+### 3) Missing required production vars in `.env.example`
+**Problem**
+- `DOMAIN`, `NEXTAUTH_SECRET`, and `ACME_EMAIL` were used by production compose but absent from `.env.example`.
+- Also needed explicit release tag example.
 
 **Fix implemented**
-- Removed `playbook_rules` from `TENANT_TABLE_CONFIG` in `apps/api/src/tenant-isolation.ts`.
-- This prevents false confidence from helper-level table registration for a relation that has no migration-backed schema.
+- Added production section to `.env.example`:
+  - `DOMAIN=evidentis.tech`
+  - `NEXTAUTH_SECRET=`
+  - `ACME_EMAIL=admin@evidentis.tech`
+  - `EVIDENTIS_VERSION=1.0.0`
 
-**Current risk status**
-- Tenant helper behavior is now aligned with actual migrated schema surface.
-- Existing playbook runtime paths continue using `playbooks.rules` JSON storage.
+**Result**
+- `.env.example` now includes the key production variables required by compose deployment.
+
+---
+
+### 4) Misleading runtime `NEXT_PUBLIC_*` vars in web compose env
+**Problem**
+- `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_WS_URL` were set in both `build.args` and runtime `environment`.
+- For Next.js, `NEXT_PUBLIC_*` are build-time inlined values; runtime entries are misleading.
+
+**Fix implemented**
+- Removed runtime `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` from `web.environment` in `docker-compose.prod.yml`.
+- Kept them only in `web.build.args`.
+
+**Result**
+- Compose config now matches actual Next.js env semantics and avoids operator confusion.
 
 ---
 
 ## Files Changed
-- `apps/api/src/tenant-isolation.ts`
-  - Added table alias normalization (`sso_configs` -> `sso_configurations`).
-  - Added missing tenant table registrations:
-    - `analytics_daily`
-    - `analytics_matters`
-    - `domain_verifications`
-    - `identity_links`
-    - `user_activity`
-    - `webauthn_credentials`
-- `db/migrations/20260413000021_normalize-sso-config-table.js`
-  - New idempotent SSO table normalization migration.
+- `DEPLOYMENT_GUIDE.md`
+- `docker-compose.prod.yml`
+- `.env.example`
 
 ## Verification Snapshot
 - `npm run typecheck --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
 - `npm run test:smoke --workspace=apps/api` ✅
 

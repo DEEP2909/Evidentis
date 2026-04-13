@@ -1,12 +1,12 @@
-# EvidentIS Production Deployment Guide (`evidnetis.tech`)
+# EvidentIS Production Deployment Guide (`evidentis.tech`)
 
 This is the canonical, step-by-step production runbook for deploying EvidentIS on your domain:
 
-- **Web app:** `https://evidnetis.tech`
-- **API:** `https://api.evidnetis.tech`
-- **(Optional) Traefik dashboard:** `https://traefik.evidnetis.tech`
+- **Web app:** `https://evidentis.tech`
+- **API:** `https://api.evidentis.tech`
+- **(Optional) Traefik dashboard:** `https://traefik.evidentis.tech`
 
-> **Important domain note:** your requested primary domain is `evidnetis.tech` (with `...net...`). Use exactly this value in DNS and env files.
+> **Important domain note:** use your production domain `evidentis.tech` consistently across DNS, TLS, and webhook setup.
 
 ---
 
@@ -40,7 +40,7 @@ docker stack deploy -c docker-compose.prod.yml evidentis
 4. Persistent data disks mounted for:
    - `/data/evidentis/postgres`
    - `/data/evidentis/redis`
-5. A DNS provider where you can manage records for `evidnetis.tech`.
+5. A DNS provider where you can manage records for `evidentis.tech`.
 
 ## 2.2 External services and accounts
 
@@ -59,16 +59,16 @@ docker stack deploy -c docker-compose.prod.yml evidentis
 
 ---
 
-## 3. DNS setup for `evidnetis.tech`
+## 3. DNS setup for `evidentis.tech`
 
 Create these records before first deploy:
 
 | Hostname | Type | Target |
 |---|---|---|
-| `evidnetis.tech` | `A` | Your public server IP |
-| `www.evidnetis.tech` | `A` | Your public server IP |
-| `api.evidnetis.tech` | `A` | Your public server IP |
-| `traefik.evidnetis.tech` (optional) | `A` | Your public server IP |
+| `evidentis.tech` | `A` | Your public server IP |
+| `www.evidentis.tech` | `A` | Your public server IP |
+| `api.evidentis.tech` | `A` | Your public server IP |
+| `traefik.evidentis.tech` (optional) | `A` | Your public server IP |
 
 TLS certificates are issued automatically by Traefik using Let’s Encrypt after DNS resolves.
 
@@ -115,8 +115,8 @@ Create `.env.production` in repo root:
 # ------------------------------------------------------------------------------
 # Core domain and TLS
 # ------------------------------------------------------------------------------
-DOMAIN=evidnetis.tech
-ACME_EMAIL=admin@evidnetis.tech
+DOMAIN=evidentis.tech
+ACME_EMAIL=admin@evidentis.tech
 
 # Traefik dashboard auth user:hashed_password (optional dashboard)
 # Generate with: htpasswd -nbB admin 'STRONG_PASSWORD'
@@ -140,7 +140,7 @@ REDIS_PASSWORD=REPLACE_ME
 # ------------------------------------------------------------------------------
 NEXTAUTH_SECRET=REPLACE_WITH_LONG_RANDOM_SECRET
 AI_SERVICE_INTERNAL_KEY=REPLACE_WITH_LONG_RANDOM_INTERNAL_KEY
-CORS_ORIGINS=https://evidnetis.tech,https://www.evidnetis.tech
+CORS_ORIGINS=https://evidentis.tech,https://www.evidentis.tech
 
 # ------------------------------------------------------------------------------
 # Object storage
@@ -268,9 +268,9 @@ docker run --rm \
 ## 10.1 Health endpoints
 
 ```bash
-curl -fsS https://api.evidnetis.tech/health/live
-curl -fsS https://api.evidnetis.tech/health/ready
-curl -I https://evidnetis.tech
+curl -fsS https://api.evidentis.tech/health/live
+curl -fsS https://api.evidentis.tech/health/ready
+curl -I https://evidentis.tech
 ```
 
 ## 10.2 Functional checks
@@ -280,7 +280,7 @@ curl -I https://evidnetis.tech
 3. AI research endpoint responds.
 4. OTP send/verify succeeds (if MSG91 configured).
 5. Razorpay webhook endpoint reachable:
-   - `POST https://api.evidnetis.tech/webhooks/razorpay`
+   - `POST https://api.evidentis.tech/webhooks/razorpay`
 
 ---
 
@@ -288,7 +288,7 @@ curl -I https://evidnetis.tech
 
 In Razorpay dashboard:
 
-1. Set webhook URL to `https://api.evidnetis.tech/webhooks/razorpay`.
+1. Set webhook URL to `https://api.evidentis.tech/webhooks/razorpay`.
 2. Use the same secret value as `RAZORPAY_WEBHOOK_SECRET`.
 3. Enable required events for subscription/payment lifecycle used by API billing routes.
 
@@ -385,7 +385,7 @@ docker service logs -f evidentis_traefik
 
 ## 15.3 Web works but API calls fail
 
-1. Ensure `NEXT_PUBLIC_API_URL=https://api.evidnetis.tech`.
+1. Ensure `NEXT_PUBLIC_API_URL=https://api.evidentis.tech`.
 2. Ensure `CORS_ORIGINS` includes web domain(s).
 3. Ensure API router labels in Traefik match `api.${DOMAIN}`.
 
@@ -398,5 +398,5 @@ docker service logs -f evidentis_traefik
 
 ## 16. Kubernetes option
 
-If you prefer Kubernetes, use `k8s/deployment.yaml` as baseline. Keep the same env/secret values and domain mapping (`evidnetis.tech`, `api.evidnetis.tech`). This guide remains Docker Swarm-first because it matches the active production compose and Traefik setup in this repository.
+If you prefer Kubernetes, use `k8s/deployment.yaml` as baseline. Keep the same env/secret values and domain mapping (`evidentis.tech`, `api.evidentis.tech`). This guide remains Docker Swarm-first because it matches the active production compose and Traefik setup in this repository.
 

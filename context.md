@@ -539,3 +539,21 @@
 - `npm run test:coverage:ci --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
 - `pytest apps/ai-service/tests -q` ✅ (111 passed)
+
+## Latest Fixes (Session 47)
+- Completed remediation pass for the latest `issue.md` follow-up items:
+  - **CSP setter consistency** (`apps/api/src/security-hardening.ts`):
+    - aligned CSP handling with other security headers by switching to `setHeaderIfMissing(...)`.
+  - **Degraded limiter scaling note** (`apps/ai-service/main.py`):
+    - added explicit warning comment that degraded limiter counters are process-local fallback only; Redis remains shared source-of-truth.
+  - **Migration rollback ownership fix** (`db/migrations/20260412000019_schema-alignment-fixes.js`):
+    - removed `deal_value_paise` drop from migration 19 down path and documented ownership in migration 15.
+  - **Documentation update**:
+    - rewrote `issue.md` as Session 47 resolved ledger with verification snapshot.
+
+## Session 47 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run test:coverage:ci --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `pytest apps/ai-service/tests -q` ✅ (111 passed)

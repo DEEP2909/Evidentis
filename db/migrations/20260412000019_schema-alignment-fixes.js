@@ -52,8 +52,8 @@ exports.down = (pgm) => {
     ALTER TABLE gst_details
       ALTER COLUMN sac_code SET DEFAULT '9982';
 
-    ALTER TABLE matters
-      DROP COLUMN IF EXISTS deal_value_paise;
+    -- deal_value_paise is owned by 20260411000015_add-matter-paise.js
+    -- and must not be dropped from this alignment migration's down path.
 
     ALTER TABLE documents
       DROP COLUMN IF EXISTS file_size_bytes;

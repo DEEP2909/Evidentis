@@ -41,6 +41,7 @@ INTERNAL_BYPASS_PATHS = {
 RATE_LIMIT_WINDOW_SECONDS = 60
 DEGRADED_RATE_LIMIT_WINDOW_SECONDS = 60
 DEGRADED_RATE_LIMIT_MAX_REQUESTS_PER_WINDOW = 30
+# Process-local degraded fallback only; use Redis for shared cross-worker enforcement.
 degraded_rate_limit_counters: dict[str, tuple[int, float]] = {}
 
 # Global model registry

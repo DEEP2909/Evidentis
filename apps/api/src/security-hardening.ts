@@ -53,7 +53,7 @@ function setHeaderIfMissing(reply: FastifyReply, header: string, value: string):
 
 function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): void {
   // Content Security Policy
-  if (cfg.contentSecurityPolicy && !reply.hasHeader('Content-Security-Policy')) {
+  if (cfg.contentSecurityPolicy) {
     const csp = typeof cfg.contentSecurityPolicy === 'object' 
       ? cfg.contentSecurityPolicy 
       : {
@@ -72,7 +72,7 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
       .map(([key, values]) => `${key} ${values.join(' ')}`)
       .join('; ');
     
-    reply.header('Content-Security-Policy', cspString);
+    setHeaderIfMissing(reply, 'Content-Security-Policy', cspString);
   }
 
   // Cross-Origin-Embedder-Policy

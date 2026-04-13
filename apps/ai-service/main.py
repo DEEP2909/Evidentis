@@ -5,6 +5,7 @@ clause extraction, risk assessment, and semantic research.
 """
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
@@ -38,9 +39,34 @@ INTERNAL_BYPASS_PATHS = {
     "/openapi.json",
 }
 RATE_LIMIT_WINDOW_SECONDS = 60
+DEGRADED_RATE_LIMIT_WINDOW_SECONDS = 60
+DEGRADED_RATE_LIMIT_MAX_REQUESTS_PER_WINDOW = 30
+degraded_rate_limit_counters: dict[str, tuple[int, float]] = {}
 
 # Global model registry
 model_registry: ModelRegistry | None = None
+
+
+def get_degraded_mode_count(bucket_key: str) -> int:
+    now = time.time()
+    current = degraded_rate_limit_counters.get(bucket_key)
+
+    if current and now - current[1] < DEGRADED_RATE_LIMIT_WINDOW_SECONDS:
+        next_count = current[0] + 1
+    else:
+        next_count = 1
+
+    degraded_rate_limit_counters[bucket_key] = (next_count, now)
+
+    stale_keys = [
+        key
+        for key, (_count, last_seen) in degraded_rate_limit_counters.items()
+        if now - last_seen >= DEGRADED_RATE_LIMIT_WINDOW_SECONDS * 5
+    ]
+    for stale_key in stale_keys:
+        degraded_rate_limit_counters.pop(stale_key, None)
+
+    return next_count
 
 
 @asynccontextmanager
@@ -98,7 +124,19 @@ async def enforce_internal_access(request: Request, call_next):
 
     rate_limit_redis = getattr(request.app.state, "rate_limit_redis", None)
     if rate_limit_redis is None:
-        logger.warning("Rate limiter unavailable: Redis client missing on app state; allowing request")
+        logger.warning("Rate limiter unavailable: Redis client missing on app state; using degraded local limiter")
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        client_ip = (
+            request.client.host
+            if request.client and request.client.host
+            else (forwarded_for.split(",")[0].strip() if forwarded_for else request.headers.get("x-real-ip", "unknown"))
+        )
+        if not client_ip:
+            client_ip = f"unknown:{request.url.path}"
+        degraded_bucket_key = f"degraded-ratelimit:{client_ip}:{request.url.path}"
+        degraded_count = get_degraded_mode_count(degraded_bucket_key)
+        if degraded_count > DEGRADED_RATE_LIMIT_MAX_REQUESTS_PER_WINDOW:
+            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded (degraded mode)"})
         return await call_next(request)
 
     forwarded_for = request.headers.get("x-forwarded-for", "")
@@ -116,7 +154,11 @@ async def enforce_internal_access(request: Request, call_next):
         if request_count == 1:
             await rate_limit_redis.expire(bucket_key, RATE_LIMIT_WINDOW_SECONDS)
     except redis.RedisError as exc:
-        logger.warning("Rate limit Redis operation failed for key %s: %s; allowing request", bucket_key, exc)
+        logger.warning("Rate limit Redis operation failed for key %s: %s; using degraded local limiter", bucket_key, exc)
+        degraded_bucket_key = f"degraded-ratelimit:{client_ip}:{request.url.path}"
+        degraded_count = get_degraded_mode_count(degraded_bucket_key)
+        if degraded_count > DEGRADED_RATE_LIMIT_MAX_REQUESTS_PER_WINDOW:
+            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded (degraded mode)"})
         return await call_next(request)
 
     if request_count > runtime_settings.rate_limit_requests_per_minute:

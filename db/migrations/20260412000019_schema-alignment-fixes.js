@@ -19,6 +19,8 @@ exports.up = (pgm) => {
 
     ALTER TABLE matters
       ADD COLUMN IF NOT EXISTS deal_value_paise bigint;
+    -- Intentionally repeated from 20260411000015_add-matter-paise.js so this alignment
+    -- migration remains safe when environments are partially migrated or drifted.
 
     UPDATE matters
     SET deal_value_paise = deal_value_cents

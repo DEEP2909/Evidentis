@@ -28,11 +28,32 @@ interface SecurityHeadersConfig {
   xssFilter?: boolean;
 }
 
-const DEFAULT_SECURITY_CONFIG: SecurityHeadersConfig = {};
+const DEFAULT_SECURITY_CONFIG: SecurityHeadersConfig = {
+  contentSecurityPolicy: true,
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: { policy: 'same-origin' },
+  crossOriginResourcePolicy: { policy: 'same-origin' },
+  dnsPrefetchControl: { allow: false },
+  frameguard: { action: 'deny' },
+  hidePoweredBy: true,
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  ieNoOpen: true,
+  noSniff: true,
+  originAgentCluster: true,
+  permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  xssFilter: true,
+};
+
+function setHeaderIfMissing(reply: FastifyReply, header: string, value: string): void {
+  if (!reply.hasHeader(header)) {
+    reply.header(header, value);
+  }
+}
 
 function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): void {
   // Content Security Policy
-  if (cfg.contentSecurityPolicy) {
+  if (cfg.contentSecurityPolicy && !reply.hasHeader('Content-Security-Policy')) {
     const csp = typeof cfg.contentSecurityPolicy === 'object' 
       ? cfg.contentSecurityPolicy 
       : {
@@ -54,12 +75,17 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
     reply.header('Content-Security-Policy', cspString);
   }
 
+  // Cross-Origin-Embedder-Policy
+  if (cfg.crossOriginEmbedderPolicy) {
+    setHeaderIfMissing(reply, 'Cross-Origin-Embedder-Policy', 'require-corp');
+  }
+
   // Cross-Origin-Opener-Policy
   if (cfg.crossOriginOpenerPolicy) {
     const policy = typeof cfg.crossOriginOpenerPolicy === 'object' 
       ? cfg.crossOriginOpenerPolicy.policy 
       : 'same-origin';
-    reply.header('Cross-Origin-Opener-Policy', policy);
+    setHeaderIfMissing(reply, 'Cross-Origin-Opener-Policy', policy);
   }
 
   // Cross-Origin-Resource-Policy
@@ -67,7 +93,7 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
     const policy = typeof cfg.crossOriginResourcePolicy === 'object'
       ? cfg.crossOriginResourcePolicy.policy
       : 'same-origin';
-    reply.header('Cross-Origin-Resource-Policy', policy);
+    setHeaderIfMissing(reply, 'Cross-Origin-Resource-Policy', policy);
   }
 
   // DNS Prefetch Control
@@ -75,7 +101,7 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
     const allow = typeof cfg.dnsPrefetchControl === 'object' 
       ? cfg.dnsPrefetchControl.allow 
       : false;
-    reply.header('X-DNS-Prefetch-Control', allow ? 'on' : 'off');
+    setHeaderIfMissing(reply, 'X-DNS-Prefetch-Control', allow ? 'on' : 'off');
   }
 
   // X-Frame-Options
@@ -83,7 +109,7 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
     const action = typeof cfg.frameguard === 'object' 
       ? cfg.frameguard.action.toUpperCase() 
       : 'DENY';
-    reply.header('X-Frame-Options', action);
+    setHeaderIfMissing(reply, 'X-Frame-Options', action);
   }
 
   // Hide X-Powered-By
@@ -97,22 +123,22 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
     let hsts = `max-age=${hstsConfig.maxAge}`;
     if (hstsConfig.includeSubDomains) hsts += '; includeSubDomains';
     if (hstsConfig.preload) hsts += '; preload';
-    reply.header('Strict-Transport-Security', hsts);
+    setHeaderIfMissing(reply, 'Strict-Transport-Security', hsts);
   }
 
   // X-Download-Options
   if (cfg.ieNoOpen) {
-    reply.header('X-Download-Options', 'noopen');
+    setHeaderIfMissing(reply, 'X-Download-Options', 'noopen');
   }
 
   // X-Content-Type-Options
   if (cfg.noSniff) {
-    reply.header('X-Content-Type-Options', 'nosniff');
+    setHeaderIfMissing(reply, 'X-Content-Type-Options', 'nosniff');
   }
 
   // Origin-Agent-Cluster
   if (cfg.originAgentCluster) {
-    reply.header('Origin-Agent-Cluster', '?1');
+    setHeaderIfMissing(reply, 'Origin-Agent-Cluster', '?1');
   }
 
   // X-Permitted-Cross-Domain-Policies
@@ -120,7 +146,7 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
     const policy = typeof cfg.permittedCrossDomainPolicies === 'object'
       ? cfg.permittedCrossDomainPolicies.permittedPolicies
       : 'none';
-    reply.header('X-Permitted-Cross-Domain-Policies', policy);
+    setHeaderIfMissing(reply, 'X-Permitted-Cross-Domain-Policies', policy);
   }
 
   // Referrer-Policy
@@ -130,12 +156,12 @@ function applySecurityHeaders(reply: FastifyReply, cfg: SecurityHeadersConfig): 
           ? cfg.referrerPolicy.policy.join(', ')
           : cfg.referrerPolicy.policy)
       : 'strict-origin-when-cross-origin';
-    reply.header('Referrer-Policy', policy);
+    setHeaderIfMissing(reply, 'Referrer-Policy', policy);
   }
 
   // X-XSS-Protection (legacy but still useful)
   if (cfg.xssFilter) {
-    reply.header('X-XSS-Protection', '1; mode=block');
+    setHeaderIfMissing(reply, 'X-XSS-Protection', '1; mode=block');
   }
 }
 

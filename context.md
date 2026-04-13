@@ -515,3 +515,27 @@
 - `npm run typecheck --workspace=apps/web` ✅
 - `pip install types-redis==4.6.0.20241004` ✅
 - `pytest apps/ai-service/tests -q` ✅ (111 passed)
+
+## Latest Fixes (Session 46)
+- Completed full remediation pass for the latest 5-item `issue.md` backlog:
+  - **Security headers restoration** (`apps/api/src/security-hardening.ts`):
+    - restored full default security header config (CSP, HSTS, frameguard, noSniff, referrer policy, etc.).
+    - retained Helmet compatibility by setting custom headers only when they are not already present (`setHeaderIfMissing`).
+  - **DB pool reinitialize safety** (`apps/api/src/database.ts`):
+    - added explicit drain window (`POOL_REINITIALIZE_DRAIN_MS = 5000`) before closing previous pool in `reinitializePool`.
+  - **AI rate limiter hardening** (`apps/ai-service/main.py`):
+    - removed fail-open behavior for Redis failures.
+    - added degraded local in-process limiter with bounded per-window threshold and 429 responses under degraded pressure.
+  - **K8s metrics sanity check** (`k8s/deployment.yaml` + worker runtime):
+    - confirmed worker scrape path remains aligned to `9101` and ai-service does not inherit worker metrics port mutation.
+  - **Migration clarity update** (`db/migrations/20260412000019_schema-alignment-fixes.js`):
+    - added explicit comment documenting intentional `deal_value_paise` redundancy with migration `20260411000015`.
+  - **Documentation updates**:
+    - rewrote `issue.md` as Session 46 resolved ledger with verification snapshot.
+
+## Session 46 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run test:smoke --workspace=apps/api` ✅
+- `npm run test:coverage:ci --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `pytest apps/ai-service/tests -q` ✅ (111 passed)

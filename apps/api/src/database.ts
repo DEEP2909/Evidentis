@@ -9,6 +9,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 
 const { Pool } = pg;
+const POOL_REINITIALIZE_DRAIN_MS = 5000;
 
 // ============================================================
 // CONNECTION POOL
@@ -46,6 +47,7 @@ export async function reinitializePool(connectionString?: string): Promise<void>
   const previousPool = pool;
   pool = createPool(connectionString ?? config.DATABASE_URL);
   attachPoolEventHandlers(pool);
+  await new Promise((resolve) => setTimeout(resolve, POOL_REINITIALIZE_DRAIN_MS));
   await previousPool.end();
 }
 

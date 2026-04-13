@@ -579,3 +579,25 @@
 - `npm run test:coverage:ci --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
 - `pytest apps/ai-service/tests -q` ✅ (111 passed)
+
+## Latest Fixes (Session 49)
+- Completed deployment/runbook modernization for production domain rollout:
+  - **Full deployment guide rewrite** (`DEPLOYMENT_GUIDE.md`):
+    - replaced stale multi-cloud generic content with an end-to-end, repository-aligned production runbook for `evidnetis.tech`.
+    - added concrete DNS records, server bootstrap, Swarm deploy flow, required env/secrets, migration, health verification, webhook setup, operations, backup, and troubleshooting steps.
+    - updated all examples to current stack conventions (Razorpay, MSG91/DLT, AI internal key, India defaults).
+  - **Production compose/runtime alignment** (`docker-compose.prod.yml`):
+    - switched usage banner to Swarm-native `docker stack deploy`.
+    - corrected API runtime env keys to match API config (`DB_POOL_MAX`, `DB_SSL`, `DB_SSL_CA`).
+    - added production web/auth/security env wiring (`FRONTEND_URL`, `TRUST_PROXY`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`).
+    - added India integration env forwarding (`INDIANKANOON_API_KEY`, `ECOURTS_API_KEY`, `MSG91_*`).
+    - switched web healthcheck to `/` (no `/api/health` route in current web app).
+    - added web build/runtime `NEXT_PUBLIC_WS_URL` and ai-service `AI_SERVICE_INTERNAL_KEY`.
+    - corrected S3 credential env naming to `S3_ACCESS_KEY` / `S3_SECRET_KEY` to match API storage config.
+  - **Web Docker build env support** (`apps/web/Dockerfile.web`):
+    - added build args/env propagation for `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` so production values are baked into the standalone build.
+
+## Session 49 Verification
+- `npm run typecheck --workspace=apps/api` ✅
+- `npm run typecheck --workspace=apps/web` ✅
+- `npm run test:smoke --workspace=apps/api` ✅

@@ -1,5 +1,5 @@
 # EvidentIS Production Docker Compose
-# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Usage: docker stack deploy -c docker-compose.prod.yml evidentis
 
 x-common-labels: &common-labels
   com.evidentis.environment: production
@@ -58,26 +58,37 @@ services:
       # Database - use connection pooling
       DATABASE_URL: ${DATABASE_URL}
       DATABASE_POOL_MIN: 5
-      DATABASE_POOL_MAX: 20
-      DATABASE_SSL: 'true'
+      DB_POOL_MAX: 20
+      DB_SSL: ${DB_SSL:-false}
+      DB_SSL_CA: ${DB_SSL_CA:-}
       # Redis
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       # Security
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private_key
       JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public_key
       APP_ENCRYPTION_KEY_FILE: /run/secrets/app_encryption_key
+      FRONTEND_URL: https://${DOMAIN}
+      TRUST_PROXY: 'true'
+      WEBAUTHN_RP_ID: ${DOMAIN}
+      WEBAUTHN_ORIGIN: https://${DOMAIN}
       # AI Service
       AI_SERVICE_URL: http://ai-service:5000
       AI_SERVICE_INTERNAL_KEY: ${AI_SERVICE_INTERNAL_KEY}
       # S3 Storage
       S3_BUCKET: ${S3_BUCKET}
       S3_REGION: ${S3_REGION:-centralindia}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
       # Razorpay
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
+      # India legal integrations
+      INDIANKANOON_API_KEY: ${INDIANKANOON_API_KEY:-}
+      ECOURTS_API_KEY: ${ECOURTS_API_KEY:-}
+      MSG91_AUTH_KEY: ${MSG91_AUTH_KEY:-}
+      MSG91_SENDER_ID: ${MSG91_SENDER_ID:-EVDTIS}
+      MSG91_WHATSAPP_INTEGRATED_NUMBER: ${MSG91_WHATSAPP_INTEGRATED_NUMBER:-}
       # Telemetry
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318}
       OTEL_SERVICE_NAME: evidentis-api
@@ -124,6 +135,7 @@ services:
       args:
         NODE_ENV: production
         NEXT_PUBLIC_API_URL: https://api.${DOMAIN}
+        NEXT_PUBLIC_WS_URL: wss://api.${DOMAIN}
     image: evidentis/web:${EVIDENTIS_VERSION:-latest}
     deploy:
       mode: replicated
@@ -146,11 +158,12 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: https://api.${DOMAIN}
+      NEXT_PUBLIC_WS_URL: wss://api.${DOMAIN}
       NEXTAUTH_URL: https://${DOMAIN}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
     labels:
       <<: *common-labels
       traefik.enable: "true"
@@ -201,6 +214,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
       # OpenAI
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      AI_SERVICE_INTERNAL_KEY: ${AI_SERVICE_INTERNAL_KEY}
       # Embedding model
       EMBEDDING_MODEL: sentence-transformers/LaBSE
       EMBEDDING_DIM: 768

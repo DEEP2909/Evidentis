@@ -1,78 +1,124 @@
-# Session 51 Issue Remediation Ledger (Resolved)
+# Session 52 Frontend Redesign & Issue Remediation Ledger (Resolved)
 
 ## Scope
-- Source of truth: latest `issue.md` update (4 deployment/docs issues).
-- Goal: fix all listed items, keep production behavior safe, update docs only where needed.
+- Source of truth: latest frontend upgrade request (`frontend_promt.md`) plus immediate regressions found during verification.
+- Goal: deliver the interactive India-first frontend uplift, wire logo usage, restore route/access correctness, and close build/test issues.
 
 ## Resolved Issues
 
-### 1) `DEPLOYMENT_GUIDE.md` domain typo (`evidnetis.tech`)
+### 1) Frontend experience did not match `frontend_promt.md` animation/interactivity target
 **Problem**
-- Deployment guide contained `evidnetis.tech` (typo) in multiple production-critical places.
-- This could cause wrong DNS/TLS/webhook setup in production.
+- Major routes were static or visually inconsistent, with limited animation and weak interaction patterns.
+- Product shell/nav behavior was not consistently role-aware across the redesigned surfaces.
 
 **Fix implemented**
-- Replaced all `evidnetis` references with `evidentis` in `DEPLOYMENT_GUIDE.md`.
-- Updated all affected sections (title, DNS table, env examples, health URLs, webhook URLs, troubleshooting, Kubernetes note).
+- Reworked core web design system and page experiences:
+  - Updated global styling and tokens for a consistent dark India-first visual language with motion utilities.
+  - Rewrote/updated key routes including landing, auth flows, dashboard, admin, analytics, matters, documents, research, Nyay Assist, calendar, billing, privacy settings, templates, bare acts, and portal pages.
+  - Added richer interaction patterns (staggered motion, hover/tap affordances, progress/typing/thinking states, animated cards).
+- Updated `AppShell` to enforce role-aware navigation visibility and responsive sidebar/mobile behavior.
 
 **Result**
-- Deployment runbook now consistently targets the correct domain: `evidentis.tech`.
+- Frontend now aligns with the requested enterprise-grade interactive presentation and role-aware experience model.
 
 ---
 
-### 2) `docker-compose.prod.yml` DB SSL default risk
+### 2) `/admin` and `/analytics` access control gaps
 **Problem**
-- API DB SSL default was `${DB_SSL:-false}` in production compose.
-- If unset, DB traffic could run unencrypted.
+- Prompt-aligned role restrictions were missing or incomplete for sensitive routes.
 
 **Fix implemented**
-- Changed API env default to:
-  - `DB_SSL: ${DB_SSL:-true}`
-  - preserved `DB_SSL_CA: ${DB_SSL_CA:-}`.
+- Added/standardized role guards:
+  - `/admin`: admin-only access enforcement.
+  - `/analytics`: restricted to `admin`, `senior_advocate`, and `partner`.
+- Kept route UI inside the common authenticated shell.
 
 **Result**
-- Production defaults now enforce encrypted DB connections unless explicitly overridden.
+- Sensitive operational surfaces now have explicit role-gated access aligned with requested behavior.
 
 ---
 
-### 3) Missing required production vars in `.env.example`
+### 3) Logo asset not integrated across upgraded frontend
 **Problem**
-- `DOMAIN`, `NEXTAUTH_SECRET`, and `ACME_EMAIL` were used by production compose but absent from `.env.example`.
-- Also needed explicit release tag example.
+- User-provided `logo.svg` was not consistently used in core product surfaces.
 
 **Fix implemented**
-- Added production section to `.env.example`:
-  - `DOMAIN=evidentis.tech`
-  - `NEXTAUTH_SECRET=`
-  - `ACME_EMAIL=admin@evidentis.tech`
-  - `EVIDENTIS_VERSION=1.0.0`
+- Added web-public logo asset at `apps/web/public/logo.svg`.
+- Integrated logo usage into key surfaces (shell branding, landing/auth/portal flows).
 
 **Result**
-- `.env.example` now includes the key production variables required by compose deployment.
+- Branding is now consistently visible across primary user journeys.
 
 ---
 
-### 4) Misleading runtime `NEXT_PUBLIC_*` vars in web compose env
+### 4) Verification regressions after frontend rewrite
 **Problem**
-- `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_WS_URL` were set in both `build.args` and runtime `environment`.
-- For Next.js, `NEXT_PUBLIC_*` are build-time inlined values; runtime entries are misleading.
+- Post-change verification surfaced breakages:
+  - `react/no-unescaped-entities` lint errors.
+  - `@next/next/no-html-link-for-pages` on research links.
+  - dashboard unit test failures after introducing `useRouter` redirect behavior.
 
 **Fix implemented**
-- Removed runtime `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` from `web.environment` in `docker-compose.prod.yml`.
-- Kept them only in `web.build.args`.
+- Escaped unescaped apostrophes in affected JSX.
+- Replaced raw anchor navigation with Next `Link` in research related-acts chips.
+- Updated `apps/web/tests/india-pages.test.tsx`:
+  - mocked `next/navigation` router/pathname hooks.
+  - mocked auth store state to avoid loading fallback during dashboard render.
 
 **Result**
-- Compose config now matches actual Next.js env semantics and avoids operator confusion.
+- Web typecheck/build/tests now pass with the redesigned pages.
+
+---
+
+### 5) Route-transition and client-boundary stability issues
+**Problem**
+- Route animation and interaction expectations required consistent client-safe composition.
+- Certain dynamic pages needed to be interactive client components to avoid client/server boundary issues with shell usage.
+
+**Fix implemented**
+- Added global route transition wrapper in providers using `AnimatePresence` keyed by pathname.
+- Set dark-first theme defaults for consistency with redesigned visual system.
+- Converted interactive dynamic pages to client components:
+  - `apps/web/app/templates/[id]/generate/page.tsx`
+  - `apps/web/app/bare-acts/[actSlug]/page.tsx`
+- Moved dashboard client redirect call into `useEffect` to avoid render-phase navigation.
+
+**Result**
+- Route transitions and interactive dynamic pages run with stable client semantics.
 
 ---
 
 ## Files Changed
-- `DEPLOYMENT_GUIDE.md`
-- `docker-compose.prod.yml`
-- `.env.example`
+- `apps/web/app/globals.css`
+- `apps/web/tailwind.config.ts`
+- `apps/web/components/india/AppShell.tsx`
+- `apps/web/app/layout.tsx`
+- `apps/web/app/providers.tsx`
+- `apps/web/app/page.tsx`
+- `apps/web/app/login/page.tsx`
+- `apps/web/app/login/mfa-dialog.tsx`
+- `apps/web/app/forgot-password/page.tsx`
+- `apps/web/app/reset-password/[token]/page.tsx`
+- `apps/web/app/invitation/[token]/page.tsx`
+- `apps/web/app/dashboard/page.tsx`
+- `apps/web/app/admin/page.tsx`
+- `apps/web/app/analytics/page.tsx`
+- `apps/web/app/matters/page.tsx`
+- `apps/web/app/documents/page.tsx`
+- `apps/web/app/research/page.tsx`
+- `apps/web/app/nyay-assist/page.tsx`
+- `apps/web/app/calendar/page.tsx`
+- `apps/web/app/billing/page.tsx`
+- `apps/web/app/settings/privacy/page.tsx`
+- `apps/web/app/templates/page.tsx`
+- `apps/web/app/templates/[id]/generate/page.tsx`
+- `apps/web/app/bare-acts/page.tsx`
+- `apps/web/app/bare-acts/[actSlug]/page.tsx`
+- `apps/web/app/portal/[shareToken]/page.tsx`
+- `apps/web/public/logo.svg`
+- `apps/web/tests/india-pages.test.tsx`
 
 ## Verification Snapshot
-- `npm run typecheck --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
-- `npm run test:smoke --workspace=apps/api` ✅
-
+- `npm run build --workspace=apps/web` ✅
+- `npm run test --workspace=apps/web` ✅

@@ -44,15 +44,15 @@ export function MfaDialog() {
 
   return (
     <Dialog open={mfaRequired} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="glass border-white/20 bg-slate-950 text-white sm:max-w-md">
         <DialogHeader>
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <ShieldCheck className="h-6 w-6 text-primary" />
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-saffron-500/20">
+            <ShieldCheck className="h-6 w-6 text-saffron-300" />
           </div>
           <DialogTitle className="text-center">
             Two-Factor Authentication
           </DialogTitle>
-          <DialogDescription className="text-center">
+          <DialogDescription className="text-center text-white/65">
             Enter the 6-digit code from your authenticator app
           </DialogDescription>
         </DialogHeader>
@@ -81,7 +81,7 @@ export function MfaDialog() {
               placeholder="000000"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              className="text-center text-2xl tracking-widest font-mono"
+              className="focus-saffron text-center text-2xl tracking-widest font-mono"
               autoFocus
               disabled={isSubmitting}
             />
@@ -91,7 +91,6 @@ export function MfaDialog() {
             type="submit"
             className="w-full"
             disabled={code.length !== 6 || isSubmitting}
-            variant="gold"
           >
             {isSubmitting ? (
               <>
@@ -103,11 +102,11 @@ export function MfaDialog() {
             )}
           </Button>
 
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-center text-sm text-white/60">
             Having trouble?{" "}
             <button
               type="button"
-              className="text-primary hover:underline"
+              className="text-saffron-300 hover:underline"
               onClick={() => toast.info("Contact your administrator for help")}
             >
               Get help

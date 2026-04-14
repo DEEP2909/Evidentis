@@ -1,51 +1,74 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 40 33% 97%;
-    --foreground: 221 71% 12%;
-    --card: 0 0% 100%;
-    --card-foreground: 221 71% 12%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 221 71% 12%;
-    --primary: 220 70% 20%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 40 22% 92%;
-    --secondary-foreground: 221 71% 12%;
-    --muted: 42 20% 92%;
-    --muted-foreground: 220 14% 36%;
+    --navy-950: 221 71% 7%;
+    --navy-900: 221 71% 10%;
+    --navy-800: 221 65% 14%;
+    --navy-700: 221 55% 20%;
+
+    --saffron-500: 33 100% 60%;
+    --saffron-400: 33 100% 68%;
+    --india-green: 130 83% 36%;
+
+    --background: 221 71% 7%;
+    --foreground: 40 20% 94%;
+    --card: 221 60% 11%;
+    --card-foreground: 40 20% 94%;
+    --popover: 221 60% 11%;
+    --popover-foreground: 40 20% 94%;
+    --primary: 33 100% 60%;
+    --primary-foreground: 221 71% 7%;
+    --secondary: 221 50% 17%;
+    --secondary-foreground: 40 20% 80%;
+    --muted: 221 45% 15%;
+    --muted-foreground: 220 15% 55%;
     --accent: 33 100% 60%;
-    --accent-foreground: 221 71% 12%;
-    --destructive: 0 82% 56%;
+    --accent-foreground: 221 71% 7%;
+    --destructive: 4 90% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 18% 84%;
-    --input: 220 18% 84%;
-    --ring: 220 70% 20%;
-    --radius: 1rem;
+    --border: 221 40% 20%;
+    --input: 221 40% 16%;
+    --ring: 33 100% 60%;
+    --radius: 1.25rem;
+    --gold: 33 100% 60%;
+    --navy: 221 71% 12%;
   }
 
   .dark {
-    --background: 220 48% 10%;
-    --foreground: 40 33% 97%;
-    --card: 221 40% 14%;
-    --card-foreground: 40 33% 97%;
-    --popover: 221 40% 14%;
-    --popover-foreground: 40 33% 97%;
+    --background: 221 71% 7%;
+    --foreground: 40 20% 94%;
+    --card: 221 60% 11%;
+    --card-foreground: 40 20% 94%;
+    --popover: 221 60% 11%;
+    --popover-foreground: 40 20% 94%;
     --primary: 33 100% 60%;
-    --primary-foreground: 221 71% 12%;
-    --secondary: 220 25% 19%;
-    --secondary-foreground: 40 33% 97%;
-    --muted: 220 25% 19%;
-    --muted-foreground: 220 10% 72%;
+    --primary-foreground: 221 71% 7%;
+    --secondary: 221 50% 17%;
+    --secondary-foreground: 40 20% 80%;
+    --muted: 221 45% 15%;
+    --muted-foreground: 220 15% 55%;
     --accent: 33 100% 60%;
-    --accent-foreground: 221 71% 12%;
-    --destructive: 0 72% 50%;
+    --accent-foreground: 221 71% 7%;
+    --destructive: 4 90% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 25% 22%;
-    --input: 220 25% 22%;
+    --border: 221 40% 20%;
+    --input: 221 40% 16%;
     --ring: 33 100% 60%;
+  }
+
+  html {
+    font-family: "DM Sans", sans-serif;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: "Playfair Display", serif;
   }
 
   * {
@@ -55,33 +78,143 @@
   body {
     @apply bg-background text-foreground;
     background-image:
-      radial-gradient(circle at top right, rgba(255, 153, 51, 0.16), transparent 30%),
-      radial-gradient(circle at bottom left, rgba(27, 94, 32, 0.14), transparent 32%);
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255, 153, 51, 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 60% at 80% 100%, rgba(15, 37, 87, 0.5) 0%, transparent 50%);
   }
 }
 
 @layer components {
-  .legal-paper {
-    background:
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.92), rgba(250, 250, 245, 0.96)),
-      radial-gradient(circle at center, rgba(15, 37, 87, 0.04), transparent 46%);
-    box-shadow: 0 24px 60px rgba(15, 37, 87, 0.12);
+  .glass {
+    @apply rounded-[var(--radius)] border border-white/10 bg-white/5 backdrop-blur-xl;
   }
 
-  .ashoka-ring {
+  .btn-gold {
+    @apply rounded-full bg-gradient-to-r from-[#ff9933] to-[#ffd18b] px-6 py-2.5 font-semibold text-slate-900 shadow-lg shadow-orange-500/20 transition-all duration-200 hover:scale-[1.02] hover:shadow-orange-500/30;
+  }
+
+  .btn-ripple {
     position: relative;
+    overflow: hidden;
   }
 
-  .ashoka-ring::after {
+  .btn-ripple::after {
     content: "";
     position: absolute;
-    inset: 12%;
+    width: 8rem;
+    height: 8rem;
+    left: 50%;
+    top: 50%;
     border-radius: 9999px;
-    border: 1px dashed rgba(15, 37, 87, 0.18);
+    transform: translate(-50%, -50%) scale(0);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.45), transparent 55%);
+    opacity: 0;
+    transition: transform 0.5s ease, opacity 0.5s ease;
     pointer-events: none;
+  }
+
+  .btn-ripple:hover::after {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  .focus-saffron {
+    @apply focus-visible:ring-[3px] focus-visible:ring-orange-400/35;
+  }
+
+  .shimmer-loading {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 153, 51, 0.6) 0%,
+      rgba(255, 209, 139, 0.95) 40%,
+      rgba(255, 153, 51, 0.6) 70%,
+      rgba(255, 153, 51, 0.6) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  .float-particle {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .ashoka-spin {
+    animation: spin-slow 120s linear infinite;
+  }
+
+  .ashoka-spin-fast {
+    animation: spin-slow 24s linear infinite;
   }
 
   .saffron-glow {
     box-shadow: 0 12px 40px rgba(255, 153, 51, 0.25);
+  }
+
+  .scroll-marquee {
+    animation: marquee 24s linear infinite;
+    white-space: nowrap;
+  }
+
+  .page-enter {
+    animation: pageEnter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .check-draw path {
+    stroke-dasharray: 110;
+    stroke-dashoffset: 110;
+    animation: drawCheck 0.8s ease forwards;
+  }
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% center;
+  }
+  to {
+    background-position: 200% center;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-12px) translateX(6px);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes drawCheck {
+  to {
+    stroke-dashoffset: 0;
   }
 }

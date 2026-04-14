@@ -65,6 +65,11 @@ const config: Config = {
           DEFAULT: '#16A34A',
           light: '#DCFCE7',
         },
+        saffron: {
+          400: '#FFD18B',
+          500: '#FF9933',
+        },
+        'india-green': '#138808',
         // Semantic Colors
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
@@ -101,8 +106,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['Aptos', 'Nirmala UI', 'Segoe UI', 'Tahoma', 'sans-serif'],
-        serif: ['Georgia', 'Cambria', 'Times New Roman', 'serif'],
+        sans: ['DM Sans', 'Aptos', 'Nirmala UI', 'Segoe UI', 'Tahoma', 'sans-serif'],
+        serif: ['Playfair Display', 'Georgia', 'Cambria', 'Times New Roman', 'serif'],
         mono: ['Cascadia Mono', 'Consolas', 'Courier New', 'monospace'],
       },
       borderRadius: {
@@ -120,18 +125,49 @@ const config: Config = {
           to: { height: '0' },
         },
         shimmer: {
-          '100%': { transform: 'translateX(100%)' },
+          from: { backgroundPosition: '-200% center' },
+          to: { backgroundPosition: '200% center' },
         },
         pulse: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '.5' },
         },
+        pageEnter: {
+          from: { opacity: '0', transform: 'translateY(12px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        fadeUp: {
+          from: { opacity: '0', transform: 'translateY(20px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideIn: {
+          from: { opacity: '0', transform: 'translateX(-16px)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0) translateX(0)' },
+          '50%': { transform: 'translateY(-12px) translateX(6px)' },
+        },
+        marquee: {
+          from: { transform: 'translateX(0)' },
+          to: { transform: 'translateX(-50%)' },
+        },
+        'spin-slow': {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
-        shimmer: 'shimmer 2s infinite',
+        shimmer: 'shimmer 4s ease-in-out infinite',
         pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'page-enter': 'pageEnter 0.4s cubic-bezier(0.22,1,0.36,1) both',
+        'fade-up': 'fadeUp 0.5s ease both',
+        'slide-in': 'slideIn 0.35s ease both',
+        float: 'float 6s ease-in-out infinite',
+        marquee: 'marquee 24s linear infinite',
+        'spin-slow': 'spin-slow 120s linear infinite',
       },
     },
   },

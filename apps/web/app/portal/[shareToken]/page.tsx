@@ -1,25 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { 
-  Loader2, 
-  Scale, 
-  FileText, 
-  Download, 
-  Clock,
+import { AnimatePresence, motion } from "framer-motion";
+import {
   AlertTriangle,
-  Shield,
-  Eye,
+  Building2,
   Calendar,
-  Building2
+  Clock,
+  Download,
+  Eye,
+  FileText,
+  Shield,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { AiDisclaimer } from "@/components/shared/AiDisclaimer";
 
 interface SharedMatter {
@@ -82,6 +80,15 @@ function formatDate(dateString: string): string {
   });
 }
 
+function timeUntilExpiry(expiresAt: string) {
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return "expired";
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days} day${days === 1 ? "" : "s"} left`;
+  return `${hours} hour${hours === 1 ? "" : "s"} left`;
+}
+
 export default function PortalPage() {
   const params = useParams();
   const shareToken = params.shareToken as string;
@@ -110,6 +117,11 @@ export default function PortalPage() {
     fetchSharedMatter();
   }, [shareToken]);
 
+  const expiryLabel = useMemo(
+    () => (matter?.expiresAt ? timeUntilExpiry(matter.expiresAt) : ""),
+    [matter?.expiresAt]
+  );
+
   const handleDownload = async (documentId: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/portal/${shareToken}/documents/${documentId}/download`);
@@ -117,25 +129,21 @@ export default function PortalPage() {
 
       const result = await response.json();
       const downloadUrl = result?.data?.downloadUrl as string | undefined;
-      if (!downloadUrl) {
-        throw new Error("Download URL not available");
-      }
+      if (!downloadUrl) throw new Error("Download URL not available");
 
       const fileResponse = await fetch(downloadUrl);
-      if (!fileResponse.ok) {
-        throw new Error("Signed download failed");
-      }
+      if (!fileResponse.ok) throw new Error("Signed download failed");
 
       const blob = await fileResponse.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const doc = matter?.documents.find(d => d.id === documentId);
-      a.download = (result?.data?.fileName as string | undefined) || doc?.name || "document";
-      document.body.appendChild(a);
-      a.click();
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const doc = matter?.documents.find((item) => item.id === documentId);
+      anchor.download = (result?.data?.fileName as string | undefined) || doc?.name || "document";
+      document.body.appendChild(anchor);
+      anchor.click();
       window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      document.body.removeChild(anchor);
     } catch (err) {
       console.error("Download error:", err);
     }
@@ -143,10 +151,10 @@ export default function PortalPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-background">
+      <div className="flex min-h-screen items-center justify-center bg-background p-8">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-          <p className="mt-4 text-muted-foreground">Loading shared content...</p>
+          <Clock className="mx-auto h-8 w-8 animate-spin text-saffron-300" />
+          <p className="mt-3 text-sm text-white/65">Loading shared content...</p>
         </div>
       </div>
     );
@@ -154,271 +162,207 @@ export default function PortalPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-background">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="w-full max-w-md"
-        >
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <div className="h-12 w-12 rounded-xl bg-[hsl(var(--navy))] flex items-center justify-center">
-              <Scale className="h-7 w-7 text-[hsl(var(--gold))]" />
+      <div className="flex min-h-screen items-center justify-center bg-background p-8">
+        <Card className="glass w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15">
+              <AlertTriangle className="h-6 w-6 text-amber-300" />
             </div>
-            <span className="text-2xl font-bold">EvidentIS</span>
-          </div>
-
-          <Card>
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center">
-                <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-              </div>
-              <CardTitle className="text-2xl">Link Not Available</CardTitle>
-              <CardDescription>
-                {error}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground text-center">
-                This shared link may have expired or been revoked.
-                Please contact the person who shared this with you.
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
+            <CardTitle className="text-2xl">Link not available</CardTitle>
+            <CardDescription className="text-white/65">{error}</CardDescription>
+          </CardHeader>
+          <CardContent className="text-center text-sm text-white/60">
+            This shared link may have expired or been revoked.
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-[hsl(var(--navy))] flex items-center justify-center">
-                <Scale className="h-6 w-6 text-[hsl(var(--gold))]" />
-              </div>
-              <span className="text-xl font-bold">EvidentIS</span>
-              <Badge variant="secondary" className="ml-2">
-                <Shield className="h-3 w-3 mr-1" />
-                Secure Portal
-              </Badge>
+      <header className="border-b border-white/12 bg-slate-950/70 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="relative h-10 w-10 overflow-hidden rounded-xl border border-white/20 bg-white/10 p-1">
+              <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" priority />
             </div>
-            {matter?.expiresAt && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                Expires: {formatDate(matter.expiresAt)}
-              </div>
-            )}
+            <div>
+              <span className="text-xl font-semibold">EvidentIS</span>
+              <div className="text-xs text-white/55">Secure Client Portal</div>
+            </div>
+            <Badge className="ml-2 border-white/20 bg-white/10 text-white/75">
+              <Shield className="mr-1 h-3 w-3" />
+              Secure Portal
+            </Badge>
           </div>
+          {matter?.expiresAt ? (
+            <div className="text-sm text-white/70">
+              Expires: {formatDate(matter.expiresAt)} · <span className="text-saffron-300">{expiryLabel}</span>
+            </div>
+          ) : null}
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          {/* Matter Header */}
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">{matter?.name}</h1>
-            {matter?.description && (
-              <p className="text-muted-foreground mb-4">{matter.description}</p>
-            )}
-            <div className="flex flex-wrap gap-4 text-sm">
+            <h1 className="text-3xl font-semibold">{matter?.name}</h1>
+            {matter?.description ? <p className="mt-2 text-white/65">{matter.description}</p> : null}
+            <div className="mt-4 flex flex-wrap gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Client:</span>
+                <Building2 className="h-4 w-4 text-white/50" />
+                <span className="text-white/50">Client:</span>
                 <span>{matter?.clientName}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Created:</span>
+                <Calendar className="h-4 w-4 text-white/50" />
+                <span className="text-white/50">Created:</span>
                 <span>{matter?.createdAt ? formatDate(matter.createdAt) : "N/A"}</span>
               </div>
-              <Badge variant={matter?.status === "active" ? "default" : "secondary"}>
-                {matter?.status}
-              </Badge>
+              <Badge variant={matter?.status === "active" ? "default" : "secondary"}>{matter?.status}</Badge>
             </div>
           </div>
 
-          {/* Section Tabs */}
-          <div className="flex gap-2 mb-6 border-b">
-            {matter?.permissions.viewDocuments && (
+          <div className="mb-6 flex flex-wrap gap-2 border-b border-white/12 pb-2">
+            {matter?.permissions.viewDocuments ? (
               <button
                 onClick={() => setActiveSection("documents")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   activeSection === "documents"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "border-saffron-500/45 bg-saffron-500/15 text-saffron-300"
+                    : "border-white/20 bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <FileText className="h-4 w-4 inline mr-2" />
+                <FileText className="mr-2 inline h-4 w-4" />
                 Documents ({matter.documents.length})
               </button>
-            )}
-            {matter?.permissions.viewClauses && matter.clauses && (
+            ) : null}
+            {matter?.permissions.viewClauses && matter.clauses ? (
               <button
                 onClick={() => setActiveSection("clauses")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   activeSection === "clauses"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "border-saffron-500/45 bg-saffron-500/15 text-saffron-300"
+                    : "border-white/20 bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <Eye className="h-4 w-4 inline mr-2" />
+                <Eye className="mr-2 inline h-4 w-4" />
                 Clauses ({matter.clauses.length})
               </button>
-            )}
-            {matter?.permissions.viewFlags && matter.flags && (
+            ) : null}
+            {matter?.permissions.viewFlags && matter.flags ? (
               <button
                 onClick={() => setActiveSection("flags")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   activeSection === "flags"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "border-saffron-500/45 bg-saffron-500/15 text-saffron-300"
+                    : "border-white/20 bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <AlertTriangle className="h-4 w-4 inline mr-2" />
+                <AlertTriangle className="mr-2 inline h-4 w-4" />
                 Flags ({matter.flags.length})
               </button>
-            )}
+            ) : null}
           </div>
 
-          {/* Documents Section */}
-          {activeSection === "documents" && (
-            <div className="space-y-4">
-              {matter?.documents.length === 0 ? (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No documents shared</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                matter?.documents.map((doc) => (
-                  <Card key={doc.id}>
-                    <CardContent className="flex items-center justify-between py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <FileText className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{doc.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {formatBytes(doc.size)} • Uploaded {formatDate(doc.uploadedAt)}
-                          </p>
-                        </div>
-                      </div>
-                      {matter.permissions.downloadDocuments && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownload(doc.id)}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-          )}
+          <AnimatePresence mode="wait">
+            {activeSection === "documents" ? (
+              <motion.div key="documents" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                <div className="space-y-3">
+                  {matter?.documents.length === 0 ? (
+                    <Card className="glass">
+                      <CardContent className="py-12 text-center text-white/60">No documents shared.</CardContent>
+                    </Card>
+                  ) : (
+                    matter?.documents.map((doc) => (
+                      <Card key={doc.id} className="glass">
+                        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="rounded-lg bg-white/10 p-2">
+                              <FileText className="h-5 w-5 text-saffron-300" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{doc.name}</p>
+                              <p className="text-sm text-white/60">
+                                {formatBytes(doc.size)} • Uploaded {formatDate(doc.uploadedAt)}
+                              </p>
+                            </div>
+                          </div>
+                          {matter.permissions.downloadDocuments ? (
+                            <Button onClick={() => handleDownload(doc.id)} className="btn-ripple">
+                              <Download className="mr-2 h-4 w-4" />
+                              Download
+                            </Button>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            ) : null}
 
-          {/* Clauses Section */}
-          {activeSection === "clauses" && (
-            <div className="space-y-4">
-              <AiDisclaimer variant="compact" />
-              {matter?.clauses?.length === 0 ? (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <Eye className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No clauses extracted</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                matter?.clauses?.map((clause) => (
-                  <Card key={clause.id}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline">{clause.type}</Badge>
-                        <span className="text-xs text-muted-foreground">
-                          From: {clause.documentName}
-                        </span>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm">{clause.text}</p>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* Flags Section */}
-          {activeSection === "flags" && (
-            <div className="space-y-4">
-              <AiDisclaimer variant="compact" />
-              {matter?.flags?.length === 0 ? (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <AlertTriangle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No flags identified</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                matter?.flags?.map((flag) => (
-                  <Card key={flag.id}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={
-                              flag.severity === "critical"
-                                ? "destructive"
-                                : flag.severity === "high"
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {flag.severity}
-                          </Badge>
-                          <span className="font-medium">{flag.type}</span>
+            {activeSection === "clauses" ? (
+              <motion.div key="clauses" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                <AiDisclaimer variant="compact" />
+                <div className="mt-3 space-y-3">
+                  {matter?.clauses?.map((clause) => (
+                    <Card key={clause.id} className="glass">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <Badge variant="outline">{clause.type}</Badge>
+                          <span className="text-xs text-white/50">From: {clause.documentName}</span>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          From: {flag.documentName}
-                        </span>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm">{flag.description}</p>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-          )}
+                      </CardHeader>
+                      <CardContent className="text-sm text-white/80">{clause.text}</CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </motion.div>
+            ) : null}
+
+            {activeSection === "flags" ? (
+              <motion.div key="flags" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                <AiDisclaimer variant="compact" />
+                <div className="mt-3 space-y-3">
+                  {matter?.flags?.map((flag) => (
+                    <Card key={flag.id} className="glass">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              className={
+                                flag.severity === "critical"
+                                  ? "border-red-500/35 bg-red-500/15 text-red-200"
+                                  : flag.severity === "high"
+                                  ? "border-yellow-500/35 bg-yellow-500/15 text-yellow-200"
+                                  : "border-blue-500/35 bg-blue-500/15 text-blue-200"
+                              }
+                            >
+                              {flag.severity}
+                            </Badge>
+                            <span className="font-medium">{flag.type}</span>
+                          </div>
+                          <span className="text-xs text-white/50">From: {flag.documentName}</span>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="text-sm text-white/80">{flag.description}</CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </motion.div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t mt-12">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-            <p>
-              This content is shared securely via EvidentIS. Access is logged and monitored.
-            </p>
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              <span>End-to-end encrypted</span>
-            </div>
+      <footer className="border-t border-white/12 py-5 text-sm text-white/55">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4">
+          <p>This content is shared securely via EvidentIS. Access is logged and monitored.</p>
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            <span>Powered by EvidentIS</span>
           </div>
         </div>
       </footer>

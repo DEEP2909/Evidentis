@@ -1,24 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { motion } from "framer-motion";
+import { ArrowLeft, CheckCircle2, Loader2, Mail } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Scale, ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
 });
 
 type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
+
+function LeftBrandPanel() {
+  return (
+    <div className="hidden w-1/2 flex-col justify-between bg-[radial-gradient(circle_at_top,#203b7a_0%,#0f2557_42%,#071226_100%)] p-12 lg:flex">
+      <div className="flex items-center gap-3">
+        <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
+          <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" priority />
+        </div>
+        <span className="text-2xl font-semibold text-white">EvidentIS</span>
+      </div>
+
+      <div>
+        <h1 className="text-4xl font-semibold leading-tight text-white">
+          Recover Access
+          <br />
+          <span className="text-saffron-300">Securely</span>
+        </h1>
+        <p className="mt-4 max-w-md text-lg text-white/75">
+          We will send password reset instructions to your registered email.
+        </p>
+      </div>
+
+      <div className="text-sm text-white/55">DPDP-compliant recovery workflow</div>
+    </div>
+  );
+}
 
 export default function ForgotPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,18 +64,15 @@ export default function ForgotPasswordPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/auth/forgot-password", {
+      await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: data.email }),
       });
-
-      // Always show success to prevent email enumeration
       setSubmittedEmail(data.email);
       setIsSubmitted(true);
       toast.success("Check your email for reset instructions");
     } catch {
-      // Still show success to prevent email enumeration
       setSubmittedEmail(data.email);
       setIsSubmitted(true);
     } finally {
@@ -56,138 +80,87 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  if (isSubmitted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-background">
+  return (
+    <div className="flex min-h-screen">
+      <LeftBrandPanel />
+      <div className="flex flex-1 items-center justify-center bg-background p-8">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+          transition={{ duration: 0.35 }}
           className="w-full max-w-md"
         >
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <div className="h-12 w-12 rounded-xl bg-[hsl(var(--navy))] flex items-center justify-center">
-              <Scale className="h-7 w-7 text-[hsl(var(--gold))]" />
+          <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
+            <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
+              <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" />
             </div>
-            <span className="text-2xl font-bold">EvidentIS</span>
+            <span className="text-2xl font-semibold">EvidentIS</span>
           </div>
 
-          <Card>
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
-                <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-              <CardTitle className="text-2xl">Check your email</CardTitle>
-              <CardDescription>
-                If an account exists for <strong>{submittedEmail}</strong>, 
-                we&apos;ve sent password reset instructions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg text-sm text-muted-foreground">
-                <p className="mb-2">Didn&apos;t receive an email?</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Check your spam folder</li>
-                  <li>Verify the email address is correct</li>
-                  <li>Wait a few minutes and try again</li>
-                </ul>
-              </div>
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setIsSubmitted(false);
-                  setSubmittedEmail("");
-                }}
-              >
-                <Mail className="mr-2 h-4 w-4" />
-                Try a different email
-              </Button>
-
-              <div className="text-center">
-                <Link
-                  href="/login"
-                  className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
-                >
+          {isSubmitted ? (
+            <Card className="glass">
+              <CardHeader className="text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/20">
+                  <CheckCircle2 className="h-6 w-6 text-green-300" />
+                </div>
+                <CardTitle className="text-2xl">Check your email</CardTitle>
+                <CardDescription className="text-white/65">
+                  If an account exists for <strong>{submittedEmail}</strong>, we have sent reset instructions.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border border-white/15 bg-white/5 p-4 text-sm text-white/70">
+                  <p className="mb-1">Did not receive an email?</p>
+                  <p>Check spam, verify the address, and retry in a few minutes.</p>
+                </div>
+                <Button variant="outline" className="w-full border-white/25 text-white/80" onClick={() => setIsSubmitted(false)}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Try a different email
+                </Button>
+                <Link href="/login" className="inline-flex items-center gap-1 text-sm text-white/60 hover:text-saffron-300">
                   <ArrowLeft className="h-3 w-3" />
                   Back to sign in
                 </Link>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="glass">
+              <CardHeader>
+                <CardTitle className="text-2xl">Forgot password?</CardTitle>
+                <CardDescription className="text-white/65">
+                  Enter your email and we will send a secure reset link.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="advocate@chambers.in"
+                      {...register("email")}
+                      disabled={isSubmitting}
+                      className="focus-saffron"
+                    />
+                    {errors.email ? <p className="text-sm text-red-300">{errors.email.message}</p> : null}
+                  </div>
+                  <Button type="submit" className={`w-full ${isSubmitting ? "shimmer-loading text-slate-900" : ""}`} disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      "Send reset link"
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
         </motion.div>
       </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center p-8 bg-background">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="w-full max-w-md"
-      >
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-12 w-12 rounded-xl bg-[hsl(var(--navy))] flex items-center justify-center">
-            <Scale className="h-7 w-7 text-[hsl(var(--gold))]" />
-          </div>
-          <span className="text-2xl font-bold">EvidentIS</span>
-        </div>
-
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl">Forgot password?</CardTitle>
-            <CardDescription>
-              Enter your email address and we&apos;ll send you a link to reset your password.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="advocate@chambers.in"
-                  {...register("email")}
-                  disabled={isSubmitting}
-                />
-                {errors.email && (
-                  <p className="text-sm text-red-500">{errors.email.message}</p>
-                )}
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isSubmitting}
-                variant="gold"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  "Send reset link"
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <p className="mt-6 text-center">
-          <Link
-            href="/login"
-            className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Back to sign in
-          </Link>
-        </p>
-      </motion.div>
     </div>
   );
 }

@@ -641,3 +641,31 @@
 - `npm run typecheck --workspace=apps/api` ✅
 - `npm run typecheck --workspace=apps/web` ✅
 - `npm run test:smoke --workspace=apps/api` ✅
+
+## Latest Fixes (Session 52)
+- Completed full frontend redesign/remediation pass based on `frontend_promt.md`:
+  - Reworked visual system (`apps/web/app/globals.css`, `apps/web/tailwind.config.ts`) with India-first dark tokens, utility classes, and animation patterns.
+  - Replaced/updated major user journeys and product pages for animation + interactivity:
+    - landing, auth (login/MFA/forgot/reset/invitation), dashboard, admin, analytics,
+      matters, documents, research, Nyay Assist, calendar, billing, privacy settings,
+      templates (+ generate), bare acts (+ detail), and portal.
+  - Added consistent role-aware shell/navigation behavior and responsive sidebar in `apps/web/components/india/AppShell.tsx`.
+  - Integrated provided brand asset via `apps/web/public/logo.svg` across shell/auth/landing/portal surfaces.
+- Closed frontend access/control and client-boundary gaps:
+  - enforced `/admin` role guard (admin-only) and `/analytics` guard (admin/senior_advocate/partner).
+  - moved dashboard client redirect to `useEffect` and preserved client route handling safety.
+  - converted interactive dynamic pages (`templates/[id]/generate`, `bare-acts/[actSlug]`) to client components for stable AppShell usage.
+- Added global route transition handling in providers:
+  - `apps/web/app/providers.tsx` now wraps children with pathname-keyed `AnimatePresence`.
+  - switched to dark-first theme default for consistent UX baseline.
+- Fixed post-redesign verification regressions:
+  - escaped unescaped apostrophes flagged by ESLint.
+  - replaced raw `<a>` with Next `<Link>` for research related-acts navigation.
+  - updated `apps/web/tests/india-pages.test.tsx` with `next/navigation` + auth-store mocks to support dashboard routing behavior in unit tests.
+- Documentation update:
+  - rewrote `issue.md` as Session 52 resolved ledger with verification snapshot.
+
+## Session 52 Verification
+- `npm run typecheck --workspace=apps/web` ✅
+- `npm run build --workspace=apps/web` ✅
+- `npm run test --workspace=apps/web` ✅

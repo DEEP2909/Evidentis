@@ -1,43 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import {
+  Gavel,
+  Loader2,
   Plus,
   Search,
-  Filter,
-  FolderOpen,
-  MoreVertical,
   Trash2,
-  Edit,
-  Loader2,
-  Scale,
-  ArrowLeft,
 } from "lucide-react";
+import { z } from "zod";
 import { toast } from "sonner";
 
-import { matters, type CreateMatterInput } from "@/lib/api";
-import { formatDate, INDIAN_STATES } from "@/lib/utils";
+import { AppShell } from "@/components/india/AppShell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { matters, type CreateMatterInput } from "@/lib/api";
+import { formatDate, INDIAN_STATES } from "@/lib/utils";
 
 const createMatterSchema = z.object({
   name: z.string().min(1, "Matter name is required"),
@@ -49,11 +36,45 @@ const createMatterSchema = z.object({
 
 type CreateMatterFormData = z.infer<typeof createMatterSchema>;
 
+const statuses = ["all", "open", "under_review", "closed", "archived"] as const;
+
+function HealthMiniDonut({ value }: { value: number }) {
+  const radius = 15;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.min(Math.max(value, 0), 100);
+  const strokeDashoffset = circumference - (progress / 100) * circumference;
+  const tone = progress >= 80 ? "#22c55e" : progress >= 60 ? "#eab308" : "#ef4444";
+
+  return (
+    <svg width="38" height="38" viewBox="0 0 38 38" aria-label={`Matter health ${progress}%`}>
+      <circle cx="19" cy="19" r={radius} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="4" />
+      <motion.circle
+        cx="19"
+        cy="19"
+        r={radius}
+        fill="none"
+        stroke={tone}
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        initial={{ strokeDashoffset: circumference }}
+        animate={{ strokeDashoffset }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+        transform="rotate(-90 19 19)"
+      />
+      <text x="19" y="22" textAnchor="middle" className="fill-white text-[9px] font-semibold">
+        {progress}
+      </text>
+    </svg>
+  );
+}
+
 export default function MattersPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const {
@@ -65,12 +86,16 @@ export default function MattersPage() {
     resolver: zodResolver(createMatterSchema),
   });
 
-  // Fetch matters
-  const { data: mattersData, isLoading } = useQuery({
-    queryKey: ["matters", { search: searchQuery, status: statusFilter === "all" ? undefined : statusFilter }],
-      queryFn: () =>
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearch(searchQuery), 280);
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
+
+  const { data: mattersData, isLoading, isFetching } = useQuery({
+    queryKey: ["matters", { search: debouncedSearch, status: statusFilter === "all" ? undefined : statusFilter }],
+    queryFn: () =>
       matters.list({
-        search: searchQuery || undefined,
+        search: debouncedSearch || undefined,
         status:
           statusFilter === "all"
             ? undefined
@@ -78,7 +103,18 @@ export default function MattersPage() {
       }),
   });
 
-  // Create matter mutation
+  const statusCounts = useMemo(() => {
+    const base = { all: 0, open: 0, under_review: 0, closed: 0, archived: 0 };
+    const rows = mattersData?.data ?? [];
+    for (const row of rows) {
+      base.all += 1;
+      if (row.status in base) {
+        base[row.status as keyof typeof base] += 1;
+      }
+    }
+    return base;
+  }, [mattersData]);
+
   const createMutation = useMutation({
     mutationFn: (data: CreateMatterInput) => matters.create(data),
     onSuccess: () => {
@@ -92,7 +128,6 @@ export default function MattersPage() {
     },
   });
 
-  // Delete matter mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => matters.delete(id),
     onSuccess: () => {
@@ -104,10 +139,6 @@ export default function MattersPage() {
     },
   });
 
-  const onCreateSubmit = (data: CreateMatterFormData) => {
-    createMutation.mutate(data);
-  };
-
   const practiceAreas = [
     "Corporate",
     "Litigation",
@@ -115,118 +146,87 @@ export default function MattersPage() {
     "Employment",
     "Intellectual Property",
     "Tax",
-    "Healthcare",
     "Banking & Finance",
     "Environmental",
-    "Immigration",
+    "Insolvency",
+    "Arbitration",
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-30 h-16 border-b bg-background/95 backdrop-blur">
-        <div className="flex h-full items-center justify-between px-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/dashboard">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <div>
-              <h1 className="text-xl font-semibold">Matters</h1>
-              <p className="text-sm text-muted-foreground">
-                Manage your legal matters and cases
-              </p>
-            </div>
+    <AppShell title="Matters">
+      <div className="space-y-6 page-enter">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] text-saffron-300">India Legal Operations</p>
+            <h2 className="mt-1 text-2xl font-semibold">Manage matters across courts and tribunals</h2>
           </div>
+
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="gold">
-                <Plus className="h-4 w-4 mr-2" />
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
                 New Matter
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="glass border-white/20 bg-slate-950 text-white sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Create New Matter</DialogTitle>
-                <DialogDescription>
-                  Enter the details for the new legal matter
+                <DialogDescription className="text-white/65">
+                  Enter details for the new legal matter.
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmit(onCreateSubmit)}>
-                <div className="space-y-4 py-4">
+              <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Matter Name *</Label>
+                  <Input id="name" placeholder="e.g., Acme Corp Acquisition" {...register("name")} className="focus-saffron" />
+                  {errors.name ? <p className="text-sm text-red-300">{errors.name.message}</p> : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clientName">Client Name *</Label>
+                  <Input id="clientName" placeholder="e.g., Acme Corporation" {...register("clientName")} className="focus-saffron" />
+                  {errors.clientName ? <p className="text-sm text-red-300">{errors.clientName.message}</p> : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Input id="description" placeholder="Brief description of the matter" {...register("description")} className="focus-saffron" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Matter Name *</Label>
-                    <Input
-                      id="name"
-                      placeholder="e.g., Acme Corp Acquisition"
-                      {...register("name")}
-                    />
-                    {errors.name && (
-                      <p className="text-sm text-red-500">{errors.name.message}</p>
-                    )}
+                    <Label htmlFor="practiceArea">Practice Area</Label>
+                    <select
+                      id="practiceArea"
+                      className="focus-saffron h-10 w-full rounded-md border border-white/20 bg-slate-900/75 px-3 text-sm outline-none"
+                      {...register("practiceArea")}
+                    >
+                      <option value="">Select...</option>
+                      {practiceAreas.map((area) => (
+                        <option key={area} value={area} className="bg-slate-900">
+                          {area}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="clientName">Client Name *</Label>
-                    <Input
-                      id="clientName"
-                      placeholder="e.g., Acme Corporation"
-                      {...register("clientName")}
-                    />
-                    {errors.clientName && (
-                      <p className="text-sm text-red-500">{errors.clientName.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Input
-                      id="description"
-                      placeholder="Brief description of the matter"
-                      {...register("description")}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="practiceArea">Practice Area</Label>
-                      <select
-                        id="practiceArea"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        {...register("practiceArea")}
-                      >
-                        <option value="">Select...</option>
-                        {practiceAreas.map((area) => (
-                          <option key={area} value={area}>
-                            {area}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="jurisdiction">Jurisdiction</Label>
-                      <select
-                        id="jurisdiction"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        {...register("jurisdiction")}
-                      >
-                        <option value="">Select...</option>
-                        {INDIAN_STATES.map((state) => (
-                          <option key={state.code} value={state.code}>
-                            {state.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <Label htmlFor="jurisdiction">Jurisdiction</Label>
+                    <select
+                      id="jurisdiction"
+                      className="focus-saffron h-10 w-full rounded-md border border-white/20 bg-slate-900/75 px-3 text-sm outline-none"
+                      {...register("jurisdiction")}
+                    >
+                      <option value="">Select...</option>
+                      {INDIAN_STATES.map((state) => (
+                        <option key={state.code} value={state.code} className="bg-slate-900">
+                          {state.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsCreateDialogOpen(false)}
-                  >
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} className="border-white/25 text-white/75">
                     Cancel
                   </Button>
-                  <Button type="submit" variant="gold" disabled={createMutation.isPending}>
+                  <Button type="submit" disabled={createMutation.isPending}>
                     {createMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -241,110 +241,103 @@ export default function MattersPage() {
             </DialogContent>
           </Dialog>
         </div>
-      </header>
 
-      {/* Content */}
-      <main className="p-6">
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
             <Input
               placeholder="Search matters..."
-              className="pl-9"
+              className="focus-saffron pl-9 pr-9"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => setSearchQuery(event.target.value)}
             />
+            {isFetching ? <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-saffron-300" /> : null}
           </div>
-          <div className="flex gap-2">
-            {["all", "open", "under_review", "closed", "archived"].map((status) => (
-              <Button
+          <div className="flex flex-wrap gap-2">
+            {statuses.map((status) => (
+              <button
                 key={status}
-                variant={statusFilter === status ? "default" : "outline"}
-                size="sm"
                 onClick={() => setStatusFilter(status)}
+                className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                  statusFilter === status
+                    ? "border-saffron-500/45 bg-saffron-500/15 text-saffron-300"
+                    : "border-white/20 text-white/65 hover:bg-white/8 hover:text-white"
+                }`}
               >
-                {status === "all" ? "All" : status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
-              </Button>
+                <span className="capitalize">{status === "all" ? "All" : status.replaceAll("_", " ")}</span>
+                <span className="ml-1 inline-block min-w-4 text-center">
+                  {statusCounts[status]}
+                </span>
+              </button>
             ))}
           </div>
         </div>
 
-        {/* Matters Grid */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-white/70" />
           </div>
         ) : mattersData?.data?.length ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <AnimatePresence>
               {mattersData.data.map((matter, index) => (
                 <motion.div
                   key={matter.id}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ delay: index * 0.05 }}
                 >
-                  <Card className="hover:shadow-lg transition-shadow cursor-pointer group">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div
-                          className="flex-1"
-                          onClick={() => router.push(`/matters/${matter.id}`)}
-                        >
-                          <CardTitle className="text-lg group-hover:text-primary transition-colors">
+                  <Card className="glass group cursor-pointer transition hover:border-saffron-500/35 hover:bg-white/7">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1" onClick={() => router.push(`/matters/${matter.id}`)}>
+                          <CardTitle className="line-clamp-2 text-lg group-hover:text-saffron-300">
                             {matter.matterName}
                           </CardTitle>
-                          <CardDescription>{matter.clientName}</CardDescription>
+                          <CardDescription className="text-white/65">{matter.clientName}</CardDescription>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={
-                               matter.status === "open"
-                                 ? "active"
-                                : matter.status === "closed"
-                                ? "secondary"
-                                : "pending"
-                            }
-                          >
-                            {matter.status}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => {
-                              if (confirm("Are you sure you want to delete this matter?")) {
-                                deleteMutation.mutate(matter.id);
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
+                        <div className="shrink-0">
+                          <HealthMiniDonut value={matter.healthScore ?? 0} />
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent onClick={() => router.push(`/matters/${matter.id}`)}>
-                      {matter.notes && (
-                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                          {matter.notes}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        {matter.matterType && (
-                          <span className="flex items-center gap-1">
-                            <Scale className="h-3 w-3" />
+                      <div className="mb-3 flex items-center gap-2">
+                        <Badge
+                          className={
+                            matter.status === "open"
+                              ? "border-green-500/35 bg-green-500/15 text-green-300"
+                              : matter.status === "closed"
+                              ? "border-white/25 bg-white/10 text-white/75"
+                              : "border-yellow-500/35 bg-yellow-500/15 text-yellow-300"
+                          }
+                        >
+                          {matter.status}
+                        </Badge>
+                        {matter.matterType ? (
+                          <span className="rounded-full border border-white/15 px-2 py-0.5 text-xs text-white/60">
                             {matter.matterType}
                           </span>
-                        )}
-                        {matter.governingLawState && (
-                          <span>{matter.governingLawState}</span>
-                        )}
+                        ) : null}
                       </div>
-                      <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Created {formatDate(matter.createdAt)}</span>
-                        <span>Updated {formatDate(matter.updatedAt)}</span>
+                      {matter.notes ? <p className="line-clamp-2 text-sm text-white/65">{matter.notes}</p> : null}
+                      <div className="mt-4 border-t border-white/10 pt-3 text-xs text-white/50">
+                        <div className="flex items-center justify-between">
+                          <span>Created {formatDate(matter.createdAt)}</span>
+                          <button
+                            className="rounded-md p-1 text-red-300 transition hover:bg-red-500/10"
+                            aria-label="Delete matter"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (window.confirm("Are you sure you want to delete this matter?")) {
+                                deleteMutation.mutate(matter.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -353,32 +346,29 @@ export default function MattersPage() {
             </AnimatePresence>
           </div>
         ) : (
-          <Card className="py-12">
+          <Card className="glass py-12">
             <CardContent className="text-center">
-              <FolderOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-medium mb-2">No matters found</h3>
-              <p className="text-muted-foreground mb-4">
-                {searchQuery
-                  ? "No matters match your search criteria"
-                  : "Get started by creating your first matter"}
+              <motion.div
+                animate={{ y: [0, -4, 0] }}
+                transition={{ repeat: Number.POSITIVE_INFINITY, duration: 2.5, ease: "easeInOut" }}
+                className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/10"
+              >
+                <Gavel className="h-7 w-7 text-saffron-300" />
+              </motion.div>
+              <h3 className="text-lg font-medium">No matters found</h3>
+              <p className="mt-1 text-white/60">
+                {searchQuery ? "No matters match your search criteria." : "Create your first matter to get started."}
               </p>
-              {!searchQuery && (
-                <Button variant="gold" onClick={() => setIsCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
+              {!searchQuery ? (
+                <Button className="mt-4" onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
                   Create Matter
                 </Button>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         )}
-
-        {/* Pagination info */}
-        {mattersData?.pagination?.total && mattersData.pagination.total > 0 && (
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            Showing {mattersData.data?.length || 0} of {mattersData.pagination.total} matters
-          </div>
-        )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

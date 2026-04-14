@@ -1,32 +1,63 @@
-import { AppShell } from "@/components/india/AppShell";
+"use client";
 
-export default async function TemplateGeneratePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
+import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { useParams } from "next/navigation";
+
+import { AppShell } from "@/components/india/AppShell";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+
+const wizardSteps = [
+  "Select jurisdiction and language",
+  "Configure party and filing details",
+  "Review AI draft and export",
+];
+
+export default function TemplateGeneratePage() {
+  const params = useParams();
+  const id = params.id as string;
+  const [step, setStep] = useState(1);
+  const progress = useMemo(() => Math.round((step / wizardSteps.length) * 100), [step]);
 
   return (
     <AppShell title={`Template · ${id}`}>
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <section className="glass p-6">
           <h2 className="text-2xl font-semibold">Generation Wizard</h2>
+          <div className="mt-4">
+            <Progress value={progress} className="h-2 bg-white/15 [&>div]:bg-saffron-400" />
+            <p className="mt-2 text-xs text-white/60">Step {step} of {wizardSteps.length}</p>
+          </div>
+
           <div className="mt-5 space-y-3 text-sm text-white/80">
-            <div className="rounded-2xl border border-white/10 bg-black/10 p-4">1. Select jurisdiction and language</div>
-            <div className="rounded-2xl border border-white/10 bg-black/10 p-4">2. Apply stamp duty and filing guidance</div>
-            <div className="rounded-2xl border border-white/10 bg-black/10 p-4">3. Generate bilingual draft with citations</div>
+            {wizardSteps.map((item, index) => (
+              <motion.button
+                key={item}
+                onClick={() => setStep(index + 1)}
+                className={`w-full rounded-2xl border p-4 text-left transition ${
+                  step === index + 1
+                    ? "border-saffron-500/45 bg-saffron-500/15 text-saffron-200"
+                    : "border-white/10 bg-black/10 hover:bg-black/20"
+                }`}
+              >
+                {index + 1}. {item}
+              </motion.button>
+            ))}
           </div>
         </section>
 
-        <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <section className="glass p-6">
           <h2 className="text-2xl font-semibold">Draft Preview</h2>
           <div className="mt-5 rounded-[2rem] bg-white/90 p-6 text-slate-900">
             <p className="text-xs uppercase tracking-[0.35em] text-[#0f2557]/60">Indian Legal Template Preview</p>
             <h3 className="mt-3 text-2xl font-semibold">Jurisdiction-aware template output</h3>
             <p className="mt-4 text-sm text-slate-600">
-              Generated drafts will include state-sensitive stamp guidance, matter metadata, bilingual clause rendering, and AI review notes before export.
+              Generated drafts include state-sensitive stamp guidance, matter metadata, bilingual clause rendering, and AI review notes before export.
             </p>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button>Generate Draft</Button>
           </div>
         </section>
       </div>

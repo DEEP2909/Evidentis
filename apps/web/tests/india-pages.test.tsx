@@ -1,5 +1,26 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/dashboard",
+}));
+
+vi.mock("@/lib/auth", () => ({
+  useAuthStore: () => ({
+    user: {
+      role: "advocate",
+      displayName: "Test Advocate",
+      email: "test@example.com",
+    },
+    isLoading: false,
+    logout: vi.fn(async () => undefined),
+  }),
+}));
 
 import HomePage from "@/app/page";
 import DashboardPage from "@/app/dashboard/page";

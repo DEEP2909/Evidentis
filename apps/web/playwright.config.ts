@@ -7,6 +7,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 const webPort = Number(process.env.PLAYWRIGHT_WEB_PORT || 3100);
 const baseURL = process.env.BASE_URL || `http://127.0.0.1:${webPort}`;
+const ciWebServerEnv = {
+  HOSTNAME: '127.0.0.1',
+  PORT: String(webPort),
+  CI: process.env.CI || 'true',
+};
 
 export default defineConfig({
   // Directory containing test files
@@ -85,11 +90,14 @@ export default defineConfig({
   // Run local dev server before starting the tests
   webServer: {
     command: process.env.CI
-      ? `npm run start -- --hostname 127.0.0.1 --port ${webPort}`
+      ? `node scripts/start-standalone.mjs`
       : `npm run dev -- --hostname 127.0.0.1 --port ${webPort}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: process.env.CI ? 180000 : 120000,
+    env: process.env.CI
+      ? ciWebServerEnv
+      : undefined,
   },
   
   // Global timeout for the entire test suite

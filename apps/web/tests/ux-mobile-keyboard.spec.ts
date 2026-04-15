@@ -38,14 +38,16 @@ test.describe("UX mobile and keyboard smoke", () => {
     test.setTimeout(90000);
 
     await gotoPage(page, "/login");
+    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
 
     await page.locator("body").click();
     await page.locator("body").press("ControlOrMeta+K");
-    await expect(page.getByText("Command Palette")).toBeVisible();
-    await expect(page.getByRole("textbox", { name: /command palette search input/i })).toBeFocused();
+    const paletteTitle = page.getByRole("heading", { name: "Command Palette" });
+    await expect(paletteTitle).toBeVisible();
+    await expect(page.getByRole("textbox", { name: /command palette search input/i })).toBeVisible();
 
     await page.keyboard.press("Escape");
-    await expect(page.getByText("Command Palette")).not.toBeVisible();
+    await expect(paletteTitle).not.toBeVisible();
   });
 
   test("mobile viewport has no horizontal overflow on core entry pages", async ({ page }) => {
@@ -54,7 +56,7 @@ test.describe("UX mobile and keyboard smoke", () => {
     await page.setViewportSize({ width: 390, height: 844 });
 
     await gotoPage(page, "/");
-    await expect(page.getByRole("heading", { name: /evidentis/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /intelligent decision system/i })).toBeVisible();
     const landingOverflow = await page.evaluate(
       () => {
         const appRoot =

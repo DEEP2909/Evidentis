@@ -132,8 +132,15 @@ export const useAuthStore = create<AuthState>()(
       checkAuth: async () => {
         loadTokens();
         set({ isLoading: true });
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
-          const user = await auth.me();
+          const authCheckTimeoutMs = 5000;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(new Error("Auth check timeout"));
+            }, authCheckTimeoutMs);
+          });
+          const user = await Promise.race([auth.me(), timeoutPromise]);
           set({ user, isAuthenticated: true, isLoading: false });
         } catch {
           clearTokens();
@@ -142,6 +149,10 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             isLoading: false,
           });
+        } finally {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
         }
       },
 

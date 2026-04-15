@@ -1,6 +1,16 @@
 import { defineConfig } from 'vitest/config';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const configDir = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@evidentis/shared': resolve(configDir, '../../packages/shared/src/index.ts'),
+      '@evidentis/shared/validators': resolve(configDir, '../../packages/shared/src/validators.ts'),
+    },
+  },
   test: {
     environment: 'node',
     globals: true,

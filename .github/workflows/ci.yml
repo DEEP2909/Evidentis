@@ -49,6 +49,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Rollup Linux binary (npm optional dependency workaround)
+        run: |
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save @rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION
+
       - name: Build shared package
         run: npm run build -w @evidentis/shared
 
@@ -188,6 +193,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Rollup Linux binary (npm optional dependency workaround)
+        run: |
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save @rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION
+
       - name: Build shared package
         run: npm run build -w @evidentis/shared
 
@@ -289,6 +299,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Rollup Linux binary (npm optional dependency workaround)
+        run: |
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save @rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

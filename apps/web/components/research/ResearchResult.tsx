@@ -154,7 +154,7 @@ export function ResearchResult({
                     <div className="flex items-start gap-2 flex-1 min-w-0">
                       {getSourceIcon(source.type)}
                       <div className="flex-1 min-w-0">
-                        <button
+                        <button type="button"
                           className="text-sm font-medium text-left hover:underline truncate block w-full"
                           onClick={() => toggleSource(source.id)}
                         >
@@ -237,7 +237,7 @@ export function ResearchResult({
                     </div>
                   )}
 
-                  <button
+                  <button type="button"
                     className="w-full flex items-center justify-center mt-2 text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => toggleSource(source.id)}
                   >
@@ -268,9 +268,9 @@ export function ResearchResult({
           </CardHeader>
           <CardContent className="pt-0">
             <div className="flex flex-wrap gap-2">
-              {followUpQuestions.map((question, idx) => (
+              {followUpQuestions.map((question) => (
                 <Button
-                  key={idx}
+                  key={question}
                   variant="outline"
                   size="sm"
                   className="text-xs h-auto py-1.5 px-3"

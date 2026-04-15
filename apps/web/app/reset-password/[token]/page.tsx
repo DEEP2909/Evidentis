@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -15,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandLogo } from "@/components/india/BrandLogo";
 
 const resetPasswordSchema = z
   .object({
@@ -38,9 +38,7 @@ function LeftBrandPanel() {
   return (
     <div className="hidden w-1/2 flex-col justify-between bg-[radial-gradient(circle_at_top,#203b7a_0%,#0f2557_42%,#071226_100%)] p-12 lg:flex">
       <div className="flex items-center gap-3">
-        <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
-          <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" priority />
-        </div>
+        <BrandLogo size="lg" priority />
         <span className="text-2xl font-semibold text-white">EvidentIS</span>
       </div>
 
@@ -63,6 +61,7 @@ function LeftBrandPanel() {
 function SuccessCheck() {
   return (
     <svg viewBox="0 0 52 52" className="check-draw h-12 w-12" aria-label="Success checkmark">
+      <title>Success checkmark</title>
       <circle cx="26" cy="26" r="24" fill="none" stroke="rgba(34,197,94,0.35)" strokeWidth="2" />
       <path d="M14 27 L22 35 L38 18" fill="none" stroke="#86efac" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -135,9 +134,7 @@ export default function ResetPasswordPage() {
           className="w-full max-w-md"
         >
           <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
-            <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
-              <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" />
-            </div>
+            <BrandLogo size="lg" />
             <span className="text-2xl font-semibold">EvidentIS</span>
           </div>
 

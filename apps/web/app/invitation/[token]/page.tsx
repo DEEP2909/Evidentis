@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -17,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandLogo } from "@/components/india/BrandLogo";
 
 const acceptInvitationSchema = z
   .object({
@@ -182,15 +182,13 @@ export default function InvitationPage() {
         transition={{ duration: 0.35 }}
         className="w-full max-w-2xl"
       >
-        <Card className="glass border-white/20">
-          <CardHeader className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
-                <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" priority />
-              </div>
-              <div>
-                <p className="text-sm uppercase tracking-[0.2em] text-saffron-300">Invitation</p>
-                <CardTitle className="text-2xl">Welcome to {invitation?.tenantName}</CardTitle>
+          <Card className="glass border-white/20">
+            <CardHeader className="space-y-4">
+              <div className="flex items-center gap-3">
+                <BrandLogo size="lg" priority />
+                <div>
+                  <p className="text-sm uppercase tracking-[0.2em] text-saffron-300">Invitation</p>
+                  <CardTitle className="text-2xl">Welcome to {invitation?.tenantName}</CardTitle>
               </div>
             </div>
             <CardDescription className="text-white/70">

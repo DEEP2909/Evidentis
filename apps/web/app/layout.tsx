@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 
 import "./globals.css";
 import { Providers } from "./providers";
@@ -18,17 +17,6 @@ export default function RootLayout({
     <html lang="en-IN" suppressHydrationWarning>
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>
-        <Script id="global-cmdk-shortcut" strategy="afterInteractive">
-          {`
-            window.addEventListener("keydown", function(event) {
-              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-                event.preventDefault();
-                var target = document.querySelector('input[aria-label="Research query input"]');
-                if (target && target.focus) target.focus();
-              }
-            });
-          `}
-        </Script>
       </body>
     </html>
   );

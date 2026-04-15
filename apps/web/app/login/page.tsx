@@ -1,11 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, ShieldCheck, Lock, Globe2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandLogo } from "@/components/india/BrandLogo";
 import { MfaDialog } from "./mfa-dialog";
 
 const loginSchema = z.object({
@@ -27,7 +27,20 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 function AshokaChakra() {
   return (
-    <svg viewBox="0 0 120 120" className="h-28 w-28 text-saffron-300 ashoka-spin" aria-label="Ashoka Chakra">
+    <svg
+      viewBox="0 0 120 120"
+      className="h-28 w-28 text-saffron-300 ashoka-spin"
+      aria-label="Ashoka Chakra"
+    >
+      <title>Ashoka Chakra</title>
+      {/* Outer glow ring */}
+      <circle
+        cx="60" cy="60" r="56"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="0.5"
+        opacity="0.2"
+      />
       <circle cx="60" cy="60" r="52" fill="none" stroke="currentColor" strokeWidth="3" />
       <circle cx="60" cy="60" r="6" fill="currentColor" />
       {Array.from({ length: 24 }).map((_, index) => {
@@ -55,16 +68,32 @@ function MfaSteps({ mfaRequired }: { mfaRequired: boolean }) {
     <div className="mt-4 flex items-center gap-2">
       {steps.map((step, index) => {
         const active = mfaRequired ? index >= 1 : index === 0;
+        const completed = mfaRequired ? index === 0 : false;
         return (
           <div key={step} className="flex items-center gap-2">
-            <div
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${
-                active ? "bg-saffron-500 text-slate-900" : "border border-white/20 text-white/55"
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: index * 0.08, duration: 0.3 }}
+              className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold transition-all duration-300 ${
+                completed
+                  ? "bg-green-500/20 text-green-400 ring-1 ring-green-500/40"
+                  : active
+                  ? "bg-saffron-500 text-slate-900 shadow-md shadow-saffron-500/30"
+                  : "border border-white/20 text-white/55"
               }`}
             >
-              {index + 1}
-            </div>
-            {index < steps.length - 1 ? <div className="h-px w-7 bg-white/20" /> : null}
+              {completed ? "✓" : index + 1}
+            </motion.div>
+            {index < steps.length - 1 ? (
+              <div className="h-px w-7 bg-white/20 transition-colors">
+                <div
+                  className={`h-full transition-all duration-500 ${
+                    completed ? "bg-saffron-500/60 w-full" : "w-0"
+                  }`}
+                />
+              </div>
+            ) : null}
           </div>
         );
       })}
@@ -103,22 +132,53 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen">
+
+      {/* ── Left hero panel ── */}
       <motion.div
         initial={{ opacity: 0, x: -36 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.55 }}
-        className="hidden w-1/2 flex-col justify-between bg-[radial-gradient(circle_at_top,#203b7a_0%,#0f2557_42%,#071226_100%)] p-12 lg:flex"
+        className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-[radial-gradient(circle_at_top,#203b7a_0%,#0f2557_42%,#071226_100%)] p-12 lg:flex"
       >
-        <div className="flex items-center gap-3">
-          <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
-            <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" priority />
-          </div>
-          <span className="text-2xl font-semibold text-white">EvidentIS</span>
+        {/* Atmospheric grid */}
+        <div className="pointer-events-none absolute inset-0 bg-grid opacity-100" />
+
+        {/* Animated orbs */}
+        <div
+          aria-hidden="true"
+          className="animated-orb orb-saffron absolute -top-16 -right-16 h-72 w-72 opacity-40"
+        />
+        <div
+          aria-hidden="true"
+          className="animated-orb orb-navy absolute bottom-0 -left-12 h-80 w-80 opacity-50"
+        />
+
+        {/* Floating particles */}
+        <span
+          className="float-particle absolute left-16 top-1/3 h-1.5 w-1.5 rounded-full bg-saffron-300/60"
+          aria-hidden="true"
+        />
+        <span
+          className="float-particle absolute right-24 top-2/3 h-1 w-1 rounded-full bg-white/40"
+          style={{ animationDelay: "2.5s" }}
+          aria-hidden="true"
+        />
+
+        {/* Logo */}
+        <div className="relative flex items-center gap-0">
+          <BrandLogo size="lg" priority />
         </div>
 
-        <div className="space-y-6">
-          <AshokaChakra />
+        {/* Center content */}
+        <div className="relative space-y-6">
+          {/* Ashoka Chakra with subtle glow ring */}
+          <div className="relative inline-block">
+            <div className="absolute inset-0 rounded-full bg-saffron-500/10 blur-2xl scale-150" />
+            <AshokaChakra />
+          </div>
+
           <div>
+            <span className="gold-rule" />
             <h1 className="text-4xl font-semibold leading-tight text-white">
               India-Ready Legal <br />
               <span className="text-saffron-300">Intelligence Platform</span>
@@ -129,22 +189,33 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="flex gap-8">
-          <div>
-            <p className="text-3xl font-semibold text-saffron-300">23</p>
-            <p className="text-sm text-white/55">Languages</p>
-          </div>
-          <div>
-            <p className="text-3xl font-semibold text-saffron-300">36</p>
-            <p className="text-sm text-white/55">Jurisdictions</p>
-          </div>
-          <div>
-            <p className="text-3xl font-semibold text-saffron-300">DPDP</p>
-            <p className="text-sm text-white/55">Aligned</p>
-          </div>
-        </div>
+        {/* Stats footer */}
+        <motion.div
+          className="relative flex gap-8"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+        >
+          {[
+            { value: "23", label: "Languages" },
+            { value: "36", label: "Jurisdictions" },
+            { value: "DPDP", label: "Aligned" },
+          ].map((stat, index) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.55 + index * 0.08, duration: 0.35 }}
+              className="stat-item"
+            >
+              <span className="stat-value">{stat.value}</span>
+              <span className="stat-label">{stat.label}</span>
+            </motion.div>
+          ))}
+        </motion.div>
       </motion.div>
 
+      {/* ── Right form panel ── */}
       <div className="flex flex-1 items-center justify-center bg-background p-8">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
@@ -152,23 +223,21 @@ export default function LoginPage() {
           transition={{ duration: 0.4, delay: 0.1 }}
           className="w-full max-w-md"
         >
-          <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
-            <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
-              <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" />
-            </div>
-            <span className="text-2xl font-semibold">EvidentIS</span>
+          {/* Mobile-only logo */}
+          <div className="mb-8 flex items-center justify-center gap-0 lg:hidden">
+            <BrandLogo size="lg" />
           </div>
 
-          <Card className="glass">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-2xl">Sign in</CardTitle>
+          <Card className="glass border-glow">
+            <CardHeader className="space-y-1 pb-4">
+              <CardTitle className="text-2xl font-semibold">Sign in</CardTitle>
               <CardDescription className="text-white/65">
-                Enter your credentials to access your account
+                Enter your credentials to access your workspace
               </CardDescription>
               <MfaSteps mfaRequired={mfaRequired} />
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                 {error ? (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
@@ -187,7 +256,7 @@ export default function LoginPage() {
                     placeholder="advocate@chambers.in"
                     {...register("email")}
                     disabled={isSubmitting}
-                    className="focus-saffron"
+                    className="focus-saffron transition-all duration-200"
                   />
                   {errors.email ? <p className="text-sm text-red-300">{errors.email.message}</p> : null}
                 </div>
@@ -195,7 +264,10 @@ export default function LoginPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
-                    <Link href="/forgot-password" className="text-sm text-white/60 transition hover:text-saffron-300">
+                    <Link
+                      href="/forgot-password"
+                      className="link-ink text-sm text-white/60 transition hover:text-saffron-300"
+                    >
                       Forgot password?
                     </Link>
                   </div>
@@ -206,12 +278,12 @@ export default function LoginPage() {
                       placeholder="••••••••"
                       {...register("password")}
                       disabled={isSubmitting}
-                      className="focus-saffron pr-10"
+                      className="focus-saffron pr-10 transition-all duration-200"
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPassword((value) => !value)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/55 hover:text-white"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/55 transition-all hover:text-white hover:scale-110"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -220,23 +292,44 @@ export default function LoginPage() {
                   {errors.password ? <p className="text-sm text-red-300">{errors.password.message}</p> : null}
                 </div>
 
-                <Button type="submit" className={`w-full ${isSubmitting ? "shimmer-loading text-slate-900" : ""}`} disabled={isSubmitting}>
+                <Button
+                  type="submit"
+                  id="login-submit"
+                  className={`w-full transition-all ${isSubmitting ? "shimmer-loading text-slate-900" : ""}`}
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in...
+                      Signing in…
                     </>
                   ) : (
                     "Sign in"
                   )}
                 </Button>
               </form>
+
+              {/* Trust badges */}
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                <span className="trust-badge">
+                  <ShieldCheck className="h-3 w-3 text-green-400" />
+                  DPDP Compliant
+                </span>
+                <span className="trust-badge">
+                  <Lock className="h-3 w-3 text-saffron-400" />
+                  MFA Protected
+                </span>
+                <span className="trust-badge">
+                  <Globe2 className="h-3 w-3 text-blue-400" />
+                  India Data Residency
+                </span>
+              </div>
             </CardContent>
           </Card>
 
           <p className="mt-6 text-center text-sm text-white/60">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-saffron-300 hover:underline">
+            <Link href="/signup" className="link-ink text-saffron-300 hover:text-saffron-200">
               Contact your administrator
             </Link>
           </p>

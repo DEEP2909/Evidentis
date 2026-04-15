@@ -144,11 +144,11 @@ export default function DocumentsPage() {
 
   return (
     <AppShell title="Documents">
-      <div className="space-y-6 page-enter">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="section-wrap page-enter">
+        <div className="section-header">
           <div>
-            <h2 className="text-2xl font-semibold">Document Intelligence Workspace</h2>
-            <p className="text-sm text-white/65">Manage uploads, AI extraction progress, and clause insights.</p>
+            <h2 className="section-title">Document Intelligence Workspace</h2>
+            <p className="section-subtitle">Manage uploads, AI extraction progress, and clause insights.</p>
           </div>
           <Button className="btn-ripple">
             <Upload className="mr-2 h-4 w-4" />
@@ -200,14 +200,14 @@ export default function DocumentsPage() {
           </Button>
 
           <div className="flex rounded-lg border border-white/15 bg-white/5 p-1">
-            <button
+            <button type="button"
               onClick={() => setViewMode("list")}
               className={`rounded p-2 ${viewMode === "list" ? "bg-saffron-500 text-slate-900" : "text-white/60"}`}
               aria-label="List view"
             >
               <List className="h-4 w-4" />
             </button>
-            <button
+            <button type="button"
               onClick={() => setViewMode("grid")}
               className={`rounded p-2 ${viewMode === "grid" ? "bg-saffron-500 text-slate-900" : "text-white/60"}`}
               aria-label="Grid view"

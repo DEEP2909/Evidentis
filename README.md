@@ -139,6 +139,9 @@ npm run seed --workspace=apps/api
 
 # Start all services in development mode
 npm run dev
+
+# Start API + Web together (requires API env including DATABASE_URL)
+npm run dev:full
 ```
 
 ### Build and Test Notes
@@ -160,9 +163,13 @@ npm run dev
 ### Demo Credentials
 
 ```
-Email: demo@evidentis.tech
-Password: Demo123!@#
-Firm: Demo Law Firm LLP
+Email: admin@sharma-associates.com
+Password: EvidentIS2026Demo!
+Firm: Sharma & Associates LLP
+
+Alternate demo admins:
+- admin@delhi-corporate.com
+- admin@bengaluru-legal.com
 ```
 
 ---

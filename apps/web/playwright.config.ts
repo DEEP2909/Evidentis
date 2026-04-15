@@ -5,6 +5,9 @@
 
 import { defineConfig, devices } from '@playwright/test';
 
+const webPort = Number(process.env.PLAYWRIGHT_WEB_PORT || 3100);
+const baseURL = process.env.BASE_URL || `http://127.0.0.1:${webPort}`;
+
 export default defineConfig({
   // Directory containing test files
   testDir: './tests',
@@ -34,7 +37,7 @@ export default defineConfig({
   // Shared settings for all projects
   use: {
     // Base URL to use in actions like `await page.goto('/')`
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL,
     
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',
@@ -81,8 +84,10 @@ export default defineConfig({
   
   // Run local dev server before starting the tests
   webServer: {
-    command: process.env.CI ? 'npm run start' : 'npm run dev',
-    url: 'http://localhost:3000',
+    command: process.env.CI
+      ? `npm run start -- --hostname 127.0.0.1 --port ${webPort}`
+      : `npm run dev -- --hostname 127.0.0.1 --port ${webPort}`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: process.env.CI ? 180000 : 120000,
   },

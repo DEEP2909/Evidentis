@@ -24,14 +24,9 @@ export function AuthGuard({
   requiredRoles = [], 
   fallbackPath = "/login" 
 }: AuthGuardProps) {
-  const { isAuthenticated, user, isLoading, checkAuth } = useAuthStore();
+  const { isAuthenticated, user, isLoading } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
-
-  useEffect(() => {
-    // Check auth state on mount
-    checkAuth();
-  }, [checkAuth]);
 
   useEffect(() => {
     if (isLoading) return;

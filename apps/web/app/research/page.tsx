@@ -65,14 +65,14 @@ export default function ResearchPage() {
 
   return (
     <AppShell title={t("research")}>
-      <div className="space-y-6 page-enter">
+      <div className="section-wrap page-enter">
         <section className="glass p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="section-header">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-saffron-300">
                 IndiaKanoon + Bare Acts + Matter Memory
               </p>
-              <h2 className="mt-2 text-2xl font-semibold">
+              <h2 className="mt-2 section-title">
                 Research with Indian sections, judgments, and multilingual answers.
               </h2>
             </div>
@@ -110,7 +110,7 @@ export default function ResearchPage() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             {nyayAssistPrompts.map((prompt) => (
-              <button
+              <button type="button"
                 key={prompt}
                 className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/75 transition hover:bg-white/10"
                 onClick={() => setQuery(prompt)}
@@ -136,9 +136,9 @@ export default function ResearchPage() {
                 className="mt-6 flex items-center gap-2 text-saffron-300"
               >
                 <span className="text-sm">Analyzing sources</span>
-                {[0, 0.15, 0.3].map((delay, index) => (
+                {[0, 0.15, 0.3].map((delay) => (
                   <motion.span
-                    key={index}
+                    key={`thinking-dot-${delay}`}
                     className="h-2 w-2 rounded-full bg-saffron-400"
                     animate={{ scale: [1, 1.35, 1], opacity: [0.4, 1, 0.4] }}
                     transition={{ repeat: Number.POSITIVE_INFINITY, delay, duration: 0.7 }}
@@ -165,7 +165,7 @@ export default function ResearchPage() {
               {citationSeed.map((citation) => {
                 const open = Boolean(openCitations[citation.id]);
                 return (
-                  <button
+                  <button type="button"
                     key={citation.id}
                     className={`rounded-full border px-3 py-1.5 text-xs transition ${
                       open

@@ -98,7 +98,7 @@ export default function NyayAssistPage() {
             </div>
             <div className="flex items-center gap-2">
               <LanguageSwitcher />
-              <button
+              <button type="button"
                 className="rounded-lg border border-white/15 bg-white/6 p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
                 aria-label="Attachments available"
               >
@@ -134,9 +134,9 @@ export default function NyayAssistPage() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
                 <div className="rounded-2xl border border-white/15 bg-white/8 px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    {[0, 0.15, 0.3].map((delay, index) => (
+                    {[0, 0.15, 0.3].map((delay) => (
                       <motion.div
-                        key={index}
+                        key={`typing-dot-${delay}`}
                         className="h-2 w-2 rounded-full bg-saffron-400"
                         animate={{ scale: [1, 1.35, 1], opacity: [0.4, 1, 0.4] }}
                         transition={{ repeat: Number.POSITIVE_INFINITY, delay, duration: 0.7 }}

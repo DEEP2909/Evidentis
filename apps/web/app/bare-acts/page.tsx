@@ -49,7 +49,7 @@ export default function BareActsPage() {
 
         <div className="flex flex-wrap gap-2">
           {categories.map((category) => (
-            <button
+            <button type="button"
               key={category}
               onClick={() => setActiveCategory(category)}
               className={`rounded-full border px-3 py-1.5 text-xs capitalize transition ${

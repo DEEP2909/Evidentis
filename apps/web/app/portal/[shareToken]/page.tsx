@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -19,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AiDisclaimer } from "@/components/shared/AiDisclaimer";
+import { BrandLogo } from "@/components/india/BrandLogo";
 
 interface SharedMatter {
   id: string;
@@ -69,7 +69,7 @@ function formatBytes(bytes: number): string {
   const k = 1024;
   const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
 }
 
 function formatDate(dateString: string): string {
@@ -184,9 +184,7 @@ export default function PortalPage() {
       <header className="border-b border-white/12 bg-slate-950/70 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="relative h-10 w-10 overflow-hidden rounded-xl border border-white/20 bg-white/10 p-1">
-              <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" priority />
-            </div>
+            <BrandLogo size="md" priority />
             <div>
               <span className="text-xl font-semibold">EvidentIS</span>
               <div className="text-xs text-white/55">Secure Client Portal</div>
@@ -226,7 +224,7 @@ export default function PortalPage() {
 
           <div className="mb-6 flex flex-wrap gap-2 border-b border-white/12 pb-2">
             {matter?.permissions.viewDocuments ? (
-              <button
+              <button type="button"
                 onClick={() => setActiveSection("documents")}
                 className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   activeSection === "documents"
@@ -239,7 +237,7 @@ export default function PortalPage() {
               </button>
             ) : null}
             {matter?.permissions.viewClauses && matter.clauses ? (
-              <button
+              <button type="button"
                 onClick={() => setActiveSection("clauses")}
                 className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   activeSection === "clauses"
@@ -252,7 +250,7 @@ export default function PortalPage() {
               </button>
             ) : null}
             {matter?.permissions.viewFlags && matter.flags ? (
-              <button
+              <button type="button"
                 onClick={() => setActiveSection("flags")}
                 className={`rounded-full border px-3 py-1.5 text-sm transition ${
                   activeSection === "flags"

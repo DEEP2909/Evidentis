@@ -362,7 +362,7 @@ function AdminContent() {
             </div>
             <nav className="space-y-1">
               {tabs.map((tab) => (
-                <button
+                <button type="button"
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition ${

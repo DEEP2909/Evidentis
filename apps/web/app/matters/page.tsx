@@ -47,6 +47,7 @@ function HealthMiniDonut({ value }: { value: number }) {
 
   return (
     <svg width="38" height="38" viewBox="0 0 38 38" aria-label={`Matter health ${progress}%`}>
+      <title>{`Matter health ${progress}%`}</title>
       <circle cx="19" cy="19" r={radius} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="4" />
       <motion.circle
         cx="19"
@@ -76,6 +77,7 @@ export default function MattersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [matterPendingDeletion, setMatterPendingDeletion] = useState<{ id: string; name: string } | null>(null);
 
   const {
     register,
@@ -138,6 +140,15 @@ export default function MattersPage() {
       toast.error(error instanceof Error ? error.message : "Failed to delete matter");
     },
   });
+
+  const confirmDeleteMatter = () => {
+    if (!matterPendingDeletion) {
+      return;
+    }
+
+    deleteMutation.mutate(matterPendingDeletion.id);
+    setMatterPendingDeletion(null);
+  };
 
   const practiceAreas = [
     "Corporate",
@@ -240,6 +251,47 @@ export default function MattersPage() {
               </form>
             </DialogContent>
           </Dialog>
+
+          <Dialog
+            open={Boolean(matterPendingDeletion)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setMatterPendingDeletion(null);
+              }
+            }}
+          >
+            <DialogContent className="glass border-white/20 bg-slate-950 text-white sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Delete Matter</DialogTitle>
+                <DialogDescription className="text-white/65">
+                  This action cannot be undone. The selected matter and its references will be removed.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                {matterPendingDeletion ? `Matter: ${matterPendingDeletion.name}` : "No matter selected"}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" className="border-white/25 text-white/75" onClick={() => setMatterPendingDeletion(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-red-500 text-white hover:bg-red-600"
+                  disabled={deleteMutation.isPending}
+                  onClick={confirmDeleteMatter}
+                >
+                  {deleteMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    "Delete Matter"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -255,7 +307,7 @@ export default function MattersPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {statuses.map((status) => (
-              <button
+              <button type="button"
                 key={status}
                 onClick={() => setStatusFilter(status)}
                 className={`rounded-full border px-3 py-1.5 text-xs transition ${
@@ -291,12 +343,16 @@ export default function MattersPage() {
                   <Card className="glass group cursor-pointer transition hover:border-saffron-500/35 hover:bg-white/7">
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1" onClick={() => router.push(`/matters/${matter.id}`)}>
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => router.push(`/matters/${matter.id}`)}
+                        >
                           <CardTitle className="line-clamp-2 text-lg group-hover:text-saffron-300">
                             {matter.matterName}
                           </CardTitle>
                           <CardDescription className="text-white/65">{matter.clientName}</CardDescription>
-                        </div>
+                        </button>
                         <div className="shrink-0">
                           <HealthMiniDonut value={matter.healthScore ?? 0} />
                         </div>
@@ -325,14 +381,12 @@ export default function MattersPage() {
                       <div className="mt-4 border-t border-white/10 pt-3 text-xs text-white/50">
                         <div className="flex items-center justify-between">
                           <span>Created {formatDate(matter.createdAt)}</span>
-                          <button
+                          <button type="button"
                             className="rounded-md p-1 text-red-300 transition hover:bg-red-500/10"
                             aria-label="Delete matter"
                             onClick={(event) => {
                               event.stopPropagation();
-                              if (window.confirm("Are you sure you want to delete this matter?")) {
-                                deleteMutation.mutate(matter.id);
-                              }
+                              setMatterPendingDeletion({ id: matter.id, name: matter.matterName });
                             }}
                           >
                             <Trash2 className="h-4 w-4" />

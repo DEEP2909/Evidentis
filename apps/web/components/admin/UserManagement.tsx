@@ -86,7 +86,7 @@ export function UserManagement({
   currentUserId,
   currentUserRole,
   onInvite,
-  onUpdateRole,
+  onUpdateRole: _onUpdateRole,
   onRemove,
   onResendInvite,
   onToggleSuspend,
@@ -218,7 +218,7 @@ export function UserManagement({
               <TableHead>Status</TableHead>
               <TableHead>MFA</TableHead>
               <TableHead>Last Active</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-[50px]" />
             </TableRow>
           </TableHeader>
           <TableBody>

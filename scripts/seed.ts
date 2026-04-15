@@ -183,44 +183,72 @@ function createDemoMatters(tenants: DemoTenant[], attorneys: DemoAttorney[]): De
 // SEED FUNCTIONS
 // ============================================================================
 
-async function seedTenants(pool: Pool, tenants: DemoTenant[]): Promise<void> {
+async function seedTenants(pool: Pool, tenants: DemoTenant[]): Promise<DemoTenant[]> {
   console.log('  Seeding tenants...');
+  const seededTenants: DemoTenant[] = [];
   
   for (const tenant of tenants) {
-    await pool.query(
+    const result = await pool.query<{ id: string }>(
       `INSERT INTO tenants (id, name, slug, plan, bar_state, subscription_status, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'active', NOW())
-       ON CONFLICT (slug) DO NOTHING`,
+        VALUES ($1, $2, $3, $4, $5, 'active', NOW())
+       ON CONFLICT (slug) DO UPDATE
+       SET name = EXCLUDED.name,
+           plan = EXCLUDED.plan,
+           bar_state = EXCLUDED.bar_state,
+           subscription_status = EXCLUDED.subscription_status
+       RETURNING id`,
       [tenant.id, tenant.name, tenant.slug, tenant.plan, tenant.barState]
     );
+
+    seededTenants.push({
+      ...tenant,
+      id: result.rows[0].id,
+    });
   }
   
   console.log(`    ✓ Created ${tenants.length} tenants`);
+  return seededTenants;
 }
 
-async function seedAttorneys(pool: Pool, attorneys: DemoAttorney[]): Promise<void> {
+async function seedAttorneys(pool: Pool, attorneys: DemoAttorney[]): Promise<DemoAttorney[]> {
   console.log('  Seeding attorneys...');
+  const seededAttorneys: DemoAttorney[] = [];
   
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, SALT_ROUNDS);
   
   for (const attorney of attorneys) {
-    await pool.query(
+    const result = await pool.query<{ id: string }>(
       `INSERT INTO attorneys (
         id, tenant_id, email, display_name, role, practice_group,
         bar_number, bar_state, bar_council_enrollment_number, bar_council_state,
         password_hash, status, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $7, $8, $9, 'active', NOW())
-      ON CONFLICT (tenant_id, email) DO NOTHING`,
+      ON CONFLICT (tenant_id, email) DO UPDATE
+      SET display_name = EXCLUDED.display_name,
+          role = EXCLUDED.role,
+          practice_group = EXCLUDED.practice_group,
+          bar_number = EXCLUDED.bar_number,
+          bar_state = EXCLUDED.bar_state,
+          bar_council_enrollment_number = EXCLUDED.bar_council_enrollment_number,
+          bar_council_state = EXCLUDED.bar_council_state,
+          status = EXCLUDED.status
+      RETURNING id`,
       [
         attorney.id, attorney.tenantId, attorney.email, attorney.displayName,
         attorney.role, attorney.practiceGroup, attorney.barNumber,
         attorney.barState, passwordHash
       ]
     );
+
+    seededAttorneys.push({
+      ...attorney,
+      id: result.rows[0].id,
+    });
   }
   
   console.log(`    ✓ Created ${attorneys.length} attorneys`);
   console.log(`    ℹ Demo password: ${DEMO_PASSWORD}`);
+  return seededAttorneys;
 }
 
 async function seedMatters(pool: Pool, matters: DemoMatter[], attorneys: DemoAttorney[]): Promise<void> {
@@ -249,50 +277,79 @@ async function seedMatters(pool: Pool, matters: DemoMatter[], attorneys: DemoAtt
   console.log(`    ✓ Created ${matters.length} matters`);
 }
 
-async function seedPlaybooks(pool: Pool, tenants: DemoTenant[]): Promise<void> {
+async function seedPlaybooks(pool: Pool, tenants: DemoTenant[], attorneys: DemoAttorney[]): Promise<void> {
   console.log('  Seeding playbooks...');
   
   const playbookTemplates = [
-    { name: 'M&A Standard Playbook', matterTypes: ['merger_acquisition'], description: 'Standard due diligence and negotiation playbook for M&A transactions' },
-    { name: 'Commercial Contracts', matterTypes: ['commercial_contract'], description: 'Standard terms for commercial agreements' },
-    { name: 'Employment Agreements', matterTypes: ['labour_employment'], description: 'Compliance-focused playbook for employment matters' },
-    { name: 'IP Licensing', matterTypes: ['intellectual_property'], description: 'Intellectual property licensing standards' },
+    {
+      name: 'M&A Standard Playbook',
+      practiceArea: 'merger_acquisition',
+      description: 'Standard due diligence and negotiation playbook for M&A transactions',
+      rules: [
+        { ruleId: 'r001', clauseType: 'indemnification', condition: 'missing', severity: 'high', description: 'Indemnification clause is required' },
+        { ruleId: 'r002', clauseType: 'limitation_of_liability', condition: 'missing', severity: 'high', description: 'Liability cap must be specified' },
+      ],
+    },
+    {
+      name: 'Commercial Contracts',
+      practiceArea: 'commercial_contract',
+      description: 'Standard terms for commercial agreements',
+      rules: [
+        { ruleId: 'r003', clauseType: 'governing_law', condition: 'missing', severity: 'medium', description: 'Governing law must be specified' },
+        { ruleId: 'r004', clauseType: 'termination_for_cause', condition: 'missing', severity: 'medium', description: 'Termination provisions required' },
+      ],
+    },
+    {
+      name: 'Employment Agreements',
+      practiceArea: 'labour_employment',
+      description: 'Compliance-focused playbook for employment matters',
+      rules: [
+        { ruleId: 'r005', clauseType: 'confidentiality', condition: 'missing', severity: 'high', description: 'Confidentiality clause is required' },
+      ],
+    },
+    {
+      name: 'IP Licensing',
+      practiceArea: 'intellectual_property',
+      description: 'Intellectual property licensing standards',
+      rules: [
+        { ruleId: 'r006', clauseType: 'intellectual_property', condition: 'missing', severity: 'high', description: 'IP ownership and license terms must be defined' },
+      ],
+    },
   ];
   
   let count = 0;
   for (const tenant of tenants) {
+    const admin = attorneys.find((attorney) => attorney.tenantId === tenant.id && attorney.role === 'admin');
+
     for (const template of playbookTemplates) {
-      const playbookId = randomUUID();
-      
-      await pool.query(
-        `INSERT INTO playbooks (id, tenant_id, name, description, matter_types, is_default, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())
-         ON CONFLICT DO NOTHING`,
-        [playbookId, tenant.id, template.name, template.description, template.matterTypes, count === 0]
+      const existing = await pool.query<{ id: string }>(
+        `SELECT id FROM playbooks WHERE tenant_id = $1 AND name = $2 LIMIT 1`,
+        [tenant.id, template.name]
       );
-      
-      // Add some rules
-      const rules = [
-        { ruleId: 'r001', clauseType: 'indemnification', condition: 'missing', severity: 'high', description: 'Indemnification clause is required' },
-        { ruleId: 'r002', clauseType: 'limitation_of_liability', condition: 'missing', severity: 'high', description: 'Liability cap must be specified' },
-        { ruleId: 'r003', clauseType: 'governing_law', condition: 'missing', severity: 'medium', description: 'Governing law must be specified' },
-        { ruleId: 'r004', clauseType: 'termination_for_cause', condition: 'missing', severity: 'medium', description: 'Termination provisions required' },
-      ];
-      
-      for (const rule of rules) {
+
+      if (existing.rows[0]) {
         await pool.query(
-          `INSERT INTO playbook_rules (id, playbook_id, rule_id, clause_type, condition, severity, description, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-           ON CONFLICT DO NOTHING`,
-          [randomUUID(), playbookId, rule.ruleId, rule.clauseType, rule.condition, rule.severity, rule.description]
+          `UPDATE playbooks
+           SET description = $3,
+               practice_area = $4,
+               rules = $5::jsonb,
+               is_active = true
+           WHERE id = $1 AND tenant_id = $2`,
+          [existing.rows[0].id, tenant.id, template.description, template.practiceArea, JSON.stringify(template.rules)]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO playbooks (id, tenant_id, name, description, practice_area, rules, is_active, created_by, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, true, $7, NOW())`,
+          [randomUUID(), tenant.id, template.name, template.description, template.practiceArea, JSON.stringify(template.rules), admin?.id ?? null]
         );
       }
-      
+
       count++;
     }
   }
   
-  console.log(`    ✓ Created ${count} playbooks with rules`);
+  console.log(`    ✓ Upserted ${count} playbooks with rules`);
 }
 
 async function seedObligations(pool: Pool, matters: DemoMatter[], attorneys: DemoAttorney[]): Promise<void> {
@@ -381,23 +438,23 @@ async function main(): Promise<void> {
   
   try {
     console.log('📊 Generating demo data...\n');
-    
-    const attorneys = createDemoAttorneys(demoTenants);
-    const matters = createDemoMatters(demoTenants, attorneys);
-    
+
     console.log('💾 Inserting into database...\n');
-    
-    await seedTenants(pool, demoTenants);
-    await seedAttorneys(pool, attorneys);
-    await seedMatters(pool, matters, attorneys);
-    await seedPlaybooks(pool, demoTenants);
-    await seedObligations(pool, matters, attorneys);
+
+    const seededTenants = await seedTenants(pool, demoTenants);
+    const attorneys = createDemoAttorneys(seededTenants);
+    const seededAttorneys = await seedAttorneys(pool, attorneys);
+    const matters = createDemoMatters(seededTenants, seededAttorneys);
+
+    await seedMatters(pool, matters, seededAttorneys);
+    await seedPlaybooks(pool, seededTenants, seededAttorneys);
+    await seedObligations(pool, matters, seededAttorneys);
     
     console.log('\n✅ Demo data seeded successfully!\n');
     
     console.log('📝 Demo Login Credentials:');
     console.log('   ─────────────────────────');
-    demoTenants.forEach(tenant => {
+    seededTenants.forEach(tenant => {
       console.log(`\n   ${tenant.name} (${tenant.slug})`);
       console.log(`   • Admin: admin@${tenant.slug}.com`);
       console.log(`   • Partner: partner@${tenant.slug}.com`);

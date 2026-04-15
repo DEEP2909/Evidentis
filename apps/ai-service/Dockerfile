@@ -72,9 +72,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Security: Create non-root user
+# Security: Create non-root user with writable home/cache
 RUN groupadd --system --gid 1001 appgroup && \
-    useradd --system --uid 1001 --gid appgroup appuser
+    useradd --system --uid 1001 --gid appgroup --create-home --home-dir /home/appuser appuser
 
 WORKDIR /app
 
@@ -85,8 +85,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY --chown=appuser:appgroup . .
 
-# Create model cache directory
-RUN mkdir -p /models && chown -R appuser:appgroup /models
+# Create model/cache directories with appuser ownership
+RUN mkdir -p /models/.cache/huggingface && chown -R appuser:appgroup /models /home/appuser
 
 # Security: Run as non-root user
 USER appuser
@@ -94,6 +94,10 @@ USER appuser
 EXPOSE 5000
 
 ENV PYTHONUNBUFFERED=1
+ENV HOME=/home/appuser
 ENV MODEL_CACHE_DIR=/models
+ENV XDG_CACHE_HOME=/models/.cache
+ENV HF_HOME=/models/.cache/huggingface
+ENV HF_HUB_DISABLE_XET=1
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]

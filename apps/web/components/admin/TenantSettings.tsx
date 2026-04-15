@@ -205,7 +205,7 @@ export function TenantSettingsPanel({
                 <Label>Session Timeout</Label>
                 <Select
                   value={String(localSettings.sessionTimeout)}
-                  onValueChange={(v) => updateSetting('sessionTimeout', parseInt(v))}
+                  onValueChange={(v) => updateSetting('sessionTimeout', Number.parseInt(v))}
                   disabled={!isOwner}
                 >
                   <SelectTrigger className="w-[200px]">

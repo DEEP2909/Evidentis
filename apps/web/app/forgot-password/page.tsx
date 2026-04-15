@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -14,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandLogo } from "@/components/india/BrandLogo";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -25,9 +25,7 @@ function LeftBrandPanel() {
   return (
     <div className="hidden w-1/2 flex-col justify-between bg-[radial-gradient(circle_at_top,#203b7a_0%,#0f2557_42%,#071226_100%)] p-12 lg:flex">
       <div className="flex items-center gap-3">
-        <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
-          <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" priority />
-        </div>
+        <BrandLogo size="lg" priority />
         <span className="text-2xl font-semibold text-white">EvidentIS</span>
       </div>
 
@@ -91,9 +89,7 @@ export default function ForgotPasswordPage() {
           className="w-full max-w-md"
         >
           <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
-            <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white/10 p-1">
-              <Image src="/logo.svg" alt="EvidentIS logo" fill className="object-contain p-1" />
-            </div>
+            <BrandLogo size="lg" />
             <span className="text-2xl font-semibold">EvidentIS</span>
           </div>
 

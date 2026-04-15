@@ -5,7 +5,8 @@
  * PDF viewer with annotation support using react-pdf
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import type React from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
@@ -58,12 +59,6 @@ interface PDFViewerProps {
   readOnly?: boolean;
 }
 
-interface Highlight {
-  pageNumber: number;
-  text: string;
-  rects: DOMRect[];
-}
-
 // ============================================================================
 // TOOLBAR BUTTON COMPONENT
 // ============================================================================
@@ -104,7 +99,7 @@ const ThumbnailSidebar: React.FC<{
     <div className="w-32 bg-[#0A1628] border-r border-gray-700 overflow-y-auto">
       <div className="p-2 space-y-2">
         {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
-          <button
+          <button type="button"
             key={pageNum}
             onClick={() => onPageSelect(pageNum)}
             className={`w-full p-1 rounded border-2 transition-colors ${
@@ -146,7 +141,8 @@ const AnnotationLayer: React.FC<{
   return (
     <div className="absolute inset-0 pointer-events-none">
       {pageAnnotations.map((annotation) => (
-        <div
+        <button
+          type="button"
           key={annotation.id}
           className="absolute pointer-events-auto cursor-pointer"
           style={{
@@ -156,6 +152,7 @@ const AnnotationLayer: React.FC<{
             height: annotation.position.height ? annotation.position.height * scale : 24,
           }}
           onClick={() => onAnnotationClick(annotation)}
+          aria-label={`Open ${annotation.type} annotation`}
         >
           {annotation.type === 'highlight' && (
             <div
@@ -173,7 +170,7 @@ const AnnotationLayer: React.FC<{
               <StickyNote className="w-3 h-3 text-blue-900" />
             </div>
           )}
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -203,7 +200,7 @@ const SearchPanel: React.FC<{
     <div className="absolute top-0 right-0 w-80 bg-[#112240] border-l border-gray-700 h-full z-10">
       <div className="p-4 border-b border-gray-700 flex items-center justify-between">
         <h3 className="font-medium">Search Document</h3>
-        <button onClick={onClose} className="text-gray-400 hover:text-white">
+        <button type="button" onClick={onClose} className="text-gray-400 hover:text-white">
           <X className="w-5 h-5" />
         </button>
       </div>
@@ -233,9 +230,9 @@ const SearchPanel: React.FC<{
           </p>
         ) : (
           <div className="p-2 space-y-2">
-            {results.map((result, index) => (
-              <button
-                key={index}
+            {results.map((result) => (
+              <button type="button"
+                key={`${result.page}-${result.text}`}
                 onClick={() => onResultClick(result.page)}
                 className="w-full text-left p-3 rounded bg-[#0A1628] hover:bg-gray-700 transition-colors"
               >
@@ -271,7 +268,7 @@ const AnnotationPopup: React.FC<{
             {annotation.type === 'note' && <StickyNote className="w-4 h-4 text-blue-400" />}
             <span className="font-medium capitalize">{annotation.type}</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -286,7 +283,7 @@ const AnnotationPopup: React.FC<{
         </div>
 
         <div className="flex justify-end gap-2 p-4 border-t border-gray-700">
-          <button
+          <button type="button"
             onClick={() => {
               onDelete(annotation.id);
               onClose();
@@ -295,7 +292,7 @@ const AnnotationPopup: React.FC<{
           >
             Delete
           </button>
-          <button
+          <button type="button"
             onClick={onClose}
             className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm"
           >
@@ -372,7 +369,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     setScale(s => Math.max(s - 0.25, 0.5));
   }, []);
 
-  const fitToWidth = useCallback(() => {
+  const _fitToWidth = useCallback(() => {
     if (containerRef.current && pageRef.current) {
       const containerWidth = containerRef.current.clientWidth - (showThumbnails ? 128 : 0) - 48;
       const pageWidth = 612; // Standard PDF width in points
@@ -629,7 +626,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
             <div 
               ref={pageRef}
               className={`relative ${annotationMode !== 'none' ? 'cursor-crosshair' : ''}`}
-              onClick={handlePageClick}
+              onMouseUp={handlePageClick}
             >
               <Document
                 file={fileUrl}
@@ -688,7 +685,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
           <input
             type="number"
             value={currentPage}
-            onChange={(e) => goToPage(parseInt(e.target.value) || 1)}
+            onChange={(e) => goToPage(Number.parseInt(e.target.value) || 1)}
             min={1}
             max={numPages}
             className="w-12 px-2 py-1 text-center bg-[#0A1628] border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-[#C9A84C]"
@@ -708,7 +705,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
       {annotationMode !== 'none' && (
         <div className="absolute bottom-16 left-1/2 -translate-x-1/2 px-4 py-2 bg-[#C9A84C] text-[#0A1628] rounded-full text-sm font-medium shadow-lg">
           Click on the document to add {annotationMode}
-          <button
+          <button type="button"
             onClick={() => setAnnotationMode('none')}
             className="ml-2 hover:opacity-70"
           >

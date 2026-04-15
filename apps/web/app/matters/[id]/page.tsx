@@ -42,7 +42,7 @@ type TabType = "documents" | "clauses" | "flags" | "obligations" | "research" | 
 
 export default function MatterDetailPage() {
   const params = useParams();
-  const router = useRouter();
+  const _router = useRouter();
   const queryClient = useQueryClient();
   const matterId = params.id as string;
 
@@ -243,7 +243,7 @@ export default function MatterDetailPage() {
           {/* Tabs */}
           <div className="flex gap-1 mt-4 border-b">
             {tabs.map((tab) => (
-              <button
+              <button type="button"
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -571,7 +571,7 @@ export default function MatterDetailPage() {
                     )}
 
                     {/* Obligations from timeline API */}
-                    {timelineData?.obligations?.map((obligation: any) => (
+                    {timelineData?.obligations?.map((obligation) => (
                       <div 
                         key={obligation.id} 
                         className={`flex gap-4 items-start border-l-2 pl-4 ${

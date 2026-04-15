@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type TimeRange = "7d" | "30d" | "90d" | "1y";
+type DrillDownFocus = "documents" | "flags" | "health";
 
 const trendData: Record<TimeRange, { name: string; documents: number; flags: number; health: number }[]> = {
   "7d": [
@@ -72,7 +73,46 @@ function MetricCard({
 
 function AnalyticsContent() {
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
+  const [drillDownFocus, setDrillDownFocus] = useState<DrillDownFocus>("documents");
   const chartData = trendData[timeRange];
+
+  const comparisonCards = [
+    { label: "Doc Throughput", current: "2,847", prior: "2,532", change: "+12.5%" },
+    { label: "Critical Flags", current: "47", prior: "61", change: "-22.9%" },
+    { label: "Avg. Health", current: "78%", prior: "73%", change: "+5.0 pts" },
+  ] as const;
+
+  const drillDownRows = useMemo(() => {
+    if (drillDownFocus === "documents") {
+      return [
+        { area: "Corporate", value: 812, baseline: 730, unit: "docs" },
+        { area: "Litigation", value: 690, baseline: 655, unit: "docs" },
+        { area: "Employment", value: 521, baseline: 470, unit: "docs" },
+        { area: "IP", value: 434, baseline: 390, unit: "docs" },
+      ];
+    }
+
+    if (drillDownFocus === "flags") {
+      return [
+        { area: "Corporate", value: 14, baseline: 19, unit: "flags" },
+        { area: "Litigation", value: 11, baseline: 16, unit: "flags" },
+        { area: "Employment", value: 12, baseline: 15, unit: "flags" },
+        { area: "IP", value: 10, baseline: 11, unit: "flags" },
+      ];
+    }
+
+    return [
+      { area: "Corporate", value: 86, baseline: 81, unit: "%" },
+      { area: "Litigation", value: 79, baseline: 74, unit: "%" },
+      { area: "Employment", value: 73, baseline: 70, unit: "%" },
+      { area: "IP", value: 76, baseline: 72, unit: "%" },
+    ];
+  }, [drillDownFocus]);
+
+  const drillDownMax = useMemo(
+    () => Math.max(...drillDownRows.map((row) => row.value), 1),
+    [drillDownRows]
+  );
 
   const metrics = useMemo(
     () => [
@@ -106,14 +146,14 @@ function AnalyticsContent() {
 
   return (
     <AppShell title="Firm Analytics">
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="max-w-2xl text-sm text-white/65">
+      <div className="section-wrap page-enter">
+        <div className="section-header">
+          <p className="section-subtitle">
             Monitor firm-level legal operations with role-restricted analytics and trend intelligence.
           </p>
           <div className="flex rounded-xl border border-white/15 bg-white/5 p-1">
             {(["7d", "30d", "90d", "1y"] as const).map((range) => (
-              <button
+              <button type="button"
                 key={range}
                 onClick={() => setTimeRange(range)}
                 className={`rounded-lg px-3 py-1.5 text-sm transition ${
@@ -218,6 +258,95 @@ function AnalyticsContent() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="glass">
+          <CardHeader>
+            <CardTitle className="text-lg">Comparative Benchmarks</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            {comparisonCards.map((card, index) => (
+              <motion.article
+                key={card.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 + index * 0.05 }}
+                className="rounded-xl border border-white/15 bg-black/20 p-4"
+              >
+                <p className="text-xs uppercase tracking-[0.18em] text-white/45">{card.label}</p>
+                <p className="mt-2 text-2xl font-semibold">{card.current}</p>
+                <p className="mt-1 text-xs text-white/55">Previous: {card.prior}</p>
+                <p className="mt-2 text-sm text-saffron-300">{card.change}</p>
+              </motion.article>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="glass">
+          <CardHeader className="space-y-4">
+            <div className="section-header">
+              <CardTitle className="text-lg">Practice Area Drill-down</CardTitle>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ["documents", "Documents"],
+                  ["flags", "Flags"],
+                  ["health", "Health"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    type="button"
+                    key={value}
+                    onClick={() => setDrillDownFocus(value)}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      drillDownFocus === value
+                        ? "border-saffron-500/40 bg-saffron-500/15 text-saffron-300"
+                        : "border-white/20 bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                    aria-label={`Show ${label.toLowerCase()} drill down`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {drillDownRows.map((row, index) => {
+              const percentage = (row.value / drillDownMax) * 100;
+              const delta = row.value - row.baseline;
+              const isPositive = delta >= 0;
+
+              return (
+                <motion.div
+                  key={row.area}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 + index * 0.05 }}
+                  className="rounded-xl border border-white/10 bg-black/15 p-3"
+                >
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span>{row.area}</span>
+                    <span className="font-semibold">
+                      {row.value}
+                      {row.unit === "%" ? "%" : ""}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percentage}%` }}
+                      transition={{ delay: 0.28 + index * 0.05, duration: 0.45 }}
+                      className="h-full bg-saffron-500"
+                    />
+                  </div>
+                  <p className={`mt-2 text-xs ${isPositive ? "text-green-300" : "text-red-300"}`}>
+                    {isPositive ? "+" : ""}
+                    {delta}
+                    {row.unit === "%" ? " pts" : ` ${row.unit}`} vs prior period
+                  </p>
+                </motion.div>
+              );
+            })}
+          </CardContent>
+        </Card>
       </div>
     </AppShell>
   );

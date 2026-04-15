@@ -1,6 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
+function skeletonKeys(prefix: string, count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
+}
+
 /**
  * PageSkeleton - Full page loading skeleton
  */
@@ -12,8 +16,8 @@ export function PageSkeleton() {
         <Skeleton className="h-10 w-32" />
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
+        {skeletonKeys("page-metric", 4).map((key) => (
+          <Card key={key}>
             <CardHeader className="pb-2">
               <Skeleton className="h-4 w-24" />
             </CardHeader>
@@ -28,8 +32,8 @@ export function PageSkeleton() {
           <Skeleton className="h-6 w-32" />
         </CardHeader>
         <CardContent className="space-y-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
+          {skeletonKeys("page-row", 5).map((key) => (
+            <Skeleton key={key} className="h-12 w-full" />
           ))}
         </CardContent>
       </Card>
@@ -52,8 +56,8 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
         <Skeleton className="h-4 w-16 ml-auto" />
       </div>
       {/* Rows */}
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 px-4 py-3">
+      {skeletonKeys("table-row", rows).map((rowKey) => (
+        <div key={rowKey} className="flex items-center gap-4 px-4 py-3">
           <Skeleton className="h-4 w-8" />
           <Skeleton className="h-4 w-40" />
           <Skeleton className="h-4 w-28" />
@@ -121,8 +125,8 @@ export function MatterDetailSkeleton() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
+        {skeletonKeys("matter-stat", 4).map((key) => (
+          <Card key={key}>
             <CardContent className="pt-4">
               <Skeleton className="h-4 w-20 mb-2" />
               <Skeleton className="h-8 w-12" />
@@ -133,8 +137,8 @@ export function MatterDetailSkeleton() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-24" />
+        {skeletonKeys("matter-tab", 5).map((key) => (
+          <Skeleton key={key} className="h-10 w-24" />
         ))}
       </div>
 
@@ -142,8 +146,8 @@ export function MatterDetailSkeleton() {
       <Card>
         <CardContent className="p-6">
           <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <DocumentCardSkeleton key={i} />
+            {skeletonKeys("matter-doc", 3).map((key) => (
+              <DocumentCardSkeleton key={key} />
             ))}
           </div>
         </CardContent>
@@ -213,8 +217,8 @@ export function ResearchSkeleton() {
       </Card>
       <div className="space-y-2">
         <Skeleton className="h-5 w-32" />
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i} className="p-3">
+        {skeletonKeys("research-source", 3).map((key) => (
+          <Card key={key} className="p-3">
             <div className="flex items-center gap-3">
               <Skeleton className="h-8 w-8 rounded" />
               <div className="flex-1">

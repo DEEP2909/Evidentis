@@ -31,7 +31,7 @@ export default function TemplatesPage() {
       <div className="space-y-6 page-enter">
         <div className="flex flex-wrap gap-2">
           {categories.map((category) => (
-            <button
+            <button type="button"
               key={category}
               onClick={() => setActiveCategory(category)}
               className={`rounded-full border px-3 py-1.5 text-xs uppercase tracking-[0.12em] transition ${

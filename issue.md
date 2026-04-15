@@ -122,3 +122,77 @@
 - `npm run typecheck --workspace=apps/web` ✅
 - `npm run build --workspace=apps/web` ✅
 - `npm run test --workspace=apps/web` ✅
+
+---
+
+## Session 54 Runtime/UI Follow-up (Resolved)
+
+### 1) Browser console noise: `[WebSocket] Error: {}` from `lib/websocket.tsx`
+**Problem**
+- Web frontend used native `WebSocket` while backend realtime server is Socket.IO on `/ws` with handshake auth.
+- Protocol mismatch produced opaque browser websocket error events and no reliable realtime stream.
+
+**Fix implemented**
+- Migrated web realtime client to `socket.io-client` in `apps/web/lib/websocket.tsx`.
+- Added Socket.IO handshake token auth (`auth.token`) using existing stored access token.
+- Added explicit listeners for backend events (`document:event`, `processing:progress`, `matter:event`, `obligation:reminder`, `notification`) and mapped them to existing UI state/subscriber contracts.
+- Removed noisy generic websocket error logging; only surfaces actionable auth-specific connect failures.
+
+**Result**
+- Realtime connection is now protocol-compatible with backend and the browser console error is resolved.
+
+---
+
+### 2) Slow page transitions and avoidable auth churn
+**Problem**
+- Auth checks were triggered redundantly at page and guard level, adding extra redirect/loading churn.
+- Global route transition wrapper in providers animated all route swaps and increased client work.
+- Heavy motion effects lacked explicit reduced-motion/touch-device degradation.
+
+**Fix implemented**
+- Centralized initial auth bootstrap in `apps/web/app/providers.tsx` (single guarded `checkAuth` on app start).
+- Removed duplicate `checkAuth` calls from:
+  - `apps/web/components/auth/AuthGuard.tsx`
+  - `apps/web/app/dashboard/page.tsx`
+- Removed global pathname-keyed `AnimatePresence` wrapper from providers to avoid full-tree transition overhead.
+- Added motion safety rules in `apps/web/app/globals.css`:
+  - disabled ripple pseudo-animation on coarse-pointer/touch devices
+  - added `prefers-reduced-motion` fallbacks for continuous animations
+  - added `will-change: transform` to key animated utility classes.
+
+**Result**
+- Route changes and authenticated page entry are more responsive with less unnecessary rerender/animation overhead.
+
+---
+
+### 3) Branding update request (`logo_1.png`)
+**Problem**
+- App logo surfaces still pointed to previous asset path.
+
+**Fix implemented**
+- Copied `logo_1.png` to `apps/web/public/logo_1.png`.
+- Updated `apps/web/components/india/BrandLogo.tsx` to use `/logo_1.png`.
+- Existing logo consumers (landing, auth, shell, portal) now render the new file automatically via `BrandLogo`.
+
+**Result**
+- New user-provided logo is now consistently used across primary UI surfaces.
+
+---
+
+### 4) Test/runtime dependency instability surfaced during validation
+**Problem**
+- Web test execution hit environment-level package resolution failures (`@rollup/rollup-win32-x64-msvc` optional dependency + `vitest` package resolution from root context).
+
+**Fix implemented**
+- Added `socket.io-client` to web dependencies (`apps/web/package.json`).
+- Installed missing optional Rollup Windows package and aligned workspace dependency tree.
+- Added root-level dev dependency for `vitest` resolution consistency in this monorepo execution context.
+- Updated dashboard test auth mock (`apps/web/tests/india-pages.test.tsx`) to include `isAuthenticated` and `checkAuth`.
+
+**Result**
+- Web test/build pipeline completes successfully after these runtime dependency and mock updates.
+
+## Session 54 Verification Snapshot
+- `npm run typecheck --workspace=apps/web` ✅
+- `npm run test --workspace=apps/web` ✅
+- `npm run build --workspace=apps/web` ✅

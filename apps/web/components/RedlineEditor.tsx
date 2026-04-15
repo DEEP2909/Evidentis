@@ -5,7 +5,8 @@
  * Tiptap-based rich text editor with track changes
  */
 
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useEditor, EditorContent, Editor, BubbleMenu } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
@@ -228,14 +229,14 @@ const SuggestionPanel: React.FC<{
           Suggestion {currentIndex + 1} of {pendingSuggestions.length}
         </span>
         <div className="flex items-center gap-1">
-          <button
+          <button type="button"
             onClick={() => onNavigate('prev')}
             disabled={currentIndex === 0}
             className="p-1 rounded hover:bg-gray-700 disabled:opacity-50"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button
+          <button type="button"
             onClick={() => onNavigate('next')}
             disabled={currentIndex === pendingSuggestions.length - 1}
             className="p-1 rounded hover:bg-gray-700 disabled:opacity-50"
@@ -290,14 +291,14 @@ const SuggestionPanel: React.FC<{
 
           {/* Actions */}
           <div className="flex items-center gap-2 pt-2">
-            <button
+            <button type="button"
               onClick={() => onAction(current.id, 'accept')}
               className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm"
             >
               <Check className="w-4 h-4" />
               Accept
             </button>
-            <button
+            <button type="button"
               onClick={() => onAction(current.id, 'reject')}
               className="flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
             >
@@ -310,13 +311,13 @@ const SuggestionPanel: React.FC<{
 
       {/* Batch actions */}
       <div className="flex items-center justify-between px-4 py-2 border-t border-gray-700 bg-gray-800/50">
-        <button
+        <button type="button"
           onClick={onAcceptAll}
           className="text-xs text-green-400 hover:text-green-300"
         >
           Accept All ({pendingSuggestions.length})
         </button>
-        <button
+        <button type="button"
           onClick={onRejectAll}
           className="text-xs text-red-400 hover:text-red-300"
         >
@@ -345,7 +346,7 @@ const CommentsPanel: React.FC<{
     <div className="bg-[#112240] border border-gray-700 rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
         <span className="text-sm font-medium">Comments ({filteredComments.length})</span>
-        <button
+        <button type="button"
           onClick={onToggleResolved}
           className="text-xs text-gray-400 hover:text-white flex items-center gap-1"
         >
@@ -377,7 +378,7 @@ const CommentsPanel: React.FC<{
               </div>
               <p className="text-sm text-gray-300 mb-2">{comment.content}</p>
               {!comment.resolved && (
-                <button
+                <button type="button"
                   onClick={() => onResolve(comment.id)}
                   className="text-xs text-green-400 hover:text-green-300 flex items-center gap-1"
                 >
@@ -398,14 +399,14 @@ const CommentsPanel: React.FC<{
 // ============================================================================
 
 export const RedlineEditor: React.FC<RedlineEditorProps> = ({
-  documentId,
+  documentId: _documentId,
   initialContent,
   suggestions = [],
   comments = [],
   readOnly = false,
   onSave,
   onSuggestionAction,
-  onCommentAdd,
+  onCommentAdd: _onCommentAdd,
   onCommentResolve,
   onExport,
 }) => {
@@ -444,7 +445,7 @@ export const RedlineEditor: React.FC<RedlineEditorProps> = ({
 
     // This would apply visual marks for suggestions
     // In a real implementation, you'd traverse suggestions and apply marks
-  }, [editor, showChanges, localSuggestions]);
+  }, [editor, showChanges]);
 
   // Handle suggestion navigation
   const handleNavigate = (direction: 'prev' | 'next') => {
@@ -687,14 +688,14 @@ export const RedlineEditor: React.FC<RedlineEditorProps> = ({
 
         {/* Export */}
         <div className="flex items-center gap-1">
-          <button
+          <button type="button"
             onClick={() => handleExport('docx')}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
           >
             <Download className="w-3 h-3" />
             DOCX
           </button>
-          <button
+          <button type="button"
             onClick={() => handleExport('pdf')}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded"
           >
@@ -705,7 +706,7 @@ export const RedlineEditor: React.FC<RedlineEditorProps> = ({
 
         {/* Save */}
         {onSave && (
-          <button
+          <button type="button"
             onClick={handleSave}
             disabled={isSaving}
             className="flex items-center gap-1 px-3 py-1.5 bg-[#C9A84C] hover:bg-[#B8973D] text-[#0A1628] rounded text-sm font-medium disabled:opacity-50"
@@ -730,19 +731,19 @@ export const RedlineEditor: React.FC<RedlineEditorProps> = ({
           {editor && (
             <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
               <div className="flex items-center gap-1 p-1 bg-[#112240] rounded-lg shadow-lg border border-gray-700">
-                <button
+                <button type="button"
                   onClick={() => editor.chain().focus().toggleBold().run()}
                   className={`p-1.5 rounded ${editor.isActive('bold') ? 'bg-[#C9A84C] text-[#0A1628]' : 'text-white hover:bg-gray-700'}`}
                 >
                   <Bold className="w-4 h-4" />
                 </button>
-                <button
+                <button type="button"
                   onClick={() => editor.chain().focus().toggleItalic().run()}
                   className={`p-1.5 rounded ${editor.isActive('italic') ? 'bg-[#C9A84C] text-[#0A1628]' : 'text-white hover:bg-gray-700'}`}
                 >
                   <Italic className="w-4 h-4" />
                 </button>
-                <button
+                <button type="button"
                   onClick={() => editor.chain().focus().toggleHighlight().run()}
                   className={`p-1.5 rounded ${editor.isActive('highlight') ? 'bg-[#C9A84C] text-[#0A1628]' : 'text-white hover:bg-gray-700'}`}
                 >
@@ -757,7 +758,7 @@ export const RedlineEditor: React.FC<RedlineEditorProps> = ({
         <div className="w-80 border-l border-gray-700 bg-[#0A1628] overflow-y-auto">
           {/* Panel tabs */}
           <div className="flex border-b border-gray-700">
-            <button
+            <button type="button"
               onClick={() => setActivePanel('suggestions')}
               className={`flex-1 px-4 py-2 text-sm font-medium ${
                 activePanel === 'suggestions'
@@ -772,7 +773,7 @@ export const RedlineEditor: React.FC<RedlineEditorProps> = ({
                 </span>
               )}
             </button>
-            <button
+            <button type="button"
               onClick={() => setActivePanel('comments')}
               className={`flex-1 px-4 py-2 text-sm font-medium ${
                 activePanel === 'comments'

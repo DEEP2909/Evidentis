@@ -59,6 +59,36 @@
 - `npm run test --workspace=packages/shared` ✅
 - `npm run test:smoke --workspace=apps/api` ✅
 - `npm run test --workspace=apps/web` ✅
+
+## Latest Fixes (Session 54)
+- Addressed reported frontend runtime + UX regressions:
+  - **WebSocket protocol mismatch fix** (`apps/web/lib/websocket.tsx`):
+    - replaced native `WebSocket` client with `socket.io-client` to match backend Socket.IO server (`/ws` path + auth handshake).
+    - added token handshake auth via existing access-token storage (`auth.token`).
+    - wired backend realtime channels (`document:event`, `processing:progress`, `matter:event`, `obligation:reminder`, `notification`) into existing toast/subscriber state paths.
+    - removed noisy generic error logging and now only surface actionable auth connect failures.
+  - **Performance/auth churn reduction**:
+    - centralized one-time auth bootstrap in `apps/web/app/providers.tsx`.
+    - removed duplicate `checkAuth` invocations from `apps/web/components/auth/AuthGuard.tsx` and `apps/web/app/dashboard/page.tsx`.
+    - removed global pathname-keyed route `AnimatePresence` wrapper in providers to reduce full-tree transition overhead.
+    - added motion degradation/perf guards in `apps/web/app/globals.css`:
+      - disable ripple pseudo-animation on coarse pointer devices,
+      - honor `prefers-reduced-motion`,
+      - added `will-change: transform` for key transform-only animations.
+  - **Logo replacement**:
+    - copied requested asset `logo_1.png` to `apps/web/public/logo_1.png`.
+    - updated `apps/web/components/india/BrandLogo.tsx` to use `/logo_1.png`, propagating across all `BrandLogo` consumers.
+  - **Validation/runtime dependency hardening**:
+    - added `socket.io-client` to `apps/web/package.json`.
+    - resolved workspace test runtime package issues encountered during validation by aligning monorepo dependency resolution (including root-level `vitest` resolution support in this environment).
+    - updated `apps/web/tests/india-pages.test.tsx` auth-store mock (`isAuthenticated`, `checkAuth`) to reflect current dashboard guard logic.
+  - **Issue ledger update**:
+    - appended Session 54 resolved section and verification snapshot to `issue.md`.
+
+## Session 54 Verification
+- `npm run typecheck --workspace=apps/web` ✅
+- `npm run test --workspace=apps/web` ✅
+- `npm run build --workspace=apps/web` ✅
 - `pytest apps/ai-service/tests -q` ✅ (105 passed)
 
 ## Latest Fixes (Session 26)
@@ -669,3 +699,17 @@
 - `npm run typecheck --workspace=apps/web` ✅
 - `npm run build --workspace=apps/web` ✅
 - `npm run test --workspace=apps/web` ✅
+
+## Latest Fixes (Session 53)
+- Diagnosed frontend startup issue from terminal:
+  - root `npm run dev` was wired to `dev:web:wait`, which hard-fails when API cannot start (missing `DATABASE_URL`), preventing frontend startup.
+  - updated root scripts so `npm run dev` starts web directly; added `npm run dev:full` for coupled API+web startup.
+- Diagnosed GitHub CI failures for run `24396254341`:
+  - `e2e-tests` failed due to stale expectations on protected routes (`/analytics`, `/dashboard`) that now redirect to login via `AuthGuard`.
+  - updated `apps/web/tests/ci-smoke.spec.ts` to perform sign-in before asserting protected page content.
+  - `python-checks` failed at `pip-audit` with `pytest==8.3.3` vulnerability `CVE-2025-71176`; upgraded to `pytest==9.0.3` in `apps/ai-service/requirements.txt`.
+- Addressed Node audit vulnerability:
+  - root npm audit reported `follow-redirects` advisory (`GHSA-r4q5-vmmm-2653`);
+  - pinned override `follow-redirects: 1.16.0` in root `package.json`.
+- Documentation updated:
+  - `README.md` now clarifies `npm run dev` (web-only) and `npm run dev:full` (API + web).

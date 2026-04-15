@@ -17,7 +17,9 @@ vi.mock("@/lib/auth", () => ({
       displayName: "Test Advocate",
       email: "test@example.com",
     },
+    isAuthenticated: true,
     isLoading: false,
+    checkAuth: vi.fn(async () => undefined),
     logout: vi.fn(async () => undefined),
   }),
 }));

@@ -117,6 +117,28 @@ def get_circuit_breaker(name: str, config: Optional[CircuitBreakerConfig] = None
     return _circuit_breakers[name]
 
 
+def extract_ollama_text(result: Any, default: str = "") -> str:
+    """Normalize text payload from Ollama chat/generate response shapes."""
+    if isinstance(result, str):
+        return result
+
+    if not isinstance(result, dict):
+        return default
+
+    message = result.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+
+    for key in ("response", "content", "text", "output"):
+        value = result.get(key)
+        if isinstance(value, str):
+            return value
+
+    return default
+
+
 @dataclass
 class RetryConfig:
     """Configuration for retry logic"""

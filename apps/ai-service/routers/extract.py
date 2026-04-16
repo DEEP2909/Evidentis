@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from explainability import explain_clause_extraction
-from llm_safety import RetryConfig, retry_with_backoff
+from llm_safety import RetryConfig, extract_ollama_text, retry_with_backoff
 from prompts import CLAUSE_EXTRACTION, validate_response
 
 logger = logging.getLogger(__name__)
@@ -418,7 +418,7 @@ async def extract_clauses_llm(
                 _call_llm,
                 config=LLM_RETRY_CONFIG,
             )
-            response_text = result.get("message", {}).get("content", "")
+            response_text = extract_ollama_text(result, "")
 
             # Parse JSON from response
             if validate_response(response_text, "json"):

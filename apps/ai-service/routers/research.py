@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from explainability import explain_research_result
-from llm_safety import RetryConfig, retry_with_backoff
+from llm_safety import RetryConfig, extract_ollama_text, retry_with_backoff
 from prompts import RESEARCH_QUERY, add_safety_guardrails
 
 logger = logging.getLogger(__name__)
@@ -363,7 +363,7 @@ async def generate_research_answer_stream(
         for line in stream_lines:
             try:
                 data = json.loads(line)
-                token = data.get("message", {}).get("content", "")
+                token = extract_ollama_text(data, "")
                 if token:
                     yield f"data: {json.dumps({'token': token})}\n\n"
                 if data.get("done"):
@@ -464,7 +464,7 @@ async def generate_research_answer(
             _call_llm,
             config=LLM_RETRY_CONFIG,
         )
-        answer = add_safety_guardrails(result.get("message", {}).get("content", "").strip())
+        answer = add_safety_guardrails(extract_ollama_text(result, "").strip())
         confidence = score_answer_confidence(answer, chunks, jurisdiction)
         return answer, confidence
     except RuntimeError as e:

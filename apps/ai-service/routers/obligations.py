@@ -15,7 +15,7 @@ from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from llm_safety import RetryConfig, retry_with_backoff
+from llm_safety import RetryConfig, extract_ollama_text, retry_with_backoff
 from prompts import OBLIGATION_EXTRACTION, validate_response
 
 logger = logging.getLogger(__name__)
@@ -404,7 +404,7 @@ No additional prose."""
             _call_llm,
             config=LLM_RETRY_CONFIG,
         )
-        response_text = result.get("message", {}).get("content", "[]")
+        response_text = extract_ollama_text(result, "[]")
         if not validate_response(response_text, "json"):
             logger.error("Obligation extraction model returned non-JSON content")
             return []

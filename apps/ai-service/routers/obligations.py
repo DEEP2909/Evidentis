@@ -8,7 +8,6 @@ import logging
 import re
 from typing import Dict, List, Optional
 from enum import Enum
-from datetime import datetime
 
 import httpx
 from dateutil import parser

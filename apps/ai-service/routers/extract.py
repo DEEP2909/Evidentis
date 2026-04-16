@@ -360,81 +360,102 @@ async def extract_clauses_llm(
     LLM-based clause extraction for higher accuracy.
     Uses Ollama with structured output.
     """
-    # Truncate text if too long (LLM context window)
-    max_chars = 30000
+    max_chars = 6000  # Chunk size for long documents
+    overlap = 500
     if len(text) > max_chars:
-        text = text[:max_chars]
-    
-    prompt = CLAUSE_EXTRACTION.format(
-        document_text=text,
-        jurisdiction="India",
-    )
-    if clause_types:
-        prompt += f"\n\nOnly include clause_type values in this allowlist: {json.dumps(clause_types)}."
+        # Split into overlapping chunks
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = min(start + max_chars, len(text))
+            chunk = text[start:end]
+            chunks.append(chunk)
+            if end == len(text):
+                break
+            start += max_chars - overlap
+    else:
+        chunks = [text]
 
-    payload: Dict[str, Any] = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "format": "json",
-        "options": {
-            "temperature": 0.1,
-            "num_predict": 4096,
-        },
-    }
-
-    async def _call_llm() -> Dict[str, Any]:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                f"{ollama_url}/api/generate",
-                json=payload,
-            )
-            if response.status_code != 200:
-                raise RuntimeError(f"Ollama error: {response.status_code}")
-            return response.json()
-
-    try:
-        result = await retry_with_backoff(
-            _call_llm,
-            config=LLM_RETRY_CONFIG,
+    all_clauses = []
+    for chunk in chunks:
+        prompt = CLAUSE_EXTRACTION.format(
+            document_text=chunk,
+            jurisdiction="India",
         )
-        response_text = result.get("response", "")
+        if clause_types:
+            prompt += f"\n\nOnly include clause_type values in this allowlist: {json.dumps(clause_types)}."
 
-        # Parse JSON from response
+        # Split prompt into system and user messages
+        system_prompt = "You are a legal document analyzer specializing in Indian commercial and legal drafting."
+        user_prompt = prompt.replace(system_prompt, "").strip()
+
+        payload: Dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": CLAUSE_EXTRACTION.temperature,
+                "num_predict": 4096,
+            },
+        }
+
+        async def _call_llm() -> Dict[str, Any]:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    f"{ollama_url}/api/chat",
+                    json=payload,
+                )
+                if response.status_code != 200:
+                    raise RuntimeError(f"Ollama error: {response.status_code}")
+                return response.json()
+
         try:
-            if not validate_response(response_text, "json"):
-                logger.error("Clause extraction model returned non-JSON content")
-                return []
-            clauses_data = json.loads(response_text)
-            if isinstance(clauses_data, dict) and "clauses" in clauses_data:
-                clauses_data = clauses_data["clauses"]
+            result = await retry_with_backoff(
+                _call_llm,
+                config=LLM_RETRY_CONFIG,
+            )
+            response_text = result.get("message", {}).get("content", "")
 
-            clauses = []
-            for item in clauses_data:
-                if item.get("clause_type") in clause_types:
-                    clause_text = item.get("text", "")
-                    # Find position in original text
-                    start = text.find(clause_text[:100]) if clause_text else -1
-                    end = start + len(clause_text) if start >= 0 else -1
+            # Parse JSON from response
+            if validate_response(response_text, "json"):
+                clauses_data = json.loads(response_text)
+                if isinstance(clauses_data, dict) and "clauses" in clauses_data:
+                    clauses_data = clauses_data["clauses"]
 
-                    clauses.append(ExtractedClause(
-                        clause_type=item["clause_type"],
-                        text=clause_text,
-                        start_offset=max(0, start),
-                        end_offset=max(0, end),
-                        confidence=float(item.get("confidence", 0.8)),
-                        metadata={"method": "llm", "model": model}
-                    ))
+                for item in clauses_data:
+                    if item.get("clause_type") in clause_types:
+                        clause_text = item.get("text", "")
+                        # Find position in original text (approximate for chunks)
+                        start = text.find(clause_text[:100]) if clause_text else -1
+                        end = start + len(clause_text) if start >= 0 else -1
 
-            return clauses
+                        all_clauses.append(ExtractedClause(
+                            clause_type=item["clause_type"],
+                            text=clause_text,
+                            start_offset=max(0, start),
+                            end_offset=max(0, end),
+                            confidence=float(item.get("confidence", 0.8)),
+                            metadata={"method": "llm", "model": model}
+                        ))
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response: {e}")
-            return []
+        except Exception as e:
+            logger.error(f"LLM extraction failed for chunk: {e}")
+            continue
 
-    except Exception as e:
-        logger.error(f"LLM extraction failed: {e}")
-        return []
+    # Deduplicate clauses by type + first 80 chars
+    seen = set()
+    deduped_clauses = []
+    for clause in all_clauses:
+        key = (clause.clause_type, clause.text[:80])
+        if key not in seen:
+            seen.add(key)
+            deduped_clauses.append(clause)
+
+    return deduped_clauses
 
 
 def merge_clauses(regex_clauses: List[ExtractedClause], llm_clauses: List[ExtractedClause]) -> List[ExtractedClause]:

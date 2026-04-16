@@ -1,198 +1,74 @@
-# Session 52 Frontend Redesign & Issue Remediation Ledger (Resolved)
+Prompts — prompts/__init__.py
+High impact
+India-specific clause types are missing from extraction prompt
+prompts/__init__.py → CLAUSE_EXTRACTION → CLAUSE TYPES TO IDENTIFY
+Your product docs promise DPDP, GST, stamp duty, RERA, and labour code clause detection — but none of these appear in the extraction prompt. The LLM can only find what you tell it to look for. Add: dpdp_consent, gst_invoicing, stamp_duty, rera_compliance, labour_code, arbitration_india (separate from generic arbitration — Indian Arbitration Act §7 has specific form requirements).
+High impact
+Risk assessment uses US state law examples in an India product
+prompts/__init__.py → RISK_ASSESSMENT → CRITICAL RULES
+The prompt says "Consider non-compete enforceability by state (CA/OK/ND/MN ban them)" — these are American states. This actively confuses the model. Replace with India-specific notes: non-compete validity under Indian Contract Act §27 (generally void), arbitration seat requirements, jurisdiction clause implications under CPC, DPDP data localisation requirements.
+Medium impact
+Switch to chat format — you're losing the system prompt slot
+routers/extract.py, research.py, suggest.py, obligations.py
+All Ollama calls use /api/generate with a single monolithic prompt string. Switch to /api/chat with a system message and a user message. Models are instruction-tuned to weight the system role more heavily — your "You are a legal analyst…" persona will be significantly more effective when passed as role: "system".
+Medium impact
+Temperature inconsistency between prompt definition and actual call
+prompts/__init__.py vs routers/research.py line ~220
+RESEARCH_QUERY defines temperature: 0.2, but the actual Ollama call in generate_research_answer() hardcodes "temperature": 0.3. The prompt template temperature is never used — the router overrides it. Fix by reading RESEARCH_QUERY.temperature in the router call so changes to the prompt config actually take effect.
+RAG Pipeline — routers/research.py
+High impact
+No reranking — retrieved chunks go straight to the LLM unsorted by relevance
+routers/research.py → generate_research_answer()
+You build the context by iterating chunks in retrieval order with no secondary scoring. Add a cross-encoder reranker using cross-encoder/ms-marco-MiniLM-L-6-v2 (30MB, runs on CPU). After pgvector retrieves top-20 candidates, rerank and pass only top-5 to the LLM. This is the single highest-leverage RAG improvement — it dramatically reduces hallucination from irrelevant context.
+High impact
+No query expansion for legal terminology
+routers/research.py → research() endpoint
+A user might ask "what happens if client doesn't pay?" but the contract says "event of default" or "payment obligation breach." Add a lightweight query expansion step before embedding: call Ollama with a 1-sentence prompt — "Rephrase this legal question using formal contract terminology: {query}" — then embed both the original and rephrased query and merge results. This is especially important for Indian users mixing Hindi/English legal terms.
+Medium impact
+Context window wasted — chunks aren't deduplicated or trimmed
+routers/research.py → generate_research_answer()
+If a clause appears in two overlapping chunks (which is normal in sliding-window chunking), the same text is sent to the LLM twice. Before building the context string, deduplicate chunks by comparing the first 100 chars of each. Also trim each chunk to ~600 tokens instead of passing the full text, to fit more distinct sources in the same context window.
+Extraction — routers/extract.py
+High impact
+Long documents are hard-truncated at 30,000 chars — tail of contract lost
+routers/extract.py → extract_clauses_llm() line ~45
+The code does text = text[:30000] and discards everything after. A 40-page contract's definitions, schedules, and signatures are silently dropped. Instead, split into overlapping chunks (e.g. 6,000 chars with 500-char overlap), extract clauses from each chunk, then merge results by deduplicating on clause type + first 80 chars of extracted text. This is the most common source of missed clauses in long contracts.
+Medium impact
+JSON parsing doesn't strip markdown fences — silent failures on some models
+routers/extract.py, assess.py, obligations.py — all JSON parse sites
+Qwen2.5 and Mistral sometimes wrap JSON in ```json … ``` even when asked not to. Your validate_response() calls json.loads() directly — if the model adds fences, it returns [] silently. Add a pre-parse cleanup: text = re.sub(r"```json|```", "", response_text).strip() before calling json.loads(). One line, prevents silent data loss.
+Embeddings — models/loader.py
+Medium impact
+LaBSE is good for multilingual but not legal domain — consider a swap
+config.py → EMBEDDING_MODEL=sentence-transformers/LaBSE
+LaBSE was trained on parallel web text — it handles Indian languages well but has no legal domain knowledge. BAAI/bge-m3 (free, Apache 2.0) is a strong alternative: it supports 100+ languages including Hindi/Bengali/Tamil, handles up to 8192 token inputs (versus LaBSE's 512), and scores significantly higher on legal retrieval benchmarks. The trade-off is it's ~570MB vs LaBSE's ~470MB — negligible on your droplet.
+Obligation Extraction — routers/obligations.py
+Quick win
+Date calculation delegated to LLM — use Python instead
+prompts/__init__.py → OBLIGATION_EXTRACTION instructions step 3
+The prompt says "Calculate concrete dates where possible" and passes effective_date to the LLM. LLMs are unreliable at date arithmetic — "30 days from April 1" might come back wrong, especially with business-day logic. Extract the relative timing as a string ("30 calendar days after execution"), then do the actual date math in Python with dateutil.relativedelta after parsing the LLM output.
+Here's the priority order for implementing these, given your constraints:
+Do immediately (no new dependencies, just code changes):
 
-## Scope
-- Source of truth: latest frontend upgrade request (`frontend_promt.md`) plus immediate regressions found during verification.
-- Goal: deliver the interactive India-first frontend uplift, wire logo usage, restore route/access correctness, and close build/test issues.
+Strip markdown fences before JSON parsing — one regex line in 4 files, prevents silent empty results right now with Qwen2.5
+Fix the US state law text in the risk assessment prompt — replace CA/OK/ND/MN references with Indian Contract Act §27 notes
+Add India-specific clause types to the extraction prompt — DPDP, GST, RERA, stamp duty are core to your product promise but the LLM doesn't know to look for them
+Read temperature from the prompt template object instead of hardcoding in the router
 
-## Resolved Issues
+Do next (small additions, high return):
 
-### 1) Frontend experience did not match `frontend_promt.md` animation/interactivity target
-**Problem**
-- Major routes were static or visually inconsistent, with limited animation and weak interaction patterns.
-- Product shell/nav behavior was not consistently role-aware across the redesigned surfaces.
+Switch /api/generate → /api/chat with proper system/user message split — affects how strongly the model holds its persona
+Chunk long documents instead of truncating — critical for any real contract over 15 pages
+Date math in Python for obligation deadlines — remove reliance on LLM arithmetic
 
-**Fix implemented**
-- Reworked core web design system and page experiences:
-  - Updated global styling and tokens for a consistent dark India-first visual language with motion utilities.
-  - Rewrote/updated key routes including landing, auth flows, dashboard, admin, analytics, matters, documents, research, Nyay Assist, calendar, billing, privacy settings, templates, bare acts, and portal pages.
-  - Added richer interaction patterns (staggered motion, hover/tap affordances, progress/typing/thinking states, animated cards).
-- Updated `AppShell` to enforce role-aware navigation visibility and responsive sidebar/mobile behavior.
+Do when stable (new dependencies):
 
-**Result**
-- Frontend now aligns with the requested enterprise-grade interactive presentation and role-aware experience model.
+Add cross-encoder reranking (cross-encoder/ms-marco-MiniLM-L-6-v2, ~30MB) to the RAG pipeline — this is your biggest RAG quality lever
+Swap LaBSE → BAAI/bge-m3 for the embedding model — better legal retrieval, longer context window, same multilingual coverage
+Query expansion before embedding — especially useful once you have real users mixing Hindi/English legal terms
 
----
-
-### 2) `/admin` and `/analytics` access control gaps
-**Problem**
-- Prompt-aligned role restrictions were missing or incomplete for sensitive routes.
-
-**Fix implemented**
-- Added/standardized role guards:
-  - `/admin`: admin-only access enforcement.
-  - `/analytics`: restricted to `admin`, `senior_advocate`, and `partner`.
-- Kept route UI inside the common authenticated shell.
-
-**Result**
-- Sensitive operational surfaces now have explicit role-gated access aligned with requested behavior.
-
----
-
-### 3) Logo asset not integrated across upgraded frontend
-**Problem**
-- User-provided `logo.svg` was not consistently used in core product surfaces.
-
-**Fix implemented**
-- Added web-public logo asset at `apps/web/public/logo.svg`.
-- Integrated logo usage into key surfaces (shell branding, landing/auth/portal flows).
-
-**Result**
-- Branding is now consistently visible across primary user journeys.
-
----
-
-### 4) Verification regressions after frontend rewrite
-**Problem**
-- Post-change verification surfaced breakages:
-  - `react/no-unescaped-entities` lint errors.
-  - `@next/next/no-html-link-for-pages` on research links.
-  - dashboard unit test failures after introducing `useRouter` redirect behavior.
-
-**Fix implemented**
-- Escaped unescaped apostrophes in affected JSX.
-- Replaced raw anchor navigation with Next `Link` in research related-acts chips.
-- Updated `apps/web/tests/india-pages.test.tsx`:
-  - mocked `next/navigation` router/pathname hooks.
-  - mocked auth store state to avoid loading fallback during dashboard render.
-
-**Result**
-- Web typecheck/build/tests now pass with the redesigned pages.
-
----
-
-### 5) Route-transition and client-boundary stability issues
-**Problem**
-- Route animation and interaction expectations required consistent client-safe composition.
-- Certain dynamic pages needed to be interactive client components to avoid client/server boundary issues with shell usage.
-
-**Fix implemented**
-- Added global route transition wrapper in providers using `AnimatePresence` keyed by pathname.
-- Set dark-first theme defaults for consistency with redesigned visual system.
-- Converted interactive dynamic pages to client components:
-  - `apps/web/app/templates/[id]/generate/page.tsx`
-  - `apps/web/app/bare-acts/[actSlug]/page.tsx`
-- Moved dashboard client redirect call into `useEffect` to avoid render-phase navigation.
-
-**Result**
-- Route transitions and interactive dynamic pages run with stable client semantics.
-
----
-
-## Files Changed
-- `apps/web/app/globals.css`
-- `apps/web/tailwind.config.ts`
-- `apps/web/components/india/AppShell.tsx`
-- `apps/web/app/layout.tsx`
-- `apps/web/app/providers.tsx`
-- `apps/web/app/page.tsx`
-- `apps/web/app/login/page.tsx`
-- `apps/web/app/login/mfa-dialog.tsx`
-- `apps/web/app/forgot-password/page.tsx`
-- `apps/web/app/reset-password/[token]/page.tsx`
-- `apps/web/app/invitation/[token]/page.tsx`
-- `apps/web/app/dashboard/page.tsx`
-- `apps/web/app/admin/page.tsx`
-- `apps/web/app/analytics/page.tsx`
-- `apps/web/app/matters/page.tsx`
-- `apps/web/app/documents/page.tsx`
-- `apps/web/app/research/page.tsx`
-- `apps/web/app/nyay-assist/page.tsx`
-- `apps/web/app/calendar/page.tsx`
-- `apps/web/app/billing/page.tsx`
-- `apps/web/app/settings/privacy/page.tsx`
-- `apps/web/app/templates/page.tsx`
-- `apps/web/app/templates/[id]/generate/page.tsx`
-- `apps/web/app/bare-acts/page.tsx`
-- `apps/web/app/bare-acts/[actSlug]/page.tsx`
-- `apps/web/app/portal/[shareToken]/page.tsx`
-- `apps/web/public/logo.svg`
-- `apps/web/tests/india-pages.test.tsx`
-
-## Verification Snapshot
-- `npm run typecheck --workspace=apps/web` ✅
-- `npm run build --workspace=apps/web` ✅
-- `npm run test --workspace=apps/web` ✅
-
----
-
-## Session 54 Runtime/UI Follow-up (Resolved)
-
-### 1) Browser console noise: `[WebSocket] Error: {}` from `lib/websocket.tsx`
-**Problem**
-- Web frontend used native `WebSocket` while backend realtime server is Socket.IO on `/ws` with handshake auth.
-- Protocol mismatch produced opaque browser websocket error events and no reliable realtime stream.
-
-**Fix implemented**
-- Migrated web realtime client to `socket.io-client` in `apps/web/lib/websocket.tsx`.
-- Added Socket.IO handshake token auth (`auth.token`) using existing stored access token.
-- Added explicit listeners for backend events (`document:event`, `processing:progress`, `matter:event`, `obligation:reminder`, `notification`) and mapped them to existing UI state/subscriber contracts.
-- Removed noisy generic websocket error logging; only surfaces actionable auth-specific connect failures.
-
-**Result**
-- Realtime connection is now protocol-compatible with backend and the browser console error is resolved.
-
----
-
-### 2) Slow page transitions and avoidable auth churn
-**Problem**
-- Auth checks were triggered redundantly at page and guard level, adding extra redirect/loading churn.
-- Global route transition wrapper in providers animated all route swaps and increased client work.
-- Heavy motion effects lacked explicit reduced-motion/touch-device degradation.
-
-**Fix implemented**
-- Centralized initial auth bootstrap in `apps/web/app/providers.tsx` (single guarded `checkAuth` on app start).
-- Removed duplicate `checkAuth` calls from:
-  - `apps/web/components/auth/AuthGuard.tsx`
-  - `apps/web/app/dashboard/page.tsx`
-- Removed global pathname-keyed `AnimatePresence` wrapper from providers to avoid full-tree transition overhead.
-- Added motion safety rules in `apps/web/app/globals.css`:
-  - disabled ripple pseudo-animation on coarse-pointer/touch devices
-  - added `prefers-reduced-motion` fallbacks for continuous animations
-  - added `will-change: transform` to key animated utility classes.
-
-**Result**
-- Route changes and authenticated page entry are more responsive with less unnecessary rerender/animation overhead.
-
----
-
-### 3) Branding update request (`logo_1.png`)
-**Problem**
-- App logo surfaces still pointed to previous asset path.
-
-**Fix implemented**
-- Copied `logo_1.png` to `apps/web/public/logo_1.png`.
-- Updated `apps/web/components/india/BrandLogo.tsx` to use `/logo_1.png`.
-- Existing logo consumers (landing, auth, shell, portal) now render the new file automatically via `BrandLogo`.
-
-**Result**
-- New user-provided logo is now consistently used across primary UI surfaces.
-
----
-
-### 4) Test/runtime dependency instability surfaced during validation
-**Problem**
-- Web test execution hit environment-level package resolution failures (`@rollup/rollup-win32-x64-msvc` optional dependency + `vitest` package resolution from root context).
-
-**Fix implemented**
-- Added `socket.io-client` to web dependencies (`apps/web/package.json`).
-- Installed missing optional Rollup Windows package and aligned workspace dependency tree.
-- Added root-level dev dependency for `vitest` resolution consistency in this monorepo execution context.
-- Updated dashboard test auth mock (`apps/web/tests/india-pages.test.tsx`) to include `isAuthenticated` and `checkAuth`.
-
-**Result**
-- Web test/build pipeline completes successfully after these runtime dependency and mock updates.
-
-## Session 54 Verification Snapshot
-- `npm run typecheck --workspace=apps/web` ✅
-- `npm run test --workspace=apps/web` ✅
-- `npm run build --workspace=apps/web` ✅
+Also, there are some more issues:
+1. There should be a feature to register the stakeholders, if not having an account.
+2. There should be a feature to give 30 days free demo to the users. 
+3. The UI should is very bad, it should be improved a lot, use the skills-main folder for the skills to improve the UI, stick to is completely and not a single percent of deviation from it in the improvement in frontend, it should look professional as well as interactive.
+4. Logo size is small, it should also be increases and also should be aligned properly.

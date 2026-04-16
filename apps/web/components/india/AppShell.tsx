@@ -87,7 +87,7 @@ function ShellSidebar({
       {/* Logo lockup — wider container for horizontal logo */}
       <div className="border-b border-white/[0.07] px-5 py-4">
         <Link href="/dashboard" className="group flex items-center gap-0" onClick={onNavigate}>
-          <BrandLogo size="md" priority />
+          <BrandLogo size="lg" priority />
         </Link>
         <div className="mt-1 text-[9px] font-medium uppercase tracking-[0.3em] text-white/30 transition-colors group-hover:text-saffron-500/60 pl-0.5">
           Legal Intelligence

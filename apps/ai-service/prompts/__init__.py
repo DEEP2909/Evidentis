@@ -4,6 +4,7 @@ Centralized prompt engineering for multilingual Indian legal AI tasks.
 All prompts follow legal domain best practices and include safety guardrails.
 """
 
+import re
 from dataclasses import dataclass
 
 
@@ -45,6 +46,7 @@ CLAUSE TYPES TO IDENTIFY:
 - intellectual_property: IP ownership and licensing terms
 - governing_law: Choice of law provisions
 - arbitration: Mandatory arbitration clauses
+- arbitration_india: Arbitration under Indian Arbitration and Conciliation Act 1996 (§7 form requirements — must be in writing, signed, reference to dispute, agreement to arbitrate)
 - jury_waiver: Waiver of jury trial rights
 - class_action_waiver: Waiver of class action rights
 - force_majeure: Excuses for non-performance due to extraordinary events
@@ -55,6 +57,11 @@ CLAUSE TYPES TO IDENTIFY:
 - entire_agreement: Integration clause
 - warranty_disclaimer: Limitations on warranties
 - data_privacy: Data handling obligations
+- dpdp_consent: Digital Personal Data Protection Act 2023 — consent management, data principal rights, data fiduciary obligations, consent manager requirements
+- gst_invoicing: GST invoicing obligations — CGST/SGST/IGST applicability, tax invoice requirements, reverse charge mechanism, input tax credit provisions
+- stamp_duty: Stamp duty and franking requirements — Indian Stamp Act 1899, state-specific stamp duty rates, e-stamping, adjudication requirements
+- rera_compliance: Real Estate (Regulation and Development) Act 2016 — promoter obligations, allottee rights, registration requirements, project disclosure
+- labour_code: Labour code compliance — Code on Wages 2019, Industrial Relations Code 2020, Social Security Code 2020, Occupational Safety Code 2020
 - insurance_requirements: Required insurance coverage
 - compliance_with_laws: Regulatory compliance obligations
 - audit_rights: Rights to audit the other party
@@ -151,9 +158,11 @@ OUTPUT FORMAT (JSON array):
 CRITICAL RULES:
 - Always flag unlimited liability provisions as high risk
 - Always flag one-sided indemnification as medium+ risk
-- Consider non-compete enforceability by state (CA/OK/ND/MN ban them)
+- Consider non-compete enforceability under Indian Contract Act §27 (generally void as restraint of trade; courts may uphold reasonable restrictions for business protection)
 - Note data privacy, GST, DPDP, stamp duty, and state or UT-specific law applicability
 - Flag missing standard protections (e.g., no limitation of liability)
+- Arbitration seat requirements under Arbitration Act §20; jurisdiction clause implications under CPC
+- Data localisation requirements under DPDP Act for personal data storage
 """
 )
 
@@ -344,7 +353,9 @@ def validate_response(response: str, expected_format: str = "json") -> bool:
     if expected_format == "json":
         import json
         try:
-            json.loads(response)
+            # Strip markdown fences before parsing
+            cleaned = re.sub(r"```json|```", "", response).strip()
+            json.loads(cleaned)
             return True
         except json.JSONDecodeError:
             return False

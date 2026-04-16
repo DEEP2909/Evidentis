@@ -18,22 +18,34 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // EvidentIS Brand Colors
         navy: {
-          DEFAULT: '#050e1f',
-          light: '#0d1e3a',
-          50: '#E8EBF0',
-          100: '#C5CCD9',
-          200: '#9EAABF',
-          300: '#7789A6',
-          400: '#5A6F93',
-          500: '#3D5580',
-          600: '#2D426A',
-          700: '#1E2F54',
-          800: '#0d1e3a',
-          900: '#050e1f',
-          950: '#020912',
+          950: "hsl(221,71%,7%)",
+          900: "hsl(221,71%,10%)",
+          800: "hsl(221,65%,14%)",
+          700: "hsl(221,55%,20%)",
         },
+        saffron: {
+          400: "#FFD18B",
+          500: "#FF9933",
+        },
+        "india-green": "#138808",
+        // Existing colors
+        // EvidentIS Brand Colors
+        // navy: {
+        //   DEFAULT: '#050e1f',
+        //   light: '#0d1e3a',
+        //   50: '#E8EBF0',
+        //   100: '#C5CCD9',
+        //   200: '#9EAABF',
+        //   300: '#7789A6',
+        //   400: '#5A6F93',
+        //   500: '#3D5580',
+        //   600: '#2D426A',
+        //   700: '#1E2F54',
+        //   800: '#0d1e3a',
+        //   900: '#050e1f',
+        //   950: '#020912',
+        // },
         gold: {
           DEFAULT: '#C9A84C',
           light: '#E8C97A',
@@ -54,13 +66,13 @@ const config: Config = {
         high:     { DEFAULT: '#EA580C', light: '#FFEDD5' },
         medium:   { DEFAULT: '#D97706', light: '#FEF3C7' },
         low:      { DEFAULT: '#16A34A', light: '#DCFCE7' },
-        saffron: {
-          300: '#FFCF8C',
-          400: '#FFD18B',
-          500: '#FF9933',
-          600: '#F07A00',
-        },
-        'india-green': '#138808',
+        // saffron: {
+        //   300: '#FFCF8C',
+        //   400: '#FFD18B',
+        //   500: '#FF9933',
+        //   600: '#F07A00',
+        // },
+        // 'india-green': '#138808',
         // Radix UI semantic tokens
         border:      'hsl(var(--border))',
         input:       'hsl(var(--input))',
@@ -97,10 +109,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans:  ['Sora', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        serif: ['Cormorant Garamond', 'Georgia', 'Cambria', 'Times New Roman', 'serif'],
+        serif: ["Cormorant Garamond", "Georgia", "serif"],
+        sans: ["Outfit", "system-ui", "sans-serif"],
         mono:  ['Cascadia Mono', 'Consolas', 'Courier New', 'monospace'],
       },
+      backgroundOpacity: { 8: "0.08" },
       fontSize: {
         'display-2xl': ['4.5rem',  { lineHeight: '1.08', letterSpacing: '-0.025em' }],
         'display-xl':  ['3.75rem', { lineHeight: '1.1',  letterSpacing: '-0.02em' }],

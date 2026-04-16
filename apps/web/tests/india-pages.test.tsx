@@ -31,8 +31,9 @@ import { LanguageSwitcher } from "@/components/india/LanguageSwitcher";
 describe("India product pages", () => {
   it("renders the landing page hero copy", () => {
     render(<HomePage />);
-    expect(screen.getByText("EvidentIS")).toBeTruthy();
-    expect(screen.getByText(/Built for Indian advocates/i)).toBeTruthy();
+    expect(screen.getByRole("img", { name: "EvidentIS" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /intelligent decision system/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /open platform/i })).toBeTruthy();
   });
 
   it("renders the dashboard shell and Nyay Assist panel", () => {

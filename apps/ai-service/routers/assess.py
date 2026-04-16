@@ -346,7 +346,6 @@ async def assess_with_llm(
         clauses_json=json.dumps(
             [
                 {
-                    "id": clause.id,
                     "clause_type": clause.clause_type,
                     "text": clause.text,
                 }
@@ -370,18 +369,25 @@ For each playbook rule, return:
 
 Return ONLY a JSON array of rule assessments. No other text."""
 
+    # Split prompt into system and user messages
+    system_prompt = "You are a senior legal counsel analyzing contract risks for an India-based law firm or in-house legal team."
+    user_prompt = prompt.replace(system_prompt, "").strip()
+
     payload: Dict[str, Any] = {
         "model": model,
-        "prompt": prompt,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0.1},
+        "options": {"temperature": RISK_ASSESSMENT.temperature},
     }
 
     async def _call_llm() -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
-                f"{ollama_url}/api/generate",
+                f"{ollama_url}/api/chat",
                 json=payload,
             )
             if response.status_code != 200:
@@ -393,7 +399,7 @@ Return ONLY a JSON array of rule assessments. No other text."""
             _call_llm,
             config=LLM_RETRY_CONFIG,
         )
-        response_text = result.get("response", "[]")
+        response_text = result.get("message", {}).get("content", "[]")
         if not validate_response(response_text, "json"):
             logger.error("Risk assessment model returned non-JSON content")
             return []

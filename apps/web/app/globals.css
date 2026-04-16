@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Sora:wght@300;400;500;600;700&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Outfit:wght@200;300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,58 +6,163 @@
 
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 33 100% 58%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 33 100% 58%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 33 100% 58%;
-    --radius: 0.5rem;
+    /* Core palette */
+    --navy-950: 221 71% 7%;
+    --navy-900: 221 71% 10%;
+    --navy-800: 221 65% 14%;
+    --navy-700: 221 55% 20%;
+    --navy-600: 221 50% 28%;
+
+    --saffron-500: 33 100% 60%;
+    --saffron-400: 33 100% 68%;
+    --saffron-300: 33 100% 78%;
+
+    --india-green: 130 83% 36%;
+
+    /* Semantic tokens */
+    --background: 221 71% 7%;
+    --foreground: 40 20% 94%;
+    --card: 221 60% 11%;
+    --card-foreground: 40 20% 94%;
+    --primary: 33 100% 60%;
+    --primary-foreground: 221 71% 7%;
+    --secondary: 221 50% 17%;
+    --secondary-foreground: 40 20% 80%;
+    --muted: 221 45% 15%;
+    --muted-foreground: 220 15% 55%;
+    --border: 221 40% 20%;
+    --input: 221 40% 16%;
+    --ring: 33 100% 60%;
+    --radius: 1.25rem;
+    --gold: 33 100% 60%;
+    --navy: 221 71% 12%;
+
+    /* Status colors */
+    --success: 130 83% 36%;
+    --warning: 38 92% 50%;
+    --danger: 4 90% 58%;
+    --info: 210 80% 55%;
   }
 
   html {
-    font-family: "Sora", ui-sans-serif, system-ui, sans-serif;
-    font-feature-settings: "kern" 1, "liga" 1;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    font-family: 'Outfit', system-ui, sans-serif;
   }
 
-  h1, h2, h3, .font-serif {
-    font-family: "Cormorant Garamond", "Georgia", serif;
-    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
-    letter-spacing: -0.01em;
+  h1, h2, h3 {
+    font-family: 'Cormorant Garamond', 'Georgia', serif;
+    font-weight: 500;
   }
 
-  * { 
-    @apply border-border; 
-  }
+  * { @apply border-border; }
 
   body {
-    background-color: #070708;
-    color: #f4f4f5;
+    @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,153,51,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 60% at 80% 100%, rgba(15,37,87,0.5) 0%, transparent 50%);
   }
 }
 
 @layer components {
-  /* Minimal glassmorphism for select components if needed globally */
+  /* Glass card — primary surface for AppShell pages */
   .glass {
-    @apply bg-black/40 backdrop-blur-xl border border-white/5;
+    @apply rounded-[var(--radius)] border border-white/10 bg-white/5 backdrop-blur-xl;
   }
+
+  /* Gold gradient button */
+  .btn-gold {
+    @apply bg-gradient-to-r from-[#FF9933] to-[#FFD18B] text-slate-900 font-semibold rounded-full px-6 py-2.5
+           shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30 hover:scale-[1.02] transition-all duration-200;
+  }
+
+  /* Navy sidebar item */
+  .nav-item {
+    @apply flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm text-white/60
+           hover:bg-white hover:bg-opacity-8 hover:text-white transition-all duration-150 cursor-pointer;
+  }
+
+  .nav-item.active {
+    @apply bg-white/10 text-white;
+  }
+
+  /* Metric card */
+  .metric-card {
+    @apply glass p-6 flex flex-col gap-2;
+  }
+
+  /* Status badge variants */
+  .badge-saffron { @apply bg-orange-500/15 text-orange-400 border border-orange-500/25 text-xs px-2.5 py-0.5 rounded-full; }
+  .badge-green   { @apply bg-green-500/15 text-green-400 border border-green-500/25 text-xs px-2.5 py-0.5 rounded-full; }
+  .badge-red     { @apply bg-red-500/15 text-red-400 border border-red-500/25 text-xs px-2.5 py-0.5 rounded-full; }
+  .badge-blue    { @apply bg-blue-500/15 text-blue-400 border border-blue-500/25 text-xs px-2.5 py-0.5 rounded-full; }
+  .badge-muted   { @apply bg-white/8 text-white/60 border border-white/10 text-xs px-2.5 py-0.5 rounded-full; }
+
+  /* Page fade-in base */
+  .page-enter {
+    animation: pageEnter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* ── Grain texture overlay ── */
+  .grain-overlay::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+  }
+
+  /* ── Diagonal grid pattern ── */
+  .grid-pattern {
+    background-image:
+      linear-gradient(rgba(255,153,51,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,153,51,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  /* ── Glow ring for hero elements ── */
+  .glow-ring {
+    box-shadow:
+      0 0 20px rgba(255,153,51,0.08),
+      0 0 60px rgba(255,153,51,0.04),
+      inset 0 0 20px rgba(255,153,51,0.02);
+  }
+}
+
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% center; }
+  to   { background-position: 200% center; }
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, #FF9933 0%, #FFD18B 40%, #FF9933 60%, #FFD18B 100%);
+  background-size: 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 4s ease-in-out infinite;
+}
+
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes float-orbit {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  33%      { transform: translateY(-12px) rotate(1deg); }
+  66%      { transform: translateY(-5px) rotate(-1deg); }
+}
+
+@keyframes border-draw {
+  from { stroke-dashoffset: 1000; }
+  to   { stroke-dashoffset: 0; }
 }
 
 /* Reduced motion overrides */

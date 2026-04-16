@@ -127,18 +127,25 @@ Return ONLY a JSON array where each item includes:
 
 No additional prose."""
 
+    # Split prompt into system and user messages
+    system_prompt = "You are an Indian commercial contracts advocate drafting redline suggestions."
+    user_prompt = prompt.replace(system_prompt, "").strip()
+
     payload = {
         "model": model,
-        "prompt": prompt,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0.2},
+        "options": {"temperature": REDLINE_SUGGESTION.temperature},
     }
 
     async def _call_llm() -> dict:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
-                f"{ollama_url}/api/generate",
+                f"{ollama_url}/api/chat",
                 json=payload,
             )
             if response.status_code != 200:
@@ -150,7 +157,7 @@ No additional prose."""
             _call_llm,
             config=LLM_RETRY_CONFIG,
         )
-        response_text = result.get("response", "[]")
+        response_text = result.get("message", {}).get("content", "[]")
         if not validate_response(response_text, "json"):
             logger.error("Redline model returned non-JSON content")
             return []

@@ -8,8 +8,11 @@ import logging
 import re
 from typing import Dict, List, Optional
 from enum import Enum
+from datetime import datetime
 
 import httpx
+from dateutil import parser
+from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -17,6 +20,44 @@ from llm_safety import RetryConfig, retry_with_backoff
 from prompts import OBLIGATION_EXTRACTION, validate_response
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_deadline(deadline_str: str, effective_date: Optional[str]) -> Optional[str]:
+    """Calculate concrete deadline from relative timing string."""
+    if not deadline_str or not effective_date:
+        return deadline_str
+
+    try:
+        # If already an ISO date, return as is
+        parser.parse(deadline_str)
+        return deadline_str
+    except (ValueError, TypeError):
+        pass
+
+    # Try to parse relative timing
+    try:
+        base_date = parser.parse(effective_date)
+    except (ValueError, TypeError):
+        return deadline_str
+
+    # Simple patterns for relative dates
+    patterns = [
+        (r"(\d+)\s*days?\s*after\s*execution", lambda m: relativedelta(days=int(m.group(1)))),
+        (r"(\d+)\s*weeks?\s*after\s*execution", lambda m: relativedelta(weeks=int(m.group(1)))),
+        (r"(\d+)\s*months?\s*after\s*execution", lambda m: relativedelta(months=int(m.group(1)))),
+        (r"(\d+)\s*days?\s*after\s*notice", lambda m: relativedelta(days=int(m.group(1)))),
+        (r"(\d+)\s*weeks?\s*after\s*notice", lambda m: relativedelta(weeks=int(m.group(1)))),
+        (r"(\d+)\s*months?\s*after\s*notice", lambda m: relativedelta(months=int(m.group(1)))),
+    ]
+
+    for pattern, delta_func in patterns:
+        match = re.search(pattern, deadline_str.lower())
+        if match:
+            delta = delta_func(match)
+            calculated = base_date + delta
+            return calculated.isoformat()
+
+    return deadline_str
 
 router = APIRouter()
 
@@ -334,18 +375,25 @@ Return ONLY a JSON array where each item includes:
 
 No additional prose."""
 
+    # Split prompt into system and user messages
+    system_prompt = "You are a contracts analyst extracting obligations from legal documents."
+    user_prompt = prompt.replace(system_prompt, "").strip()
+
     payload = {
         "model": model,
-        "prompt": prompt,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0.1},
+        "options": {"temperature": OBLIGATION_EXTRACTION.temperature},
     }
 
     async def _call_llm() -> dict:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
-                f"{ollama_url}/api/generate",
+                f"{ollama_url}/api/chat",
                 json=payload,
             )
             if response.status_code != 200:
@@ -357,7 +405,7 @@ No additional prose."""
             _call_llm,
             config=LLM_RETRY_CONFIG,
         )
-        response_text = result.get("response", "[]")
+        response_text = result.get("message", {}).get("content", "[]")
         if not validate_response(response_text, "json"):
             logger.error("Obligation extraction model returned non-JSON content")
             return []
@@ -386,13 +434,16 @@ No additional prose."""
             except ValueError:
                 recurrence = RecurrencePattern.ONCE
 
+            raw_deadline = item.get("deadline")
+            calculated_deadline = calculate_deadline(raw_deadline, effective_date) if raw_deadline else None
+
             obligations.append(ExtractedObligation(
                 id=f"obl-llm-{i}",
                 type=obl_type,
                 party=party,
                 description=item.get("description", ""),
                 source_text=source_text,
-                deadline=item.get("deadline"),
+                deadline=calculated_deadline,
                 recurrence=recurrence,
                 trigger_event=item.get("trigger_event"),
                 penalty=item.get("penalty"),

@@ -301,11 +301,23 @@ async def generate_research_answer_stream(
     Generate streaming research answer using RAG.
     Yields Server-Sent Events.
     """
+    # Deduplicate chunks by first 100 chars
+    seen_keys = set()
+    unique_chunks = []
+    for chunk in chunks:
+        key = chunk.text[:100]
+        if key not in seen_keys:
+            seen_keys.add(key)
+            # Trim chunk to ~600 tokens (~2400 chars)
+            trimmed_text = chunk.text[:2400]
+            chunk.text = trimmed_text
+            unique_chunks.append(chunk)
+
     # Build context from chunks
     context_parts = []
-    for i, chunk in enumerate(chunks, 1):
+    for i, chunk in enumerate(unique_chunks, 1):
         context_parts.append(f"[Source {i}: {chunk.document_name}]\n{chunk.text}\n")
-    
+
     context = "\n---\n".join(context_parts) if context_parts else "No relevant documents found."
 
     prompt = RESEARCH_QUERY.format(
@@ -316,17 +328,24 @@ async def generate_research_answer_stream(
     )
     prompt += "\n\nCite context snippets using [Source N] labels aligned to excerpt order."
 
+    # Split into system / user messages for better persona adherence
+    system_prompt = "You are a legal research assistant helping advocates analyze contracts, pleadings, and legal questions."
+    user_prompt = prompt.replace(system_prompt, "").strip()
+
     async def _read_llm_stream_lines() -> list[str]:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream(
                 "POST",
-                f"{ollama_url}/api/generate",
+                f"{ollama_url}/api/chat",
                 json={
                     "model": model,
-                    "prompt": prompt,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
                     "stream": True,
                     "options": {
-                        "temperature": 0.3,
+                        "temperature": RESEARCH_QUERY.temperature,
                         "num_predict": 2048,
                     },
                 },
@@ -344,7 +363,7 @@ async def generate_research_answer_stream(
         for line in stream_lines:
             try:
                 data = json.loads(line)
-                token = data.get("response", "")
+                token = data.get("message", {}).get("content", "")
                 if token:
                     yield f"data: {json.dumps({'token': token})}\n\n"
                 if data.get("done"):
@@ -389,10 +408,22 @@ async def generate_research_answer(
     """
     Generate non-streaming research answer.
     """
+    # Deduplicate chunks by first 100 chars
+    seen_keys = set()
+    unique_chunks = []
+    for chunk in chunks:
+        key = chunk.text[:100]
+        if key not in seen_keys:
+            seen_keys.add(key)
+            # Trim chunk to ~600 tokens (~2400 chars)
+            trimmed_text = chunk.text[:2400]
+            chunk.text = trimmed_text
+            unique_chunks.append(chunk)
+
     context_parts = []
-    for i, chunk in enumerate(chunks, 1):
+    for i, chunk in enumerate(unique_chunks, 1):
         context_parts.append(f"[Source {i}: {chunk.document_name}]\n{chunk.text}\n")
-    
+
     context = "\n---\n".join(context_parts) if context_parts else "No relevant documents found."
 
     prompt = RESEARCH_QUERY.format(
@@ -403,16 +434,23 @@ async def generate_research_answer(
     )
     prompt += "\n\nCite context snippets using [Source N] labels aligned to excerpt order."
 
+    # Split into system / user messages for better persona adherence
+    system_prompt = "You are a legal research assistant helping advocates analyze contracts, pleadings, and legal questions."
+    user_prompt = prompt.replace(system_prompt, "").strip()
+
     async def _call_llm() -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
-                f"{ollama_url}/api/generate",
+                f"{ollama_url}/api/chat",
                 json={
                     "model": model,
-                    "prompt": prompt,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
                     "stream": False,
                     "options": {
-                        "temperature": 0.3,
+                        "temperature": RESEARCH_QUERY.temperature,
                         "num_predict": 2048,
                     },
                 },
@@ -426,7 +464,7 @@ async def generate_research_answer(
             _call_llm,
             config=LLM_RETRY_CONFIG,
         )
-        answer = add_safety_guardrails(result.get("response", "").strip())
+        answer = add_safety_guardrails(result.get("message", {}).get("content", "").strip())
         confidence = score_answer_confidence(answer, chunks, jurisdiction)
         return answer, confidence
     except RuntimeError as e:

@@ -99,6 +99,21 @@ export class ApiError extends Error {
 }
 
 /**
+ * Quota/billing error (HTTP 402)
+ */
+export class QuotaError extends Error {
+  public feature: string;
+  public detail?: string;
+
+  constructor(feature: string, detail?: string) {
+    super(`Quota limit reached for ${feature}`);
+    this.name = "QuotaError";
+    this.feature = feature;
+    this.detail = detail;
+  }
+}
+
+/**
  * Refresh access token using refresh token
  */
 async function refreshAccessToken(): Promise<boolean> {
@@ -210,6 +225,13 @@ async function apiRequest<T>(
       errorPayload.error !== null
         ? (errorPayload.error as Record<string, unknown>)
         : errorPayload ?? {};
+
+    // Detect 402 Quota/Billing errors
+    if (response.status === 402) {
+      const quotaFeature = String(errorObject.feature ?? errorObject.resource ?? "this feature");
+      const quotaDetail = errorObject.detail ? String(errorObject.detail) : undefined;
+      throw new QuotaError(quotaFeature, quotaDetail);
+    }
 
     throw new ApiError(
       response.status,
@@ -545,8 +567,22 @@ export const auth = {
   },
 
   async logout(): Promise<void> {
+    if (!accessToken) {
+      loadTokens();
+    }
+
+    if (!accessToken) {
+      clearTokens();
+      return;
+    }
+
     try {
       await apiRequest("POST", "/auth/logout");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        return;
+      }
+      throw error;
     } finally {
       clearTokens();
     }

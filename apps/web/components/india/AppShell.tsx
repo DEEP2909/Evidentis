@@ -200,6 +200,7 @@ function ShellSidebar({
             type="button"
             onClick={() => void onLogout()}
             className="rounded-lg p-1.5 text-white/35 transition-all duration-200 hover:bg-red-500/15 hover:text-red-300 hover:scale-110"
+            suppressHydrationWarning
             title={t("logout")}
             aria-label={t("logout")}
           >
@@ -335,7 +336,7 @@ export function AppShell({
               </Button>
               <div className="flex items-center gap-2">
                 <span className="hidden text-white/25 lg:inline">/</span>
-                <h1 className="font-serif text-xl font-semibold tracking-tight">{title}</h1>
+                <h1 suppressHydrationWarning className="font-serif text-xl font-semibold tracking-tight">{title}</h1>
               </div>
             </div>
             <div className="flex items-center gap-2">

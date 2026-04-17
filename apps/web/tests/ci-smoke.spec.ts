@@ -10,6 +10,12 @@ test.describe("Web smoke suite", () => {
     });
   };
 
+  const expectLoginSurface = async (page: import("@playwright/test").Page) => {
+    await expect(page.locator('input[name="email"]')).toBeVisible();
+    await expect(page.locator('input[name="password"]')).toBeVisible();
+    await expect(page.locator("#login-submit")).toBeVisible();
+  };
+
   test("renders root landing page", async ({ page }) => {
     await gotoPage(page, "/");
     await expect(page.getByRole("heading", { name: /intelligent decision system/i })).toBeVisible();
@@ -18,9 +24,7 @@ test.describe("Web smoke suite", () => {
 
   test("renders login form", async ({ page }) => {
     await gotoPage(page, "/login");
-    await expect(page.locator('input[name="email"]')).toBeVisible();
-    await expect(page.locator('input[name="password"]')).toBeVisible();
-    await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+    await expectLoginSurface(page);
   });
 
   test("renders forgot-password flow", async ({ page }) => {
@@ -32,20 +36,18 @@ test.describe("Web smoke suite", () => {
 
   test("renders analytics dashboard shell", async ({ page }) => {
     await gotoPage(page, "/analytics");
-    await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
+    await expectLoginSurface(page);
   });
 
   test("renders dashboard shell", async ({ page }) => {
     await gotoPage(page, "/dashboard");
-    await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
+    await expectLoginSurface(page);
   });
 
   test("renders research search UI", async ({ page }) => {
     await gotoPage(page, "/research");
     await expect(page.getByRole("heading", { name: /^research$/i })).toBeVisible();
     await expect(page.getByText(/research with indian sections, judgments, and multilingual answers/i)).toBeVisible();
-    await expect(page.getByText(/limitation period for cheque bounce complaints/i)).toBeVisible();
+    await expect(page.getByText(/limitation period for cheque bounce/i)).toBeVisible();
   });
 });

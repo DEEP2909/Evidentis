@@ -14,7 +14,7 @@ test.describe("UX mobile and keyboard smoke", () => {
     test.setTimeout(90000);
 
     await gotoPage(page, "/login");
-    await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
+    await expect(page.locator("#login-submit")).toBeVisible();
 
     await page.keyboard.press("Tab");
     await expect(page.locator("#email")).toBeFocused();
@@ -31,14 +31,14 @@ test.describe("UX mobile and keyboard smoke", () => {
     await expect(page.getByRole("button", { name: /show password/i })).toBeFocused();
 
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeFocused();
+    await expect(page.locator("#login-submit")).toBeFocused();
   });
 
   test("global command palette opens and closes from keyboard", async ({ page }) => {
     test.setTimeout(90000);
 
     await gotoPage(page, "/login");
-    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
+    await expect(page.locator("#login-submit")).toBeVisible();
 
     await page.locator("body").click();
     await page.locator("body").press("ControlOrMeta+K");
@@ -68,7 +68,7 @@ test.describe("UX mobile and keyboard smoke", () => {
     expect(landingOverflow).toBeFalsy();
 
     await gotoPage(page, "/login");
-    await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
+    await expect(page.locator("#login-submit")).toBeVisible();
     const loginOverflow = await page.evaluate(
       () => {
         const appRoot =

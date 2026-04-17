@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandLogo } from "@/components/india/BrandLogo";
+import { useTranslation } from "react-i18next";
 
 const stakeholderSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -90,6 +91,7 @@ const stakeholderBenefits = [
 export default function StakeholderRegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { t } = useTranslation();
 
   const {
     register,
@@ -259,7 +261,7 @@ export default function StakeholderRegisterPage() {
                     htmlFor="name"
                     className="text-white/60 text-xs uppercase tracking-wider"
                   >
-                    Full Name
+                    {t("auth_fullName")}
                   </Label>
                   <Input
                     id="name"
@@ -280,7 +282,7 @@ export default function StakeholderRegisterPage() {
                     htmlFor="email"
                     className="text-white/60 text-xs uppercase tracking-wider"
                   >
-                    Email
+                    {t("auth_email")}
                   </Label>
                   <Input
                     id="email"
@@ -322,7 +324,7 @@ export default function StakeholderRegisterPage() {
                     htmlFor="password"
                     className="text-white/60 text-xs uppercase tracking-wider"
                   >
-                    Password
+                    {t("auth_password")}
                   </Label>
                   <Input
                     id="password"
@@ -343,7 +345,7 @@ export default function StakeholderRegisterPage() {
                     htmlFor="confirmPassword"
                     className="text-white/60 text-xs uppercase tracking-wider"
                   >
-                    Confirm Password
+                    {t("auth_confirmPassword")}
                   </Label>
                   <Input
                     id="confirmPassword"
@@ -374,12 +376,12 @@ export default function StakeholderRegisterPage() {
 
               <div className="mt-6 text-center space-y-2">
                 <p className="text-sm text-white/30">
-                  Already registered?{" "}
+                  {t("auth_hasAccount")}{" "}
                   <Link
                     href="/login"
                     className="text-[#ff9933] hover:text-[#ffcf8c] transition-colors"
                   >
-                    Sign in
+                    {t("login")}
                   </Link>
                 </p>
                 <p className="text-sm text-white/30">

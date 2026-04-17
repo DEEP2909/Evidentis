@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { useTranslation } from "react-i18next";
 
 type DocumentStatus = "processing" | "processed" | "failed";
 
@@ -126,6 +127,7 @@ export default function DocumentsPage() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const isDebouncing = searchQuery !== debouncedQuery;
+  const { t } = useTranslation();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -143,16 +145,16 @@ export default function DocumentsPage() {
   }, [debouncedQuery]);
 
   return (
-    <AppShell title="Documents">
+    <AppShell title={t("nav_documents")}>
       <div className="section-wrap page-enter">
         <div className="section-header">
           <div>
-            <h2 className="section-title">Document Intelligence Workspace</h2>
-            <p className="section-subtitle">Manage uploads, AI extraction progress, and clause insights.</p>
+            <h2 className="section-title">{t("doc_title")}</h2>
+            <p className="section-subtitle">{t("doc_subtitle")}</p>
           </div>
           <Button className="btn-ripple">
             <Upload className="mr-2 h-4 w-4" />
-            Upload Documents
+            {t("doc_uploadDocuments")}
           </Button>
         </div>
 
@@ -177,8 +179,8 @@ export default function DocumentsPage() {
             <div className={`mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full ${isDragging ? "bg-saffron-500/20 text-saffron-400" : "bg-white/10 text-white/65"}`}>
               <Upload className={`h-6 w-6 ${isDragging ? "animate-bounce" : "animate-pulse"}`} />
             </div>
-            <p className="text-lg font-medium">{isDragging ? "Drop files here" : "Drag and drop files to upload"}</p>
-            <p className="mt-1 text-sm text-white/55">Supports PDF, DOCX, DOC • Max 50MB per file</p>
+            <p className="text-lg font-medium">{isDragging ? t("doc_dropHere") : t("doc_dragDrop")}</p>
+            <p className="mt-1 text-sm text-white/55">{t("doc_fileTypes")}</p>
           </CardContent>
         </Card>
 
@@ -186,7 +188,7 @@ export default function DocumentsPage() {
           <div className="relative min-w-[260px] flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
             <Input
-              placeholder="Search documents..."
+              placeholder={t("doc_searchDocs")}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               className="focus-saffron pl-9"
@@ -196,7 +198,7 @@ export default function DocumentsPage() {
 
           <Button variant="outline" className="border-white/25 text-white/75">
             <Filter className="mr-2 h-4 w-4" />
-            Filters
+            {t("filter")}
           </Button>
 
           <div className="flex rounded-lg border border-white/15 bg-white/5 p-1">
@@ -218,7 +220,37 @@ export default function DocumentsPage() {
         </div>
 
         <AnimatePresence mode="wait">
-          {viewMode === "list" ? (
+          {filteredDocuments.length === 0 ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="glass py-16 text-center"
+            >
+              <motion.div
+                animate={{ y: [0, -8, 0] }}
+                transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-saffron-500/20 bg-saffron-500/10"
+              >
+                <FileText className="h-8 w-8 text-saffron-400" />
+              </motion.div>
+              <h3 className="text-lg font-semibold text-white/85">
+                {debouncedQuery ? t("doc_emptyNoMatch") : t("doc_emptyTitle")}
+              </h3>
+              <p className="mt-2 text-sm text-white/50 max-w-sm mx-auto">
+                {debouncedQuery
+                  ? t("doc_emptyNoMatchDesc")
+                  : t("doc_emptyDesc")}
+              </p>
+              {!debouncedQuery && (
+                <Button className="btn-ripple mt-5">
+                  <Upload className="mr-2 h-4 w-4" />
+                  {t("doc_uploadDocuments")}
+                </Button>
+              )}
+            </motion.div>
+          ) : viewMode === "list" ? (
             <motion.div
               key="list"
               initial={{ opacity: 0, y: 8 }}
@@ -230,12 +262,12 @@ export default function DocumentsPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.14em] text-white/45">
-                        <th className="px-4 py-3">Document</th>
-                        <th className="px-4 py-3">Matter</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">Analysis</th>
-                        <th className="px-4 py-3">Uploaded</th>
-                        <th className="px-4 py-3 text-right">Actions</th>
+                        <th className="px-4 py-3">{t("doc_document")}</th>
+                        <th className="px-4 py-3">{t("doc_matter")}</th>
+                        <th className="px-4 py-3">{t("doc_status")}</th>
+                        <th className="px-4 py-3">{t("doc_analysis")}</th>
+                        <th className="px-4 py-3">{t("doc_uploaded")}</th>
+                        <th className="px-4 py-3 text-right">{t("doc_actions")}</th>
                       </tr>
                     </thead>
                     <tbody>

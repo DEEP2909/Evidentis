@@ -22,32 +22,35 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { type ComponentType, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { useAuthStore } from "@/lib/auth";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { BrandLogo } from "./BrandLogo";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 type NavItem = {
   href: string;
-  label: string;
+  /** i18n key for the label — resolved at render time */
+  labelKey: string;
   icon: ComponentType<{ className?: string }>;
   roles: string[];
 };
 
 const ALL_NAV_ITEMS: readonly NavItem[] = [
-  { href: "/dashboard",       label: "Dashboard",   icon: LayoutDashboard, roles: ["admin","senior_advocate","junior_advocate","advocate","paralegal","partner"] },
-  { href: "/matters",         label: "Matters",     icon: FolderOpen,      roles: ["admin","senior_advocate","junior_advocate","advocate","paralegal","partner"] },
-  { href: "/documents",       label: "Documents",   icon: FileText,        roles: ["admin","senior_advocate","junior_advocate","advocate","paralegal","partner"] },
-  { href: "/research",        label: "Research",    icon: Search,          roles: ["admin","senior_advocate","junior_advocate","advocate","partner"] },
-  { href: "/nyay-assist",     label: "Nyay Assist", icon: Sparkles,        roles: ["admin","senior_advocate","junior_advocate","advocate","partner"] },
-  { href: "/bare-acts",       label: "Bare Acts",   icon: ScrollText,      roles: ["admin","senior_advocate","junior_advocate","advocate","partner"] },
-  { href: "/templates",       label: "Templates",   icon: FileStack,       roles: ["admin","senior_advocate","junior_advocate","advocate","partner"] },
-  { href: "/calendar",        label: "Calendar",    icon: CalendarDays,    roles: ["admin","senior_advocate","junior_advocate","advocate","paralegal","partner"] },
-  { href: "/analytics",       label: "Analytics",   icon: BarChart3,       roles: ["admin","senior_advocate","partner"] },
-  { href: "/billing",         label: "Billing",     icon: ReceiptText,     roles: ["admin"] },
-  { href: "/settings/privacy",label: "Privacy",     icon: ShieldCheck,     roles: ["admin","senior_advocate","partner"] },
-  { href: "/admin",           label: "Admin Panel", icon: Settings,        roles: ["admin"] },
+  { href: "/dashboard",       labelKey: "nav_dashboard",   icon: LayoutDashboard, roles: ["admin","senior_advocate","junior_advocate","advocate","paralegal","partner"] },
+  { href: "/matters",         labelKey: "nav_matters",     icon: FolderOpen,      roles: ["admin","senior_advocate","junior_advocate","advocate","paralegal","partner"] },
+  { href: "/documents",       labelKey: "nav_documents",   icon: FileText,        roles: ["admin","senior_advocate","junior_advocate","advocate","paralegal","partner"] },
+  { href: "/research",        labelKey: "nav_research",    icon: Search,          roles: ["admin","senior_advocate","junior_advocate","advocate","partner"] },
+  { href: "/nyay-assist",     labelKey: "nav_nyayAssist",  icon: Sparkles,        roles: ["admin","senior_advocate","junior_advocate","advocate","partner"] },
+  { href: "/bare-acts",       labelKey: "nav_bareActs",    icon: ScrollText,      roles: ["admin","senior_advocate","junior_advocate","advocate","partner"] },
+  { href: "/templates",       labelKey: "nav_templates",   icon: FileStack,       roles: ["admin","senior_advocate","junior_advocate","advocate","partner"] },
+  { href: "/calendar",        labelKey: "nav_calendar",    icon: CalendarDays,    roles: ["admin","senior_advocate","junior_advocate","advocate","paralegal","partner"] },
+  { href: "/analytics",       labelKey: "nav_analytics",   icon: BarChart3,       roles: ["admin","senior_advocate","partner"] },
+  { href: "/billing",         labelKey: "nav_billing",     icon: ReceiptText,     roles: ["admin"] },
+  { href: "/settings/privacy",labelKey: "nav_privacy",     icon: ShieldCheck,     roles: ["admin","senior_advocate","partner"] },
+  { href: "/admin",           labelKey: "nav_admin",       icon: Settings,        roles: ["admin"] },
 ];
 
 /** Role colour palette for avatar badge */
@@ -74,12 +77,30 @@ function ShellSidebar({
   onLogout: () => Promise<void>;
   onNavigate?: () => void;
 }) {
+  const { t } = useTranslation();
   const navItems = useMemo(
     () => ALL_NAV_ITEMS.filter((item) => item.roles.includes(role)),
     [role],
   );
 
   const roleColor = ROLE_COLORS[role] ?? { bg: "bg-white/10", text: "text-white/60" };
+
+  // Fetch upcoming obligations count for calendar badge
+  const { data: obligationsCount } = useQuery({
+    queryKey: ["obligations-due-count"],
+    queryFn: async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/obligations?due_within_days=7&count=true`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('evidentis_access_token') || ''}` },
+        });
+        if (!res.ok) return 0;
+        const data = await res.json();
+        return typeof data === 'number' ? data : (data?.count ?? data?.data?.length ?? 0);
+      } catch { return 0; }
+    },
+    staleTime: 300_000, // 5 min
+    refetchOnWindowFocus: false,
+  });
 
   return (
     <aside className="flex h-full flex-col border-r border-white/[0.07] bg-[#030b1a]/90 backdrop-blur-2xl">
@@ -97,7 +118,7 @@ function ShellSidebar({
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/25">
-          Workspace
+          {t("workspace")}
         </div>
         <ul className="space-y-0.5">
           {navItems.map((item, index) => {
@@ -140,10 +161,17 @@ function ShellSidebar({
                         : "text-white/35 group-hover:text-white/65 group-hover:scale-110"
                     }`}
                   />
-                  <span>{item.label}</span>
+                  <span>{t(item.labelKey)}</span>
+
+                  {/* Calendar badge — obligations due within 7 days */}
+                  {item.href === "/calendar" && typeof obligationsCount === "number" && obligationsCount > 0 && (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white shadow-lg shadow-red-500/30 animate-pulse">
+                      {obligationsCount > 9 ? "9+" : obligationsCount}
+                    </span>
+                  )}
 
                   {/* Hover glow dot */}
-                  {!isActive && (
+                  {!isActive && item.href !== "/calendar" && (
                     <span className="ml-auto h-1 w-1 rounded-full bg-saffron-500 opacity-0 transition-opacity duration-200 group-hover:opacity-60" />
                   )}
                 </Link>
@@ -172,8 +200,8 @@ function ShellSidebar({
             type="button"
             onClick={() => void onLogout()}
             className="rounded-lg p-1.5 text-white/35 transition-all duration-200 hover:bg-red-500/15 hover:text-red-300 hover:scale-110"
-            title="Sign out"
-            aria-label="Sign out"
+            title={t("logout")}
+            aria-label={t("logout")}
           >
             <LogOut className="h-3.5 w-3.5" />
           </button>
@@ -327,6 +355,8 @@ export function AppShell({
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
               className="flex-1 p-5 lg:p-8"
             >
+              {/* Trial expiry banner */}
+              <TrialBanner />
               {children}
             </motion.div>
           </AnimatePresence>
@@ -355,5 +385,76 @@ export function AppShell({
         </motion.div>
       )}
     </div>
+  );
+}
+
+/* ── Trial Expiry Banner ── */
+function TrialBanner() {
+  const [dismissed, setDismissed] = useState(false);
+  const [daysLeft, setDaysLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Check if already dismissed this session
+    if (sessionStorage.getItem("trial_banner_dismissed")) {
+      setDismissed(true);
+      return;
+    }
+
+    // Read trial end date from localStorage (set during login/registration)
+    const trialEnd = localStorage.getItem("evidentis_trial_ends_at");
+    if (!trialEnd) return;
+
+    try {
+      const endDate = new Date(trialEnd);
+      const now = new Date();
+      const diff = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (diff > 0 && diff <= 7) {
+        setDaysLeft(diff);
+      }
+    } catch {
+      // Invalid date
+    }
+  }, []);
+
+  if (dismissed || daysLeft === null) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-saffron-500/30 bg-gradient-to-r from-saffron-500/10 via-saffron-500/5 to-transparent px-5 py-3"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-saffron-500/20">
+          <Sparkles className="h-4 w-4 text-saffron-400" />
+        </div>
+        <span className="text-sm">
+          <span className="font-semibold text-saffron-300">Trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>
+          <span className="text-white/60"> — Upgrade now to keep your workspace running</span>
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Link
+          href="/admin/billing"
+          className="rounded-lg bg-saffron-500 px-3 py-1.5 text-xs font-semibold text-slate-900 transition-colors hover:bg-saffron-400"
+        >
+          Upgrade →
+        </Link>
+        <button
+          type="button"
+          onClick={() => {
+            setDismissed(true);
+            sessionStorage.setItem("trial_banner_dismissed", "1");
+          }}
+          className="rounded p-1 text-white/30 hover:text-white/60 transition-colors"
+          aria-label="Dismiss trial banner"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </motion.div>
   );
 }

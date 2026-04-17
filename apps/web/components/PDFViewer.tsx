@@ -393,21 +393,41 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     }
   }, []);
 
-  // Search
-  const handleSearch = useCallback((query: string) => {
-    // In a real implementation, this would search the PDF text content
-    // For now, we'll return mock results
+  // Search — real text extraction using pdf.js
+  const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
       return;
     }
-    
-    // Mock search results
-    setSearchResults([
-      { page: 1, text: `...${query} found in first paragraph...` },
-      { page: 3, text: `...another instance of ${query}...` },
-    ]);
-  }, []);
+
+    try {
+      const pdf = await pdfjs.getDocument(fileUrl).promise;
+      const results: { page: number; text: string }[] = [];
+      const lowerQuery = query.toLowerCase();
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => (item as { str?: string }).str ?? "")
+          .join(" ");
+
+        if (pageText.toLowerCase().includes(lowerQuery)) {
+          // Extract a snippet around the match
+          const idx = pageText.toLowerCase().indexOf(lowerQuery);
+          const start = Math.max(0, idx - 40);
+          const end = Math.min(pageText.length, idx + query.length + 40);
+          const snippet = (start > 0 ? "..." : "") + pageText.slice(start, end).trim() + (end < pageText.length ? "..." : "");
+          results.push({ page: i, text: snippet });
+        }
+      }
+
+      setSearchResults(results);
+    } catch (err) {
+      console.error("PDF search error:", err);
+      setSearchResults([]);
+    }
+  }, [fileUrl]);
 
   // Print
   const handlePrint = useCallback(() => {

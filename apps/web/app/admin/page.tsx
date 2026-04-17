@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTranslation } from "react-i18next";
 
 type AdminTab = "team" | "security" | "billing" | "sso" | "playbooks" | "webhooks";
 
@@ -349,10 +350,11 @@ function WebhooksTab() {
 }
 
 function AdminContent() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<AdminTab>("team");
 
   return (
-    <AppShell title="Admin Panel">
+    <AppShell title={t("nav_admin")}>
       <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
         <Card className="glass h-fit">
           <CardContent className="p-3">

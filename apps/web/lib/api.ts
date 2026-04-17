@@ -1014,7 +1014,7 @@ export const obligations = {
 
 export interface ResearchQuery {
   query: string;
-  matterId: string;
+  matterId?: string | null;
   documentIds?: string[];
   jurisdiction?: string;
   language?: SupportedLanguageCode;
@@ -1038,15 +1038,25 @@ export interface ResearchHistoryItem {
 
 export const research = {
   async query(input: ResearchQuery): Promise<ResearchResult> {
-    return apiRequest("POST", "/api/research/query", {
+    const payload: Record<string, unknown> = {
       question: input.query,
-      matterId: input.matterId,
       language: input.language,
-    });
+    };
+    if (input.matterId) {
+      payload.matterId = input.matterId;
+    }
+    return apiRequest("POST", "/api/research/query", payload);
   },
 
   async stream(input: ResearchQuery): Promise<ReadableStream<Uint8Array>> {
     loadTokens();
+    const payload: Record<string, unknown> = {
+      query: input.query,
+      language: input.language,
+    };
+    if (input.matterId) {
+      payload.matterId = input.matterId;
+    }
 
     const response = await fetch(`${API_BASE}/api/research/stream`, {
       method: "POST",
@@ -1054,11 +1064,7 @@ export const research = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ 
-        query: input.query, 
-        matterId: input.matterId,
-        language: input.language,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {

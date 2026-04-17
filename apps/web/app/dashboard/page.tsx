@@ -2,13 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { Loader2, AlertTriangle, CheckCircle2, Info, Shield, ChevronRight } from "lucide-react";
-import { useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Loader2, AlertTriangle, CheckCircle2, Info, Shield,
+  ChevronRight, X, Upload, Sparkles, Users, FileText,
+  BarChart3, Rocket,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { AppShell } from "@/components/india/AppShell";
 import { useAuthStore } from "@/lib/auth";
+import { analytics } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 type Kpi = {
   label: string;
@@ -17,7 +24,28 @@ type Kpi = {
   trend?: "up" | "down" | "neutral";
 };
 
-function DashboardKpiGrid({ kpis }: { kpis: readonly Kpi[] }) {
+/* ── KPI Skeleton ── */
+function KpiSkeleton() {
+  return (
+    <div className="glass kpi-card p-5 animate-pulse">
+      <div className="h-3 w-24 rounded bg-white/10 mb-3" />
+      <div className="h-9 w-16 rounded bg-white/8 mb-2" />
+      <div className="h-3 w-20 rounded bg-white/6" />
+    </div>
+  );
+}
+
+function DashboardKpiGrid({ kpis, isLoading }: { kpis: readonly Kpi[]; isLoading?: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <KpiSkeleton key={`skel-${i}`} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {kpis.map((kpi, index) => (
@@ -94,14 +122,129 @@ const alertClassMap: Record<AlertSeverity, { cls: string; icon: React.ElementTyp
   info:     { cls: "alert-info",      icon: Info,           iconCls: "text-blue-400" },
 };
 
+/* ── Onboarding Checklist ── */
+function OnboardingChecklist({ role }: { role: string }) {
+  const [dismissed, setDismissed] = useState(false);
+  const [completed, setCompleted] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("evidentis_onboarding");
+      if (stored === "dismissed") {
+        setDismissed(true);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stored || "{}");
+        setCompleted(parsed);
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  if (dismissed || role !== "admin") return null;
+
+  const allDone = completed.invite && completed.upload && completed.analyze;
+  if (allDone) return null;
+
+  const steps = [
+    { key: "invite", label: "Invite your first advocate", icon: Users, href: "/admin" },
+    { key: "upload", label: "Upload a contract", icon: Upload, href: "/documents" },
+    { key: "analyze", label: "Run your first AI analysis", icon: Sparkles, href: "/nyay-assist" },
+  ];
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("evidentis_onboarding", "dismissed");
+    }
+  };
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      className="glass p-6 relative overflow-hidden"
+    >
+      {/* Decorative gradient */}
+      <div className="absolute top-0 right-0 w-40 h-40 bg-saffron-500/[0.04] rounded-full blur-[60px] pointer-events-none" />
+
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-saffron-500/15 text-saffron-400">
+            <Rocket className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold">Get Started with EvidentIS</h3>
+            <p className="text-sm text-white/50">Complete these steps to activate your workspace</p>
+          </div>
+        </div>
+        <button type="button" onClick={handleDismiss} className="text-white/30 hover:text-white/60 transition-colors p-1">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {steps.map((step, index) => (
+          <Link
+            key={step.key}
+            href={step.href}
+            className={`group flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
+              completed[step.key]
+                ? "border-green-500/30 bg-green-500/5 text-green-300"
+                : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10 hover:border-saffron-500/25"
+            }`}
+          >
+            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+              completed[step.key] ? "bg-green-500/20 text-green-400" : "bg-saffron-500/15 text-saffron-400"
+            }`}>
+              {completed[step.key] ? <CheckCircle2 className="h-4 w-4" /> : <span>{index + 1}</span>}
+            </div>
+            <span className="text-sm font-medium">{step.label}</span>
+            <ChevronRight className="h-3.5 w-3.5 ml-auto text-white/0 transition-all group-hover:text-saffron-500/70 group-hover:translate-x-0.5" />
+          </Link>
+        ))}
+      </div>
+    </motion.section>
+  );
+}
+
+/* ── Quick Research Button (shared) ── */
+function QuickResearchButton({ prompt }: { prompt: string }) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={() => router.push(`/nyay-assist?q=${encodeURIComponent(prompt)}`)}
+      className="group w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white/75 transition-all hover:bg-white/10 hover:text-white hover:border-saffron-500/20"
+    >
+      <span className="flex items-center justify-between">
+        {prompt}
+        <ChevronRight className="h-3.5 w-3.5 text-saffron-500/0 transition-all group-hover:text-saffron-500/70 group-hover:translate-x-0.5" />
+      </span>
+    </button>
+  );
+}
+
 /* ── Admin Dashboard ── */
 function AdminDashboard() {
-  const kpis: readonly Kpi[] = [
-    { label: "Active Advocates", value: "12",    delta: "+2 this month",          trend: "up" },
-    { label: "Open Matters",     value: "128",   delta: "23 hearings this week",  trend: "neutral" },
-    { label: "Docs Processed",   value: "2,847", delta: "Up 12.5% vs last month", trend: "up" },
-    { label: "DPDP Alerts",      value: "4",     delta: "Action required",         trend: "down" },
-  ];
+  const { t } = useTranslation();
+  const { data: overview, isLoading } = useQuery({
+    queryKey: ["analytics", "overview"],
+    queryFn: () => analytics.firmOverview(),
+    staleTime: 60_000,
+  });
+
+  const kpis: readonly Kpi[] = overview
+    ? [
+        { label: "Active Advocates",  value: String(overview.totalMatters > 0 ? Math.min(overview.activeMatters, 99) : 0), delta: "Live from API",       trend: "neutral" },
+        { label: "Open Matters",      value: String(overview.activeMatters),  delta: `${overview.totalMatters} total`,     trend: "neutral" },
+        { label: "Docs Processed",    value: String(overview.totalDocuments).replace(/\B(?=(\d{3})+(?!\d))/g, ","), delta: `${overview.documentsThisMonth} this month`, trend: "up" },
+        { label: "Flags Resolved",    value: String(overview.flagsResolved),  delta: "Action required",                    trend: "down" },
+      ]
+    : [];
 
   const teamActivity = [
     { name: "Aarav Mehta",    role: "Admin",        action: "Reviewed SSO config",    time: "5 min ago" },
@@ -118,14 +261,16 @@ function AdminDashboard() {
   ];
 
   return (
-    <AppShell title="Firm Command Centre">
+    <AppShell title={t("dash_firmCommand")}>
       <div className="space-y-6 page-enter">
-        <DashboardKpiGrid kpis={kpis} />
+        <OnboardingChecklist role="admin" />
+
+        <DashboardKpiGrid kpis={kpis} isLoading={isLoading} />
 
         <div className="grid gap-4 xl:grid-cols-[1.55fr_1fr]">
           {/* Team Activity */}
           <section className="glass p-6">
-            <h2 className="mb-5 text-lg font-semibold">Team Activity</h2>
+            <h2 className="mb-5 text-lg font-semibold">{t("dash_teamActivity")}</h2>
             <div className="space-y-1">
               {teamActivity.map((item, index) => (
                 <motion.div
@@ -153,7 +298,7 @@ function AdminDashboard() {
 
           {/* Subscription */}
           <section className="glass p-6">
-            <h2 className="mb-4 text-lg font-semibold">Subscription</h2>
+            <h2 className="mb-4 text-lg font-semibold">{t("dash_subscription")}</h2>
             <div className="rounded-2xl border border-saffron-500/30 bg-saffron-500/10 p-4">
               <div className="text-xs uppercase tracking-[0.2em] text-saffron-400">Professional Plan</div>
               <div className="mt-2 kpi-value text-2xl font-semibold">
@@ -172,7 +317,7 @@ function AdminDashboard() {
               </div>
               <div className="flex justify-between">
                 <span>Docs used</span>
-                <span className="text-white/90">2,847 / 5,000</span>
+                <span className="text-white/90">{overview ? `${String(overview.totalDocuments).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} / 5,000` : "— / 5,000"}</span>
               </div>
             </div>
           </section>
@@ -180,7 +325,7 @@ function AdminDashboard() {
 
         {/* System Alerts */}
         <section className="glass p-6">
-          <h2 className="mb-5 text-lg font-semibold">System Alerts</h2>
+          <h2 className="mb-5 text-lg font-semibold">{t("dash_systemAlerts")}</h2>
           <div className="grid gap-3 md:grid-cols-2">
             {alerts.map((alert, index) => {
               const cfg = alertClassMap[alert.severity];
@@ -207,12 +352,21 @@ function AdminDashboard() {
 
 /* ── Senior Advocate Dashboard ── */
 function SeniorAdvocateDashboard() {
-  const kpis: readonly Kpi[] = [
-    { label: "My Active Matters",    value: "34",  delta: "6 updated today",        trend: "neutral" },
-    { label: "Hearings This Week",   value: "8",   delta: "Next: Mon 14, 10:30 am", trend: "neutral" },
-    { label: "Docs Pending Review",  value: "12",  delta: "3 flagged critical",      trend: "down" },
-    { label: "Avg. Matter Health",   value: "78%", delta: "Up 5% vs last month",    trend: "up" },
-  ];
+  const { t } = useTranslation();
+  const { data: overview, isLoading } = useQuery({
+    queryKey: ["analytics", "overview"],
+    queryFn: () => analytics.firmOverview(),
+    staleTime: 60_000,
+  });
+
+  const kpis: readonly Kpi[] = overview
+    ? [
+        { label: "My Active Matters",    value: String(overview.activeMatters),                            delta: "Live from API",         trend: "neutral" },
+        { label: "Hearings This Week",   value: "—",                                                     delta: "Check calendar",        trend: "neutral" },
+        { label: "Docs Pending Review",  value: String(overview.totalDocuments - overview.flagsResolved), delta: "Pending review",         trend: "down" },
+        { label: "Avg. Matter Health",   value: overview.avgProcessingTime ? `${Math.round(100 - overview.avgProcessingTime)}%` : "—", delta: "Computed",   trend: "up" },
+      ]
+    : [];
 
   const portfolio = [
     { name: "Acme Corp Acquisition",    health: 92, flags: 2 },
@@ -236,14 +390,14 @@ function SeniorAdvocateDashboard() {
   };
 
   return (
-    <AppShell title="My Practice Dashboard">
+    <AppShell title={t("dash_myPractice")}>
       <div className="space-y-6">
-        <DashboardKpiGrid kpis={kpis} />
+        <DashboardKpiGrid kpis={kpis} isLoading={isLoading} />
 
         <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
           {/* Upcoming Hearings */}
           <section className="glass p-6">
-            <h2 className="mb-5 text-lg font-semibold">Upcoming Hearings</h2>
+            <h2 className="mb-5 text-lg font-semibold">{t("dash_upcomingHearings")}</h2>
             <div className="space-y-1">
               {hearings.map((hearing, index) => (
                 <motion.div
@@ -271,8 +425,8 @@ function SeniorAdvocateDashboard() {
 
           {/* Nyay Assist quick prompts */}
           <section className="glass p-6">
-            <p className="text-xs uppercase tracking-[0.22em] text-saffron-400">AI Research</p>
-            <h2 className="mb-5 mt-1 text-lg font-semibold">Nyay Assist</h2>
+            <p className="text-xs uppercase tracking-[0.22em] text-saffron-400">{t("dash_aiResearch")}</p>
+            <h2 className="mb-5 mt-1 text-lg font-semibold">{t("assistant")}</h2>
             <div className="space-y-2">
               {[
                 "Explain Section 138 NI Act limitation period",
@@ -280,16 +434,7 @@ function SeniorAdvocateDashboard() {
                 "Draft legal notice under Section 80 CPC",
                 "Map IPC provisions to BNS replacements",
               ].map((prompt) => (
-                <button
-                  type="button"
-                  key={prompt}
-                  className="group w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white/75 transition-all hover:bg-white/10 hover:text-white hover:border-saffron-500/20"
-                >
-                  <span className="flex items-center justify-between">
-                    {prompt}
-                    <ChevronRight className="h-3.5 w-3.5 text-saffron-500/0 transition-all group-hover:text-saffron-500/70 group-hover:translate-x-0.5" />
-                  </span>
-                </button>
+                <QuickResearchButton key={prompt} prompt={prompt} />
               ))}
             </div>
           </section>
@@ -297,7 +442,7 @@ function SeniorAdvocateDashboard() {
 
         {/* Portfolio Health */}
         <section className="glass p-6">
-          <h2 className="mb-5 text-lg font-semibold">Portfolio Health</h2>
+          <h2 className="mb-5 text-lg font-semibold">{t("dash_portfolioHealth")}</h2>
           <div className="space-y-4">
             {portfolio.map((matter, index) => (
               <div key={matter.name} className="flex items-center gap-4">
@@ -332,43 +477,43 @@ function SeniorAdvocateDashboard() {
 
 /* ── Junior Advocate Dashboard ── */
 function JuniorAdvocateDashboard() {
-  const kpis: readonly Kpi[] = [
-    { label: "Assigned Matters",  value: "8",   delta: "2 updated today",         trend: "neutral" },
-    { label: "Pending Documents", value: "5",   delta: "Review requested",         trend: "down" },
-    { label: "Next Hearing",      value: "Mon", delta: "Section 138 — Delhi DC",   trend: "neutral" },
-  ];
+  const { t } = useTranslation();
+  const { data: overview, isLoading } = useQuery({
+    queryKey: ["analytics", "overview"],
+    queryFn: () => analytics.firmOverview(),
+    staleTime: 60_000,
+  });
+
+  const kpis: readonly Kpi[] = overview
+    ? [
+        { label: "Assigned Matters",  value: String(overview.activeMatters),  delta: "Live from API",       trend: "neutral" },
+        { label: "Pending Documents", value: String(overview.documentsThisMonth), delta: "Review requested",  trend: "down" },
+        { label: "Next Hearing",      value: "—",                            delta: "Check calendar",      trend: "neutral" },
+      ]
+    : [];
 
   return (
-    <AppShell title="My Workspace">
+    <AppShell title={t("dash_myWorkspace")}>
       <div className="space-y-6">
-        <DashboardKpiGrid kpis={kpis} />
+        <DashboardKpiGrid kpis={kpis} isLoading={isLoading} />
         <div className="grid gap-4 xl:grid-cols-2">
           <section className="glass p-6">
-            <h2 className="mb-4 text-lg font-semibold">My Assigned Matters</h2>
+            <h2 className="mb-4 text-lg font-semibold">{t("dash_assignedMatters")}</h2>
             <p className="text-sm text-white/65">
-              Matters assigned to you will appear here with hearing timelines and document statuses.
+              {t("dash_assignedDesc")}
             </p>
             <Button asChild className="mt-4 btn-ripple">
               <Link href="/matters" className="inline-flex items-center gap-2">
-                Open matters
+                {t("dash_openMatters")}
                 <ChevronRight className="h-4 w-4" />
               </Link>
             </Button>
           </section>
           <section className="glass p-6">
-            <h2 className="mb-4 text-lg font-semibold">Quick Research</h2>
+            <h2 className="mb-4 text-lg font-semibold">{t("dash_quickResearch")}</h2>
             <div className="space-y-2">
               {["Section 138 NI Act", "RERA compliance", "BNS mappings from IPC"].map((prompt) => (
-                <button
-                  type="button"
-                  key={prompt}
-                  className="group w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white/75 transition-all hover:bg-white/10 hover:text-white hover:border-saffron-500/20"
-                >
-                  <span className="flex items-center justify-between">
-                    {prompt}
-                    <ChevronRight className="h-3.5 w-3.5 text-saffron-500/0 transition-all group-hover:text-saffron-500/70" />
-                  </span>
-                </button>
+                <QuickResearchButton key={prompt} prompt={prompt} />
               ))}
             </div>
           </section>
@@ -380,19 +525,28 @@ function JuniorAdvocateDashboard() {
 
 /* ── Paralegal Dashboard ── */
 function ParalegalDashboard() {
-  const kpis: readonly Kpi[] = [
-    { label: "Documents to Upload", value: "3", delta: "Assigned by Nandini Rao", trend: "neutral" },
-    { label: "Upcoming Tasks",      value: "7", delta: "2 due today",             trend: "down" },
-  ];
+  const { t } = useTranslation();
+  const { data: overview, isLoading } = useQuery({
+    queryKey: ["analytics", "overview"],
+    queryFn: () => analytics.firmOverview(),
+    staleTime: 60_000,
+  });
+
+  const kpis: readonly Kpi[] = overview
+    ? [
+        { label: "Documents to Upload", value: String(overview.documentsThisMonth), delta: "This month", trend: "neutral" },
+        { label: "Upcoming Tasks",      value: String(overview.flagsResolved),      delta: "Action items", trend: "down" },
+      ]
+    : [];
 
   return (
-    <AppShell title="Paralegal Workspace">
+    <AppShell title={t("dash_paralegalWorkspace")}>
       <div className="space-y-6">
-        <DashboardKpiGrid kpis={kpis} />
+        <DashboardKpiGrid kpis={kpis} isLoading={isLoading} />
         <section className="glass p-6">
-          <h2 className="mb-4 text-lg font-semibold">Today&apos;s Tasks</h2>
+          <h2 className="mb-4 text-lg font-semibold">{t("dash_todayTasks")}</h2>
           <p className="text-sm text-white/65">
-            Task queue includes filing reminders, document uploads, and hearing calendar updates.
+            {t("dash_todayTasksDesc")}
           </p>
         </section>
       </div>
@@ -404,6 +558,7 @@ function ParalegalDashboard() {
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading, isAuthenticated } = useAuthStore();
+  const { t } = useTranslation();
   const role = user?.role;
 
   useEffect(() => {
@@ -421,7 +576,7 @@ export default function DashboardPage() {
       <div className="flex min-h-screen items-center justify-center bg-navy-950">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-saffron-500" />
-          <p className="text-sm text-white/40">Loading workspace…</p>
+          <p className="text-sm text-white/40">{t("dash_loadingWorkspace")}</p>
         </div>
       </div>
     );
@@ -430,7 +585,7 @@ export default function DashboardPage() {
   if (!isAuthenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-navy-950 text-white/40 text-sm">
-        Redirecting…
+        {t("redirecting")}
       </div>
     );
   }

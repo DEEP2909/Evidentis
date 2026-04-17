@@ -9,6 +9,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell } from "@/components/india/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranslation } from "react-i18next";
 
 type TimeRange = "7d" | "30d" | "90d" | "1y";
 type DrillDownFocus = "documents" | "flags" | "health";
@@ -72,6 +73,7 @@ function MetricCard({
 }
 
 function AnalyticsContent() {
+  const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
   const [drillDownFocus, setDrillDownFocus] = useState<DrillDownFocus>("documents");
   const chartData = trendData[timeRange];
@@ -145,7 +147,7 @@ function AnalyticsContent() {
   );
 
   return (
-    <AppShell title="Firm Analytics">
+    <AppShell title={t("analytics_title")}>
       <div className="section-wrap page-enter">
         <div className="section-header">
           <p className="section-subtitle">

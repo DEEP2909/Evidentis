@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandLogo } from "@/components/india/BrandLogo";
 import { MfaDialog } from "./mfa-dialog";
+import { useTranslation } from "react-i18next";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -106,6 +107,7 @@ export default function LoginPage() {
   const { login, mfaRequired, error, clearError } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useTranslation();
 
   const {
     register,
@@ -122,7 +124,7 @@ export default function LoginPage() {
     try {
       const success = await login(data.email, data.password);
       if (success && !mfaRequired) {
-        toast.success("Welcome back!");
+        toast.success(t("auth_loginTitle"));
         router.push("/dashboard");
       }
     } finally {
@@ -230,9 +232,9 @@ export default function LoginPage() {
 
           <Card className="glass border-glow">
             <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-2xl font-semibold">Sign in</CardTitle>
+              <CardTitle className="text-2xl font-semibold">{t("auth_loginTitle")}</CardTitle>
               <CardDescription className="text-white/65">
-                Enter your credentials to access your workspace
+                {t("auth_loginSubtitle")}
               </CardDescription>
               <MfaSteps mfaRequired={mfaRequired} />
             </CardHeader>
@@ -249,7 +251,7 @@ export default function LoginPage() {
                 ) : null}
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("auth_email")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -263,12 +265,12 @@ export default function LoginPage() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password">{t("auth_password")}</Label>
                     <Link
                       href="/forgot-password"
                       className="link-ink text-sm text-white/60 transition hover:text-saffron-300"
                     >
-                      Forgot password?
+                      {t("auth_forgotPassword")}
                     </Link>
                   </div>
                   <div className="relative">
@@ -304,7 +306,7 @@ export default function LoginPage() {
                       Signing in…
                     </>
                   ) : (
-                    "Sign in"
+                    t("login")
                   )}
                 </Button>
               </form>
@@ -328,7 +330,7 @@ export default function LoginPage() {
           </Card>
 
           <p className="mt-6 text-center text-sm text-white/60">
-            Don&apos;t have an account?{" "}
+            {t("auth_noAccount")}{" "}
             <Link href="/signup" className="link-ink text-saffron-300 hover:text-saffron-200">
               Contact your administrator
             </Link>

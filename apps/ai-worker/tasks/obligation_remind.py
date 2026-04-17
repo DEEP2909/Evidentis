@@ -5,10 +5,13 @@ import os
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import httpx
 from celery import shared_task
 
 logger = logging.getLogger(__name__)
+
+IST = ZoneInfo('Asia/Kolkata')
 
 API_SERVICE_URL = os.getenv('API_SERVICE_URL', 'http://api:4000')
 
@@ -24,7 +27,7 @@ def send_daily_reminders(self) -> Dict[str, Any]:
     try:
         with httpx.Client(timeout=120.0) as client:
             # Get all upcoming obligations across tenants
-            today = datetime.utcnow().date()
+            today = datetime.now(tz=IST).date()
             upcoming_dates = [
                 (today, 'today'),
                 (today + timedelta(days=1), 'tomorrow'),
@@ -146,7 +149,7 @@ def send_obligation_reminder(
                     'X-Tenant-ID': tenant_id,
                     'X-Internal-Key': get_internal_key(),
                 },
-                json={'period': period, 'sent_at': datetime.utcnow().isoformat()},
+                json={'period': period, 'sent_at': datetime.now(tz=IST).isoformat()},
             )
             
             logger.info(f'Reminder sent for obligation {obligation_id}')
@@ -246,7 +249,7 @@ def send_overdue_alert(
                 last_alert = datetime.fromisoformat(
                     obligation['last_overdue_alert'].replace('Z', '+00:00')
                 )
-                if (datetime.utcnow() - last_alert).hours < 24:
+                if (datetime.now(tz=IST) - last_alert).total_seconds() < 86400:  # 24 hours
                     return {'status': 'skipped', 'reason': 'Alert sent within 24h'}
             
             # Get assignees and matter lead
@@ -305,7 +308,7 @@ def send_overdue_alert(
                     'X-Tenant-ID': tenant_id,
                     'X-Internal-Key': get_internal_key(),
                 },
-                json={'last_overdue_alert': datetime.utcnow().isoformat()},
+                json={'last_overdue_alert': datetime.now(tz=IST).isoformat()},
             )
             
             return {
@@ -483,7 +486,7 @@ def calculate_days_overdue(due_date_str: Optional[str]) -> int:
         return 0
     try:
         due_date = datetime.fromisoformat(due_date_str.replace('Z', '+00:00'))
-        delta = datetime.utcnow() - due_date
+        delta = datetime.now(tz=IST) - due_date
         return max(0, delta.days)
     except:
         return 0

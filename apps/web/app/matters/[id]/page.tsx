@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useDropzone } from "react-dropzone";
 import {
   ArrowLeft,
@@ -27,16 +27,21 @@ import {
   RefreshCw,
   BarChart3,
   History,
+  ChevronDown,
+  Sparkles,
+  ThumbsDown,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { matters, documents, clauses, flags, obligations } from "@/lib/api";
+import { matters, documents, clauses, flags, obligations, research } from "@/lib/api";
 import { formatDate, getRiskColor, CLAUSE_TYPE_LABELS } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AiDisclaimer, AiGeneratedContent } from "@/components/shared/AiDisclaimer";
+import { useTranslation } from "react-i18next";
 
 type TabType = "documents" | "clauses" | "flags" | "obligations" | "research" | "timeline" | "analytics";
 
@@ -48,6 +53,7 @@ export default function MatterDetailPage() {
 
   const [activeTab, setActiveTab] = useState<TabType>("documents");
   const [isUploading, setIsUploading] = useState(false);
+  const { t } = useTranslation();
 
   // Fetch matter details
   const { data: matter, isLoading: matterLoading } = useQuery({
@@ -156,9 +162,9 @@ export default function MatterDetailPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Matter not found</h2>
+          <h2 className="text-xl font-semibold mb-2">{t("mat_noMatters")}</h2>
           <Button asChild>
-            <Link href="/matters">Back to Matters</Link>
+            <Link href="/matters">{t("back")}</Link>
           </Button>
         </div>
       </div>
@@ -166,13 +172,13 @@ export default function MatterDetailPage() {
   }
 
   const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
-    { id: "documents", label: "Documents", icon: FileText },
-    { id: "clauses", label: "Clauses", icon: BookOpen },
-    { id: "flags", label: "Flags", icon: Flag },
-    { id: "obligations", label: "Obligations", icon: Calendar },
-    { id: "research", label: "Research", icon: Search },
-    { id: "timeline", label: "Timeline", icon: History },
-    { id: "analytics", label: "Analytics", icon: BarChart3 },
+    { id: "documents", label: t("mat_tab_documents"), icon: FileText },
+    { id: "clauses", label: t("mat_tab_clauses"), icon: BookOpen },
+    { id: "flags", label: t("mat_tab_flags"), icon: Flag },
+    { id: "obligations", label: t("mat_tab_obligations"), icon: Calendar },
+    { id: "research", label: t("mat_tab_research"), icon: Search },
+    { id: "timeline", label: t("mat_tab_timeline"), icon: History },
+    { id: "analytics", label: t("mat_tab_analytics"), icon: BarChart3 },
   ];
 
   const totalDocuments = analytics?.totalDocuments ?? 0;
@@ -383,79 +389,9 @@ export default function MatterDetailPage() {
           </div>
         )}
 
-        {/* Flags Tab */}
+        {/* Flags Tab — sorted by severity, color-coded, low/medium collapsed */}
         {activeTab === "flags" && (
-          <div className="space-y-4">
-            <AiDisclaimer variant="default" className="mb-4" />
-            {flagsData?.data?.map((flag) => (
-              <Card key={flag.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="h-3 w-3 rounded-full mt-1.5"
-                      style={{
-                        backgroundColor: getRiskColor(
-                          flag.severity === "critical"
-                            ? "critical"
-                            : flag.severity === "warn"
-                            ? "medium"
-                            : "low"
-                        ),
-                      }}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge
-                          variant={
-                            flag.severity === "critical"
-                              ? "critical"
-                              : flag.severity === "warn"
-                              ? "medium"
-                              : "low"
-                          }
-                        >
-                          {flag.severity}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {flag.flagType}
-                        </span>
-                      </div>
-                      <p className="font-medium">{flag.reason}</p>
-                      {flag.recommendedFix && (
-                        <AiGeneratedContent disclaimerVariant="inline" className="mt-2">
-                          <p className="text-sm text-muted-foreground">
-                            Suggestion: {flag.recommendedFix}
-                          </p>
-                        </AiGeneratedContent>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => flagMutation.mutate({ flagId: flag.id, status: "accepted" })}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => flagMutation.mutate({ flagId: flag.id, status: "rejected" })}
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {!flagsData?.data?.length && (
-              <div className="text-center py-12 text-muted-foreground">
-                <Flag className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No flags generated yet.</p>
-              </div>
-            )}
-          </div>
+          <FlagsTabContent flagsData={flagsData} flagMutation={flagMutation} />
         )}
 
         {/* Obligations Tab */}
@@ -497,26 +433,9 @@ export default function MatterDetailPage() {
           </div>
         )}
 
-        {/* Research Tab */}
+        {/* Research Tab — wired to API */}
         {activeTab === "research" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Legal Research</CardTitle>
-              <CardDescription>
-                Ask questions about this matter&apos;s documents
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                <Input placeholder="e.g., What are the termination conditions?" />
-                <Button variant="gold">
-                  <Search className="h-4 w-4 mr-2" />
-                  Research
-                </Button>
-              </div>
-              <AiDisclaimer variant="compact" className="mt-4" />
-            </CardContent>
-          </Card>
+          <ResearchTabContent matterId={matterId} />
         )}
 
         {/* Timeline Tab */}
@@ -731,5 +650,170 @@ export default function MatterDetailPage() {
         )}
       </main>
     </div>
+  );
+}
+
+/* ── Flags Tab with severity sort + color + collapse ── */
+const SEVERITY_ORDER: Record<string, number> = { critical: 0, warn: 1, info: 2 };
+const SEVERITY_COLORS: Record<string, { border: string; bg: string; text: string }> = {
+  critical: { border: "border-red-500/40", bg: "bg-red-500/10", text: "text-red-300" },
+  warn:     { border: "border-amber-500/40", bg: "bg-amber-500/10", text: "text-amber-300" },
+  info:     { border: "border-blue-500/40", bg: "bg-blue-500/10", text: "text-blue-300" },
+};
+
+function FlagsTabContent({ flagsData, flagMutation }: { flagsData: any; flagMutation: any }) {
+  const [showLowMedium, setShowLowMedium] = useState(false);
+
+  const sortedFlags = useMemo(() => {
+    if (!flagsData?.data) return [];
+    return [...flagsData.data].sort(
+      (a: any, b: any) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3)
+    );
+  }, [flagsData]);
+
+  const criticalHighFlags = sortedFlags.filter((f: any) => f.severity === "critical");
+  const otherFlags = sortedFlags.filter((f: any) => f.severity !== "critical");
+
+  const renderFlag = (flag: any) => {
+    const colors = SEVERITY_COLORS[flag.severity] ?? SEVERITY_COLORS.info;
+    return (
+      <Card key={flag.id} className={`${colors.border} border`}>
+        <CardContent className="p-4">
+          <div className="flex items-start gap-4">
+            <div
+              className="h-3 w-3 rounded-full mt-1.5 shrink-0"
+              style={{ backgroundColor: getRiskColor(flag.severity === "critical" ? "critical" : flag.severity === "warn" ? "medium" : "low") }}
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Badge className={`${colors.bg} ${colors.text} ${colors.border}`}>
+                  {flag.severity === "critical" ? "Critical" : flag.severity === "warn" ? "Warning" : "Info"}
+                </Badge>
+                <span className="text-sm text-muted-foreground">{flag.flagType}</span>
+              </div>
+              <p className="font-medium">{flag.reason}</p>
+              {flag.recommendedFix && (
+                <AiGeneratedContent disclaimerVariant="inline" className="mt-2">
+                  <p className="text-sm text-muted-foreground">Suggestion: {flag.recommendedFix}</p>
+                </AiGeneratedContent>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => flagMutation.mutate({ flagId: flag.id, status: "accepted" })}>Accept</Button>
+              <Button variant="outline" size="sm" onClick={() => flagMutation.mutate({ flagId: flag.id, status: "rejected" })}>Reject</Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <AiDisclaimer variant="default" className="mb-4" />
+
+      {/* Critical/High flags — always visible */}
+      {criticalHighFlags.map(renderFlag)}
+
+      {/* Low/Medium — collapsed by default */}
+      {otherFlags.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowLowMedium(!showLowMedium)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronDown className={`h-4 w-4 transition-transform ${showLowMedium ? "rotate-180" : ""}`} />
+            {showLowMedium ? "Hide" : "Show"} {otherFlags.length} lower-priority flag{otherFlags.length !== 1 ? "s" : ""}
+          </button>
+          <AnimatePresence>
+            {showLowMedium && otherFlags.map(renderFlag)}
+          </AnimatePresence>
+        </>
+      )}
+
+      {!flagsData?.data?.length && (
+        <div className="text-center py-12 text-muted-foreground">
+          <Flag className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p>No flags generated yet.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Research Tab — wired to real API ── */
+function ResearchTabContent({ matterId }: { matterId: string }) {
+  const [query, setQuery] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [isResearching, setIsResearching] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim() || isResearching) return;
+
+    setIsResearching(true);
+    setAnswer("");
+
+    try {
+      const result = await research.query({
+        query: query.trim(),
+        matterId,
+      });
+      setAnswer(result.answer);
+    } catch (err) {
+      console.error("Research error:", err);
+      setAnswer("Unable to process your research query right now. Please try again.");
+    } finally {
+      setIsResearching(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          Legal Research
+        </CardTitle>
+        <CardDescription>
+          Ask questions about this matter&apos;s documents
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <Input
+            placeholder="e.g., What are the termination conditions?"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            disabled={isResearching}
+          />
+          <Button type="submit" variant="gold" disabled={isResearching || !query.trim()}>
+            {isResearching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-2" />
+                Research
+              </>
+            )}
+          </Button>
+        </form>
+
+        {answer && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 rounded-lg border bg-muted/30 p-4"
+          >
+            <AiGeneratedContent disclaimerVariant="compact">
+              <p className="text-sm whitespace-pre-wrap">{answer}</p>
+            </AiGeneratedContent>
+          </motion.div>
+        )}
+
+        <AiDisclaimer variant="compact" className="mt-4" />
+      </CardContent>
+    </Card>
   );
 }

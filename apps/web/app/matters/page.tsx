@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { matters, type CreateMatterInput } from "@/lib/api";
 import { formatDate, INDIAN_STATES } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const createMatterSchema = z.object({
   name: z.string().min(1, "Matter name is required"),
@@ -73,6 +74,7 @@ function HealthMiniDonut({ value }: { value: number }) {
 export default function MattersPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>("all");
@@ -164,19 +166,19 @@ export default function MattersPage() {
   ];
 
   return (
-    <AppShell title="Matters">
+    <AppShell title={t("nav_matters")}>
       <div className="space-y-6 page-enter">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-saffron-300">India Legal Operations</p>
-            <h2 className="mt-1 text-2xl font-semibold">Manage matters across courts and tribunals</h2>
+            <p className="text-xs uppercase tracking-[0.28em] text-saffron-300">{t("mat_indiaOps")}</p>
+            <h2 className="mt-1 text-2xl font-semibold">{t("mat_subtitle")}</h2>
           </div>
 
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                New Matter
+                {t("mat_createMatter")}
               </Button>
             </DialogTrigger>
             <DialogContent className="glass border-white/20 bg-slate-950 text-white sm:max-w-lg">

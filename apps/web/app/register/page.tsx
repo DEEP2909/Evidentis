@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandLogo } from "@/components/india/BrandLogo";
+import { useTranslation } from "react-i18next";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -55,6 +56,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isStakeholder, setIsStakeholder] = useState(false);
   const router = useRouter();
+  const { t } = useTranslation();
 
   const {
     register,
@@ -164,17 +166,17 @@ export default function RegisterPage() {
           <Card className="border border-white/[0.06] bg-white/[0.02] backdrop-blur-xl shadow-2xl shadow-black/40">
             <CardHeader className="space-y-2 pb-4">
               <CardTitle className="text-2xl text-center font-serif text-white tracking-tight">
-                Create Account
+                {t("auth_registerTitle")}
               </CardTitle>
               <CardDescription className="text-center text-white/40">
-                Enter your details to start your free 30-day trial
+                {t("auth_registerSubtitle")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-white/60 text-xs uppercase tracking-wider">
-                    Full Name
+                    {t("auth_fullName")}
                   </Label>
                   <Input
                     id="name"
@@ -190,7 +192,7 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-white/60 text-xs uppercase tracking-wider">
-                    Email
+                    {t("auth_email")}
                   </Label>
                   <Input
                     id="email"
@@ -206,7 +208,7 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-white/60 text-xs uppercase tracking-wider">
-                    Password
+                    {t("auth_password")}
                   </Label>
                   <div className="relative">
                     <Input
@@ -231,7 +233,7 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword" className="text-white/60 text-xs uppercase tracking-wider">
-                    Confirm Password
+                    {t("auth_confirmPassword")}
                   </Label>
                   <div className="relative">
                     <Input
@@ -315,9 +317,9 @@ export default function RegisterPage() {
               </form>
 
               <div className="mt-6 text-center text-sm text-white/30">
-                Already have an account?{" "}
+                {t("auth_hasAccount")}{" "}
                 <Link href="/login" className="text-[#ff9933] hover:text-[#ffcf8c] transition-colors">
-                  Sign in
+                  {t("login")}
                 </Link>
               </div>
 

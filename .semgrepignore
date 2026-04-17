@@ -1,0 +1,5 @@
+# Vendored helper assets (not part of product runtime)
+skills-main/
+
+# Local workspace metadata
+.orchids/

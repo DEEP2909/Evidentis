@@ -133,12 +133,12 @@ export default function TemplatesPage() {
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-semibold uppercase tracking-wider text-white/40 mb-1.5 block">{t("tpl_nameLabel", { defaultValue: "Template Name" })}</label>
-                    <Input placeholder={t("tpl_namePlaceholder", { defaultValue: "e.g. Master Services Agreement" })} className="bg-white/5 border-white/10 focus-saffron text-sm rounded-xl h-11" />
+                    <label htmlFor="template-name" className="text-xs font-semibold uppercase tracking-wider text-white/40 mb-1.5 block">{t("tpl_nameLabel", { defaultValue: "Template Name" })}</label>
+                    <Input id="template-name" placeholder={t("tpl_namePlaceholder", { defaultValue: "e.g. Master Services Agreement" })} className="bg-white/5 border-white/10 focus-saffron text-sm rounded-xl h-11" />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold uppercase tracking-wider text-white/40 mb-1.5 block">{t("tpl_categoryLabel", { defaultValue: "Category" })}</label>
-                    <Input placeholder={t("tpl_categoryPlaceholder", { defaultValue: "e.g. Corporate" })} className="bg-white/5 border-white/10 focus-saffron text-sm rounded-xl h-11" />
+                    <label htmlFor="template-category" className="text-xs font-semibold uppercase tracking-wider text-white/40 mb-1.5 block">{t("tpl_categoryLabel", { defaultValue: "Category" })}</label>
+                    <Input id="template-category" placeholder={t("tpl_categoryPlaceholder", { defaultValue: "e.g. Corporate" })} className="bg-white/5 border-white/10 focus-saffron text-sm rounded-xl h-11" />
                   </div>
                   
                   <button type="button" className="w-full mt-4 group relative flex h-12 items-center justify-center overflow-hidden rounded-xl bg-white font-medium text-black transition-all hover:scale-[1.02] active:scale-[0.98]">

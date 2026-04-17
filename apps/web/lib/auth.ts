@@ -69,7 +69,7 @@ export const useAuthStore = create<AuthState>()(
             // Use advocate profile from login response directly to avoid
             // a second round-trip to /auth/me that can fail and undo login.
             const loginProfile = response.advocate ?? response.attorney ?? null;
-            const user = loginProfile && loginProfile.id ? loginProfile : await auth.me();
+            const user = loginProfile?.id ? loginProfile : await auth.me();
 
             set({
               user,

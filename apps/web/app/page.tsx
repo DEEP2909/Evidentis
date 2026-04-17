@@ -250,9 +250,10 @@ export default function HomePage() {
               <div className="grid gap-3 h-full">
                 {features.map((feature, i) => (
                   <motion.div key={feature.title} variants={slideInRight}>
-                    <div
+                    <button
+                      type="button"
                       onClick={() => setActiveFeature(feature)}
-                      className="flex items-center border border-white/[0.04] bg-[#111114] p-4 transition-all duration-300 hover:bg-[#1a1a20] hover:border-[#ff9933]/30 cursor-pointer group rounded-sm shadow-[0_0_0_0_rgba(255,153,51,0)] hover:shadow-[0_0_20px_-5px_rgba(255,153,51,0.15)] block w-full relative overflow-hidden"
+                      className="flex items-center border border-white/[0.04] bg-[#111114] p-4 transition-all duration-300 hover:bg-[#1a1a20] hover:border-[#ff9933]/30 cursor-pointer group rounded-sm shadow-[0_0_0_0_rgba(255,153,51,0)] hover:shadow-[0_0_20px_-5px_rgba(255,153,51,0.15)] block w-full relative overflow-hidden text-left"
                     >
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center bg-black/60 border border-white/[0.08] text-white/40 group-hover:text-[#ff9933] group-hover:border-[#ff9933]/40 transition-all duration-300 z-10 relative">
                         <feature.icon className="h-4.5 w-4.5" />
@@ -269,7 +270,7 @@ export default function HomePage() {
                         <Plus className="h-4 w-4 text-[#ff9933]" />
                       </div>
                       <div className="absolute right-0 top-0 h-full w-32 bg-gradient-to-l from-[#ff9933]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0" />
-                    </div>
+                    </button>
                   </motion.div>
                 ))}
               </div>

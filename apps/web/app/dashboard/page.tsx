@@ -39,8 +39,8 @@ function DashboardKpiGrid({ kpis, isLoading }: { kpis: readonly Kpi[]; isLoading
   if (isLoading) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <KpiSkeleton key={`skel-${i}`} />
+        {["kpi-1", "kpi-2", "kpi-3", "kpi-4"].map((id) => (
+          <KpiSkeleton key={id} />
         ))}
       </div>
     );

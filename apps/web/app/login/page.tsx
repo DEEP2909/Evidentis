@@ -1,8 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
+
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2, ShieldCheck, Lock, Globe2 } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -103,8 +105,11 @@ function MfaSteps({ mfaRequired }: { mfaRequired: boolean }) {
   );
 }
 
-export default function LoginPage() {
+
+
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, mfaRequired, error, clearError } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -126,7 +131,8 @@ export default function LoginPage() {
       const success = await login(data.email, data.password);
       if (success && !mfaRequired) {
         toast.success(t("auth_loginTitle"));
-        router.push("/dashboard");
+        const returnUrl = searchParams.get("returnUrl");
+        router.push(returnUrl ? decodeURIComponent(returnUrl) : "/dashboard");
       }
     } finally {
       setIsSubmitting(false);
@@ -341,5 +347,13 @@ export default function LoginPage() {
 
       <MfaDialog />
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-slate-950"><Loader2 className="h-8 w-8 animate-spin text-saffron-500" /></div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

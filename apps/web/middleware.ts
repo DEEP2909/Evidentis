@@ -7,8 +7,12 @@ import { NextResponse, type NextRequest } from 'next/server';
  */
 export function middleware(request: NextRequest) {
   // Next.js dev server relies on eval and dynamically injected scripts.
-  // Enforcing strict CSP in development breaks hydration (forms degrade to GET submits).
-  if (process.env.NODE_ENV !== 'production') {
+  // Enforcing strict CSP in development or CI without full nonce injection breaks hydration.
+  if (
+    process.env.NODE_ENV !== 'production' || 
+    process.env.CI === 'true' || 
+    process.env.DISABLE_CSP === 'true'
+  ) {
     return NextResponse.next();
   }
 

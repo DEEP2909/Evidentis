@@ -9,6 +9,12 @@
 import { Pool } from 'pg';
 import { createHash, randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Force load the root .env file regardless of CWD execution
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') }); // Fallback
 
 // ============================================================================
 // CONFIGURATION

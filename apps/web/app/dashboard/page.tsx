@@ -128,19 +128,36 @@ function OnboardingChecklist({ userRole }: { userRole: string }) {
   const [completed, setCompleted] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("evidentis_onboarding");
-      if (stored === "dismissed") {
-        setDismissed(true);
-        return;
+    if (typeof window === "undefined") return;
+
+    const stored = localStorage.getItem("evidentis_onboarding");
+    if (stored === "dismissed") {
+      setDismissed(true);
+      return;
+    }
+
+    // Try server-side first, fall back to localStorage
+    const loadOnboarding = async () => {
+      try {
+        const { onboarding } = await import("@/lib/api");
+        const serverState = await onboarding.getStatus();
+        if (Object.keys(serverState).length > 0) {
+          setCompleted(serverState);
+          return;
+        }
+      } catch {
+        // API unavailable — fall through to localStorage
       }
+
       try {
         const parsed = JSON.parse(stored || "{}");
         setCompleted(parsed);
       } catch {
         // ignore
       }
-    }
+    };
+
+    loadOnboarding();
   }, []);
 
   if (dismissed || userRole !== "admin") return null;

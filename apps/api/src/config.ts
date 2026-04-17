@@ -3,9 +3,23 @@
  * India-first environment configuration with DPDP, Razorpay, MSG91,
  * IndiaKanoon, eCourts, and data-localisation defaults.
  */
-
 import fs from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
+import dotenv from 'dotenv';
+
+const envCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), '../../.env'),
+  path.resolve(process.cwd(), '../.env'),
+];
+
+for (const candidate of envCandidates) {
+  if (fs.existsSync(candidate)) {
+    dotenv.config({ path: candidate });
+    break;
+  }
+}
 
 const isProductionEnv = process.env.NODE_ENV === 'production';
 const DEV_APP_ENCRYPTION_KEY =
@@ -47,7 +61,7 @@ const configSchema = z.object({
   S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('false'),
 
   AI_SERVICE_URL: z.string().url().default('http://localhost:5000'),
-  AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(60000),
+  AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(180000),
   AI_SERVICE_INTERNAL_KEY: z.string().optional(),
 
   MALWARE_SCANNER: z.enum(['clamav', 'none']).default('clamav'),
@@ -177,7 +191,11 @@ export const isProduction = config.NODE_ENV === 'production';
 export const isDevelopment = config.NODE_ENV === 'development';
 export const isTest = config.NODE_ENV === 'test';
 
-export const corsOrigins = config.CORS_ORIGINS.split(',').map((origin) => origin.trim());
+export const corsOrigins = [
+  ...config.CORS_ORIGINS.split(',').map((origin) => origin.trim()),
+  'http://127.0.0.1:3000',
+  'http://localhost:3000'
+];
 export const trustProxy = config.TRUST_PROXY === 'true';
 
 export const passwordPolicy = {

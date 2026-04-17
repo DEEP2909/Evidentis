@@ -2020,6 +2020,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': request.headers.origin || 'http://localhost:3000',
+      'Access-Control-Allow-Credentials': 'true',
     });
 
     const sendEvent = (data: object) => {

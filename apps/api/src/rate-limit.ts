@@ -41,6 +41,12 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
     keyPrefix: 'rl:ai',
     message: 'AI request limit reached. Please try again later.',
   },
+  ai_burst: {
+    windowMs: 60 * 1000,       // 1 minute
+    maxRequests: 5,
+    keyPrefix: 'rl:ai:burst',
+    message: 'Too many AI requests in a short period. Please wait a moment before trying again.',
+  },
   api: {
     windowMs: 60 * 60 * 1000,  // 1 hour
     maxRequests: 1000,
@@ -154,6 +160,30 @@ export function createRateLimiter(limitType: keyof typeof RATE_LIMITS) {
       });
       return reply;
     }
+  };
+}
+
+/**
+ * Create a dual rate limiter that enforces both an hourly and burst (per-minute) limit.
+ * Both limits apply: if either is exceeded, the request is rejected.
+ */
+export function createDualRateLimiter(
+  primaryType: keyof typeof RATE_LIMITS,
+  burstType: keyof typeof RATE_LIMITS
+) {
+  const primaryHandler = createRateLimiter(primaryType);
+  const burstHandler = createRateLimiter(burstType);
+
+  return async function dualRateLimitHandler(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    // Check burst limit first (more likely to trigger)
+    await burstHandler(request, reply);
+    if (reply.sent) return;
+
+    // Then check hourly limit
+    await primaryHandler(request, reply);
   };
 }
 

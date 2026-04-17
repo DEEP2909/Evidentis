@@ -220,6 +220,66 @@ const en = {
   auth_password: 'Password',
   auth_confirmPassword: 'Confirm password',
   auth_fullName: 'Full name',
+
+  // Shell chrome
+  shell_subtitle: 'Legal Intelligence',
+  shell_nyayAssistFab: 'Nyay Assist',
+
+  // Auth flow states
+  auth_signingIn: 'Signing in…',
+  auth_stepCredentials: 'Credentials',
+  auth_stepMFA: 'MFA',
+  auth_stepAccess: 'Access',
+
+  // Trust badges
+  trust_dpdp: 'DPDP Compliant',
+  trust_mfa: 'MFA Protected',
+  trust_dataResidency: 'India Data Residency',
+
+  // Auth misc
+  auth_contactAdmin: 'Contact your administrator',
+
+  // Trial CTA
+  trial_upgradeCta: 'Upgrade →',
+
+  // Login hero panel
+  auth_heroTitle1: 'India-Ready Legal',
+  auth_heroTitle2: 'Intelligence Platform',
+  auth_heroSubtitle: 'Run multilingual legal operations with AI workflows across all Indian states and UTs.',
+  auth_statLanguages: 'Languages',
+  auth_statJurisdictions: 'Jurisdictions',
+  auth_statAligned: 'Aligned',
+
+  // Landing Page Features & Marquee
+  landing_heroEyebrow: 'India-First Legal AI',
+  landing_heroTitle1: 'Intelligent ',
+  landing_heroTitle2: 'Decision',
+  landing_heroTitle3: 'System',
+  landing_heroSubtitle: 'EvidentIS represents a paradigm shift for Indian legal tech. Built symmetrically with the latest DPDP standards and equipped with a 36-jurisdiction neural corpus.',
+  landing_ctaTrial: 'Start Free Trial',
+  landing_ctaOpen: 'Open Platform',
+  landing_ctaStakeholder: 'Register as a Stakeholder',
+  landing_feature1Title: '{{count}}-Language UX',
+  landing_feature1Desc: 'Deep integrations with BNS/BNSS translations in regional dialects.',
+  landing_feature2Title: 'India Legal Corpus',
+  landing_feature2Desc: 'Real-time updates to Bare acts, case-law, and eCourts matters.',
+  landing_feature3Title: 'Court Operations',
+  landing_feature3Desc: 'Algorithmic hearing alerts and Tribunal-aware limitation limits.',
+  landing_feature4Title: 'DPDP Ready',
+  landing_feature4Desc: 'India-localized data default, transparent audit and sovereign encryption.',
+  landing_opFramework: 'Operational Framework',
+  landing_trustedAcross: 'Trusted Across',
+  landing_trialBadge: '30 Days Free — No card required',
+
+  // Templates Add
+  tpl_addTemplate: 'Create Template',
+  tpl_addTemplateDesc: 'Design a new generative clause template.',
+  tpl_categoryAll: 'all',
+  tpl_langsCount: '{{count}} langs',
+  tpl_features: 'Jurisdiction-aware clauses, multilingual drafts, and filing guidance available.',
+
+  // Document Upload
+  doc_uploadLimit: 'PDF, DOCX, DOC • Max 50MB per file',
 };
 
 // ============================================================================
@@ -300,6 +360,25 @@ const hi: typeof en = {
   auth_noAccount: 'खाता नहीं है?', auth_hasAccount: 'पहले से खाता है?',
   auth_email: 'ईमेल', auth_password: 'पासवर्ड', auth_confirmPassword: 'पासवर्ड की पुष्टि करें', auth_fullName: 'पूरा नाम',
   redirecting: 'पुनर्निर्देशित हो रहा है…',
+  shell_subtitle: 'कानूनी बुद्धिमत्ता', shell_nyayAssistFab: 'न्याय असिस्ट',
+  auth_signingIn: 'साइन इन हो रहा है…', auth_stepCredentials: 'प्रमाण-पत्र', auth_stepMFA: 'MFA', auth_stepAccess: 'पहुँच',
+  trust_dpdp: 'DPDP अनुपालित', trust_mfa: 'MFA संरक्षित', trust_dataResidency: 'भारत डेटा रेसीडेंसी',
+  auth_contactAdmin: 'अपने व्यवस्थापक से संपर्क करें', trial_upgradeCta: 'अपग्रेड →',
+  auth_heroTitle1: 'भारत-तैयार कानूनी', auth_heroTitle2: 'बुद्धिमत्ता प्लेटफ़ॉर्म',
+  auth_heroSubtitle: 'सभी भारतीय राज्यों और केंद्र शासित प्रदेशों में एआई कार्यप्रवाह के साथ बहुभाषी कानूनी संचालन चलाएं।',
+  auth_statLanguages: 'भाषाएँ', auth_statJurisdictions: 'क्षेत्राधिकार', auth_statAligned: 'संरेखित',
+  landing_heroEyebrow: 'भारत की पहली कानूनी एआई',
+  landing_heroTitle1: 'बुद्धिमान ', landing_heroTitle2: 'निर्णय', landing_heroTitle3: 'प्रणाली',
+  landing_heroSubtitle: 'EvidentIS भारतीय कानूनी तकनीक के लिए एक आदर्श बदलाव का प्रतिनिधित्व करता है। नवीनतम DPDP मानकों के साथ निर्मित और 36-क्षेत्राधिकार के तंत्रिका कोष से सुसज्जित।',
+  landing_ctaTrial: 'नि:शुल्क परीक्षण शुरू करें', landing_ctaOpen: 'ओपन प्लेटफॉर्म', landing_ctaStakeholder: 'हितधारक के रूप में पंजीकरण करें',
+  landing_feature1Title: '{{count}}-भाषा UX', landing_feature1Desc: 'क्षेत्रीय बोलियों में BNS/BNSS अनुवाद के साथ गहन एकीकरण।',
+  landing_feature2Title: 'भारतीय कानूनी निकाय', landing_feature2Desc: 'बेयर एक्ट्स, केस-लॉ और ईकॉर्ट्स मामलों के वास्तविक समय के अपडेट।',
+  landing_feature3Title: 'न्यायालय संचालन', landing_feature3Desc: 'एल्गोरिदमिक सुनवाई अलर्ट और ट्रिब्यूनल-वाकिफ़ परिसीमा सीमाएँ।',
+  landing_feature4Title: 'DPDP तैयार', landing_feature4Desc: 'भारत-स्थानीय डेटा डिफ़ॉल्ट, पारदर्शी ऑडिट और संप्रभु एन्क्रिप्शन।',
+  landing_opFramework: 'परिचालन ढांचा', landing_trustedAcross: 'वहां तक भरोंसा', landing_trialBadge: '30 दिन नि:शुल्क — कोई कार्ड आवश्यक नहीं',
+  tpl_addTemplate: 'टेम्पलेट बनाएं', tpl_addTemplateDesc: 'एक नया जनरेटिव क्लॉज टेम्पलेट डिज़ाइन करें।',
+  tpl_categoryAll: 'सभी', tpl_langsCount: '{{count}} भाषाएं', tpl_features: 'क्षेत्राधिकार-संवेदनशील खंड, बहुभाषी ड्राफ्ट, और फाइलिंग मार्गदर्शन।',
+  doc_uploadLimit: 'PDF, DOCX, DOC • प्रति फ़ाइल अधिकतम 50MB',
 };
 
 const bn: typeof en = {
@@ -331,6 +410,25 @@ const bn: typeof en = {
   res_headline: 'ভারতীয় ধারা, রায় এবং বহুভাষিক উত্তর দিয়ে গবেষণা করুন।', res_placeholder: 'একটি আইনি গবেষণা প্রশ্ন জিজ্ঞাসা করুন…',
   res_startTitle: 'আপনার গবেষণা শুরু করুন', cal_title: 'বাধ্যবাধকতা ক্যালেন্ডার', bill_title: 'বিলিং এবং সাবস্ক্রিপশন',
   auth_loginTitle: 'আবার স্বাগতম', auth_registerTitle: 'আপনার অ্যাকাউন্ট তৈরি করুন',
+  shell_subtitle: 'আইনি বুদ্ধিমত্তা', shell_nyayAssistFab: 'ন্যায় অ্যাসিস্ট',
+  auth_signingIn: 'সাইন ইন হচ্ছে…', auth_stepCredentials: 'শংসাপত্র', auth_stepMFA: 'MFA', auth_stepAccess: 'অ্যাক্সেস',
+  trust_dpdp: 'DPDP অনুবর্তী', trust_mfa: 'MFA সুরক্ষিত', trust_dataResidency: 'ভারত ডেটা রেসিডেন্সি',
+  auth_contactAdmin: 'আপনার প্রশাসকের সাথে যোগাযোগ করুন', trial_upgradeCta: 'আপগ্রেড →',
+  auth_heroTitle1: 'ভারত-প্রস্তুত আইনি', auth_heroTitle2: 'বুদ্ধিমত্তা প্ল্যাটফর্ম',
+  auth_heroSubtitle: 'সমস্ত ভারতীয় রাজ্য ও কেন্দ্রশাসিত অঞ্চল জুড়ে এআই ওয়ার্কফ্লোর মাধ্যমে বহুভাষিক আইনি কার্যক্রম পরিচালনা করুন।',
+  auth_statLanguages: 'ভাষা', auth_statJurisdictions: 'এখতিয়ার', auth_statAligned: 'সামঞ্জস্যপূর্ণ',
+  landing_heroEyebrow: 'ভারতের প্রথম লিগ্যাল এআই',
+  landing_heroTitle1: 'বুদ্ধিমান ', landing_heroTitle2: 'সিদ্ধান্ত', landing_heroTitle3: 'ব্যবস্থা',
+  landing_heroSubtitle: 'EvidentIS ভারতীয় আইনি প্রযুক্তির জন্য একটি নতুন দৃষ্টান্ত। সর্বশেষ DPDP মান অনুযায়ী তৈরি এবং 36-এখতিয়ার নিউরাল কর্পাস দিয়ে সজ্জিত।',
+  landing_ctaTrial: 'বিনামূল্যে ট্রায়াল শুরু করুন', landing_ctaOpen: 'ওপেন প্ল্যাটফর্ম', landing_ctaStakeholder: 'স্টেকহোল্ডার হিসেবে নিবন্ধন করুন',
+  landing_feature1Title: '{{count}}-ভাষার UX', landing_feature1Desc: 'আঞ্চলিক উপভাষায় BNS/BNSS অনুবাদের সাথে গভীর একীকরণ।',
+  landing_feature2Title: 'ভারতীয় আইনি কর্পাস', landing_feature2Desc: 'বেয়ার অ্যাক্টস, কেস-ল এবং ই-কোর্ট মামলার রিয়েল-টাইম আপডেট।',
+  landing_feature3Title: 'আদালতের কার্যক্রম', landing_feature3Desc: 'অ্যালগরিদমিক শুনানির সতর্কতা এবং ট্রাইব্যুনাল-সচেতন সময়সীমা।',
+  landing_feature4Title: 'DPDP প্রস্তুত', landing_feature4Desc: 'ভারত-স্থানীয় ডেটা, স্বচ্ছ অডিট এবং সার্বভৌম এনক্রিপশন।',
+  landing_opFramework: 'অপারেশনাল ফ্রেমওয়ার্ক', landing_trustedAcross: 'বিশ্বস্ত সর্বত্র', landing_trialBadge: '30 দিন বিনামূল্যে — কোনো কার্ডের প্রয়োজন নেই',
+  tpl_addTemplate: 'টেমপ্লেট তৈরি করুন', tpl_addTemplateDesc: 'একটি নতুন জেনারেটিভ ক্লজ টেমপ্লেট ডিজাইন করুন।',
+  tpl_categoryAll: 'সমস্ত', tpl_langsCount: '{{count}} ভাষা', tpl_features: 'এখতিয়ার-সচেতন ক্লজ, বহুভাষিক খসড়া এবং ফাইলিং নির্দেশিকা উপলব্ধ।',
+  doc_uploadLimit: 'PDF, DOCX, DOC • ফাইল প্রতি সর্বোচ্চ 50MB',
 };
 
 const ta: typeof en = {

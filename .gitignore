@@ -35,3 +35,8 @@ certs/
 # Local tooling
 .idea/
 .vscode/
+
+# Internal development files — not product code
+skills-main/
+frontend_promt.md
+*_promt.md

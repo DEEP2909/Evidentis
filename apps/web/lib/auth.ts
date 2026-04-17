@@ -6,7 +6,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Attorney } from "@evidentis/shared";
-import { auth, setTokens, clearTokens, loadTokens } from "./api";
+import { auth, setTokens, clearTokens, loadTokens, getAccessToken } from "./api";
 
 interface AuthState {
   user: Attorney | null;
@@ -59,7 +59,18 @@ export const useAuthStore = create<AuthState>()(
           // Login successful
           if (response.accessToken) {
             setTokens(response.accessToken, response.refreshToken ?? "");
-            const user = await auth.me();
+
+            // Store trial end date for trial banner
+            const trialEndsAt = (response as unknown as Record<string, unknown>).trialEndsAt;
+            if (typeof trialEndsAt === "string" && typeof window !== "undefined") {
+              localStorage.setItem("evidentis_trial_ends_at", trialEndsAt);
+            }
+
+            // Use advocate profile from login response directly to avoid
+            // a second round-trip to /auth/me that can fail and undo login.
+            const loginProfile = response.advocate ?? response.attorney ?? null;
+            const user = loginProfile && loginProfile.id ? loginProfile : await auth.me();
+
             set({
               user,
               isAuthenticated: true,
@@ -131,6 +142,7 @@ export const useAuthStore = create<AuthState>()(
 
       checkAuth: async () => {
         loadTokens();
+        const tokenAtStart = getAccessToken();
         set({ isLoading: true });
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -143,12 +155,20 @@ export const useAuthStore = create<AuthState>()(
           const user = await Promise.race([auth.me(), timeoutPromise]);
           set({ user, isAuthenticated: true, isLoading: false });
         } catch {
-          clearTokens();
-          set({
-            user: null,
-            isAuthenticated: false,
-            isLoading: false,
-          });
+          // Only clear tokens if they haven't changed since checkAuth started.
+          // This prevents a race condition where login() sets new tokens
+          // while checkAuth() is still running with a stale/missing token.
+          const currentToken = getAccessToken();
+          if (currentToken === tokenAtStart) {
+            clearTokens();
+            set({
+              user: null,
+              isAuthenticated: false,
+              isLoading: false,
+            });
+          } else {
+            set({ isLoading: false });
+          }
         } finally {
           if (timeoutId) {
             clearTimeout(timeoutId);

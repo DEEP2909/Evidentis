@@ -61,6 +61,21 @@
       radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,153,51,0.08) 0%, transparent 60%),
       radial-gradient(ellipse 60% 60% at 80% 100%, rgba(15,37,87,0.5) 0%, transparent 50%);
   }
+
+  /* Custom enterprise dark scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/20 rounded-full transition-colors;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/30;
+  }
 }
 
 @layer components {

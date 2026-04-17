@@ -11,42 +11,18 @@ import {
   ChevronRight,
   Users,
   Sparkles,
+  X,
+  Plus,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
 import { SUPPORTED_LANGUAGE_CODES } from "@evidentis/shared";
 
 import { LanguageSwitcher } from "@/components/india/LanguageSwitcher";
 import { BrandLogo } from "@/components/india/BrandLogo";
 
 const languageCount = SUPPORTED_LANGUAGE_CODES.length;
-
-const features = [
-  {
-    icon: Globe2,
-    title: `${languageCount}-Language UX`,
-    description:
-      "Deep integrations with BNS/BNSS translations in regional dialects.",
-  },
-  {
-    icon: Landmark,
-    title: "India Legal Corpus",
-    description:
-      "Real-time updates to Bare acts, case-law, and eCourts matters.",
-  },
-  {
-    icon: CalendarDays,
-    title: "Court Operations",
-    description:
-      "Algorithmic hearing alerts and Tribunal-aware limitation limits.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "DPDP Ready",
-    description:
-      "India-localized data default, transparent audit and sovereign encryption.",
-  },
-];
 
 const marqueeItems = [
   { label: "Supreme Court of India" },
@@ -91,6 +67,39 @@ const slideInRight = {
 
 export default function HomePage() {
   const { t } = useTranslation();
+  const [activeFeature, setActiveFeature] = useState<{
+    icon: any;
+    title: string;
+    description: string;
+    details: string;
+  } | null>(null);
+
+  const features = [
+    {
+      icon: Globe2,
+      title: t("landing_feature1Title", { count: languageCount }),
+      description: t("landing_feature1Desc"),
+      details: t("landing_feature1Details", { defaultValue: "Our proprietary NLU engine translates dense legal boilerplate seamlessly into 23 Indian languages, preserving legal nuance across regions such as Hindi, Bengali, Tamil, and Telugu without losing contextual meaning." }),
+    },
+    {
+      icon: Landmark,
+      title: t("landing_feature2Title"),
+      description: t("landing_feature2Desc"),
+      details: t("landing_feature2Details", { defaultValue: "Direct webhook pipelines connecting directly with High Courts and eCourts. EvidentIS dynamically caches all recent tribunal judgements preventing an outdated corpus." }),
+    },
+    {
+      icon: CalendarDays,
+      title: t("landing_feature3Title"),
+      description: t("landing_feature3Desc"),
+      details: t("landing_feature3Details", { defaultValue: "Mitigate limitation act expirations automatically. Our algorithmic calendar understands specific tribunal filing lengths (NCLT, NCDRC, etc.) and notifies your legal command center instantly." }),
+    },
+    {
+      icon: ShieldCheck,
+      title: t("landing_feature4Title"),
+      description: t("landing_feature4Desc"),
+      details: t("landing_feature4Details", { defaultValue: "Fully aligned with India's new data security framework. Your matter documents rest strictly entirely on domestic servers with immutable SOC-2 audit logging and encryption." }),
+    },
+  ];
 
   return (
     <div className="grain-overlay relative min-h-screen bg-[#060709] text-[#f4f4f5] selection:bg-[#ff9933] selection:text-black overflow-hidden font-sans">
@@ -149,7 +158,7 @@ export default function HomePage() {
               <motion.div variants={fadeUpAnim} className="mb-8">
                 <span className="inline-flex items-center rounded-sm bg-[#ff9933]/[0.08] px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#ffcf8c] border border-[#ff9933]/15">
                   <span className="w-1.5 h-1.5 bg-[#ff9933] rounded-full mr-2.5 animate-pulse" />
-                  India-First Legal AI
+                  {t("landing_heroEyebrow")}
                 </span>
               </motion.div>
 
@@ -157,19 +166,17 @@ export default function HomePage() {
                 variants={fadeUpAnim}
                 className="font-serif text-[3.5rem] leading-[1.02] tracking-tight lg:text-[5rem] antialiased"
               >
-                Intelligent{" "}
-                <span className="italic text-white/30">Decision</span>
+                {t("landing_heroTitle1")}
+                <span className="italic text-white/30">{t("landing_heroTitle2")}</span>
                 <br />
-                System
+                {t("landing_heroTitle3")}
               </motion.h1>
 
               <motion.p
                 variants={fadeUpAnim}
                 className="mt-8 text-lg md:text-xl font-light text-white/50 leading-relaxed max-w-xl"
               >
-                EvidentIS represents a paradigm shift for Indian legal tech.
-                Built symmetrically with the latest DPDP standards and equipped
-                with a 36-jurisdiction neural corpus.
+                {t("landing_heroSubtitle")}
               </motion.p>
 
               <motion.div
@@ -183,7 +190,7 @@ export default function HomePage() {
                 >
                   <span className="relative z-10 flex items-center gap-2 text-sm uppercase tracking-wider font-semibold">
                     <Sparkles className="h-4 w-4" />
-                    Start Free Trial
+                    {t("landing_ctaTrial")}
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </span>
                   <div className="absolute inset-0 bg-[#ff9933] translate-y-[100%] transition-transform duration-300 group-hover:translate-y-[0%] z-0" />
@@ -194,7 +201,7 @@ export default function HomePage() {
                   href="/login"
                   className="inline-flex items-center gap-2 px-6 py-3 text-sm tracking-wide text-white/60 border border-white/10 transition-all hover:text-white hover:border-white/20 hover:bg-white/[0.03]"
                 >
-                  Open Platform
+                  {t("landing_ctaOpen")}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </motion.div>
@@ -206,7 +213,7 @@ export default function HomePage() {
                   className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-white/30 hover:text-[#ff9933] transition-colors"
                 >
                   <Users className="h-3.5 w-3.5" />
-                  Register as a Stakeholder
+                  {t("landing_ctaStakeholder")}
                   <ChevronRight className="h-3 w-3" />
                 </Link>
               </motion.div>
@@ -233,7 +240,7 @@ export default function HomePage() {
                 className="mb-10 flex items-center justify-between"
               >
                 <span className="text-[10px] uppercase tracking-[0.25em] text-[#ffcf8c] font-semibold">
-                  Operational Framework
+                  {t("landing_opFramework")}
                 </span>
                 <span className="text-[9px] uppercase tracking-widest text-white/20 font-mono">
                   v3.2
@@ -242,23 +249,27 @@ export default function HomePage() {
 
               <div className="grid gap-3 h-full">
                 {features.map((feature, i) => (
-                  <motion.div
-                    key={feature.title}
-                    variants={slideInRight}
-                    className="flex items-center border border-white/[0.04] bg-[#111114] p-4 transition-all duration-300 hover:bg-white/[0.04] hover:border-white/[0.08] cursor-crosshair group"
-                  >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center bg-black/60 border border-white/[0.08] text-white/40 group-hover:text-[#ff9933] group-hover:border-[#ff9933]/25 transition-all duration-300">
-                      <feature.icon className="h-4.5 w-4.5" />
+                  <motion.div key={feature.title} variants={slideInRight}>
+                    <div
+                      onClick={() => setActiveFeature(feature)}
+                      className="flex items-center border border-white/[0.04] bg-[#111114] p-4 transition-all duration-300 hover:bg-[#1a1a20] hover:border-[#ff9933]/30 cursor-pointer group rounded-sm shadow-[0_0_0_0_rgba(255,153,51,0)] hover:shadow-[0_0_20px_-5px_rgba(255,153,51,0.15)] block w-full relative overflow-hidden"
+                    >
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center bg-black/60 border border-white/[0.08] text-white/40 group-hover:text-[#ff9933] group-hover:border-[#ff9933]/40 transition-all duration-300 z-10 relative">
+                        <feature.icon className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="ml-4 flex flex-col z-10 relative">
+                        <span className="font-serif text-lg tracking-wide text-white/90 group-hover:text-white transition-colors duration-300">
+                          {feature.title}
+                        </span>
+                        <span className="mt-0.5 text-xs text-white/35 max-w-[280px] truncate group-hover:text-white/60 transition-colors duration-300">
+                          {feature.description}
+                        </span>
+                      </div>
+                      <div className="ml-auto flex items-center justify-center p-2 z-10 relative bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform group-hover:scale-110">
+                        <Plus className="h-4 w-4 text-[#ff9933]" />
+                      </div>
+                      <div className="absolute right-0 top-0 h-full w-32 bg-gradient-to-l from-[#ff9933]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0" />
                     </div>
-                    <div className="ml-4 flex flex-col">
-                      <span className="font-serif text-lg tracking-wide text-white/90">
-                        {feature.title}
-                      </span>
-                      <span className="mt-0.5 text-xs text-white/35 max-w-[280px] truncate">
-                        {feature.description}
-                      </span>
-                    </div>
-                    <ArrowRight className="ml-auto h-3.5 w-3.5 text-white/0 group-hover:text-white/30 transition-all duration-300 translate-x-[-4px] group-hover:translate-x-0" />
                   </motion.div>
                 ))}
               </div>
@@ -279,7 +290,7 @@ export default function HomePage() {
           >
             <span className="w-2 h-2 bg-[#ff9933] rounded-full animate-pulse" />
             <span className="text-xs font-medium tracking-wide text-[#ffcf8c]">
-              30 Days Free — No card required
+              {t("landing_trialBadge")}
             </span>
             <ChevronRight className="h-3.5 w-3.5 text-[#ff9933]/60 group-hover:translate-x-0.5 transition-transform" />
           </Link>
@@ -294,7 +305,7 @@ export default function HomePage() {
         >
           <div className="flex items-center overflow-hidden">
             <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.25em] text-white/25 mr-8">
-              Trusted Across
+              {t("landing_trustedAcross")}
             </span>
             <div className="flex items-center gap-10 whitespace-nowrap opacity-50">
               <motion.div
@@ -319,6 +330,58 @@ export default function HomePage() {
           </div>
         </motion.div>
       </div>
+
+      <AnimatePresence>
+        {activeFeature && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md"
+              onClick={() => setActiveFeature(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, x: "-50%", y: "-40%" }}
+              animate={{ opacity: 1, scale: 1, x: "-50%", y: "-50%" }}
+              exit={{ opacity: 0, scale: 0.95, x: "-50%", y: "-40%" }}
+              className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg rounded-[2rem] border border-white/10 bg-[#0c0c0f] p-8 shadow-2xl glow-ring"
+            >
+              <button
+                type="button"
+                onClick={() => setActiveFeature(null)}
+                className="absolute right-6 top-6 text-white/40 hover:text-white transition-colors"
+                aria-label="Close modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#ff9933]/20 bg-[#ff9933]/10 text-[#ffcf8c]">
+                <activeFeature.icon className="h-7 w-7" />
+              </div>
+              <h2 className="font-serif text-3xl mb-4 font-light tracking-wide text-white/95">{activeFeature.title}</h2>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 mb-6 relative overflow-hidden">
+                <div className="absolute right-0 top-0 h-full w-32 bg-gradient-to-l from-[#ff9933]/5 to-transparent z-0" />
+                <p className="text-sm text-white/70 relative z-10 leading-relaxed indent-1 italic border-l-2 border-l-[#ff9933] pl-3">
+                  {activeFeature.description}
+                </p>
+              </div>
+              <p className="text-[#a1a1aa] mb-8 leading-relaxed">
+                {activeFeature.details}
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveFeature(null)}
+                className="w-full relative flex h-14 items-center justify-center overflow-hidden rounded-xl bg-white font-medium text-black transition-all hover:scale-[1.02] active:scale-[0.98] group"
+              >
+                <span className="relative z-10 flex items-center gap-2 text-sm uppercase tracking-wider font-bold">
+                  {t("got_it", { defaultValue: "Got it" })}
+                </span>
+                <div className="absolute inset-0 bg-[#ff9933] translate-y-[100%] transition-transform duration-300 group-hover:translate-y-[0%] z-0" />
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

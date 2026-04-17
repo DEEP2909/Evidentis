@@ -110,14 +110,14 @@ function ShellSidebar({
         <Link href="/dashboard" className="group flex items-center gap-0" onClick={onNavigate}>
           <BrandLogo size="lg" priority />
         </Link>
-        <div className="mt-1 text-[9px] font-medium uppercase tracking-[0.3em] text-white/30 transition-colors group-hover:text-saffron-500/60 pl-0.5">
-          Legal Intelligence
+        <div suppressHydrationWarning className="mt-1 text-[9px] font-medium uppercase tracking-[0.3em] text-white/30 transition-colors group-hover:text-saffron-500/60 pl-0.5">
+          {t("shell_subtitle")}
         </div>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/25">
+        <div suppressHydrationWarning className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/25">
           {t("workspace")}
         </div>
         <ul className="space-y-0.5">
@@ -161,7 +161,7 @@ function ShellSidebar({
                         : "text-white/35 group-hover:text-white/65 group-hover:scale-110"
                     }`}
                   />
-                  <span>{t(item.labelKey)}</span>
+                  <span suppressHydrationWarning>{t(item.labelKey)}</span>
 
                   {/* Calendar badge — obligations due within 7 days */}
                   {item.href === "/calendar" && typeof obligationsCount === "number" && obligationsCount > 0 && (
@@ -206,8 +206,6 @@ function ShellSidebar({
             <LogOut className="h-3.5 w-3.5" />
           </button>
         </div>
-
-        <LanguageSwitcher />
       </div>
     </aside>
   );
@@ -340,7 +338,7 @@ export function AppShell({
                 <h1 className="font-serif text-xl font-semibold tracking-tight">{title}</h1>
               </div>
             </div>
-            <div className="lg:hidden">
+            <div className="flex items-center gap-2">
               <LanguageSwitcher />
             </div>
           </header>
@@ -361,30 +359,35 @@ export function AppShell({
             </motion.div>
           </AnimatePresence>
         </main>
-      </div>
-
-      {/* Nyay Assist floating FAB */}
-      {["admin","senior_advocate","junior_advocate","advocate","partner"].includes(role) && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.75, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ delay: 0.4, type: "spring", stiffness: 240, damping: 20 }}
-          className="fixed bottom-6 right-6 z-40"
-        >
-          <Link
-            href="/nyay-assist"
-            className="btn-ripple group flex items-center gap-2.5 rounded-full px-5 py-3 text-sm font-semibold text-slate-950 shadow-2xl shadow-orange-500/30 transition-all hover:shadow-orange-500/45 glow-pulse"
-            style={{
-              background: "linear-gradient(135deg, #ff9933 0%, #ffd18b 55%, #ffb347 100%)",
-            }}
-            aria-label="Open Nyay Assist"
-          >
-            <Sparkles className="h-4 w-4 transition-transform group-hover:rotate-12" />
-            <span>Nyay Assist</span>
-          </Link>
-        </motion.div>
-      )}
+      {!pathname.includes("/nyay-assist") && <AppShellFab role={role} />}
     </div>
+    </div>
+  );
+}
+
+/* ── Nyay Assist FAB ──────────────────────────────────────────── */
+function AppShellFab({ role }: { role: string }) {
+  const { t } = useTranslation();
+  if (!["admin","senior_advocate","junior_advocate","advocate","partner"].includes(role)) return null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.75, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ delay: 0.4, type: "spring", stiffness: 240, damping: 20 }}
+      className="fixed bottom-6 right-6 z-40"
+    >
+      <Link
+        href="/nyay-assist"
+        className="btn-ripple group flex items-center gap-2.5 rounded-full px-5 py-3 text-sm font-semibold text-slate-950 shadow-2xl shadow-orange-500/30 transition-all hover:shadow-orange-500/45 glow-pulse"
+        style={{
+          background: "linear-gradient(135deg, #ff9933 0%, #ffd18b 55%, #ffb347 100%)",
+        }}
+        aria-label="Open Nyay Assist"
+      >
+        <Sparkles className="h-4 w-4 transition-transform group-hover:rotate-12" />
+        <span suppressHydrationWarning>{t("shell_nyayAssistFab")}</span>
+      </Link>
+    </motion.div>
   );
 }
 
@@ -392,6 +395,7 @@ export function AppShell({
 function TrialBanner() {
   const [dismissed, setDismissed] = useState(false);
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -432,8 +436,8 @@ function TrialBanner() {
           <Sparkles className="h-4 w-4 text-saffron-400" />
         </div>
         <span className="text-sm">
-          <span className="font-semibold text-saffron-300">Trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>
-          <span className="text-white/60"> — Upgrade now to keep your workspace running</span>
+          <span className="font-semibold text-saffron-300">{t("trial_endsIn", { days: daysLeft })}</span>
+          <span className="text-white/60"> — {t("trial_upgradeNow")}</span>
         </span>
       </div>
       <div className="flex items-center gap-2">
@@ -441,7 +445,7 @@ function TrialBanner() {
           href="/admin/billing"
           className="rounded-lg bg-saffron-500 px-3 py-1.5 text-xs font-semibold text-slate-900 transition-colors hover:bg-saffron-400"
         >
-          Upgrade →
+          {t("trial_upgradeCta")}
         </Link>
         <button
           type="button"

@@ -25,7 +25,7 @@
     "migrate:up": "npm run migrate:up -w apps/api",
     "migrate:down": "npm run migrate:down -w apps/api",
     "seed": "npm run seed -w apps/api",
-    "docker:up": "docker compose up -d",
+    "docker:up": "docker compose up -d postgres redis minio clamav ai-service ai-worker",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"
   },

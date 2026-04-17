@@ -1,5 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { I18nextProvider } from "react-i18next";
+import { i18n } from "@/lib/i18n";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -28,6 +31,17 @@ import HomePage from "@/app/page";
 import DashboardPage from "@/app/dashboard/page";
 import { LanguageSwitcher } from "@/components/india/LanguageSwitcher";
 
+function TestWrapper({ children }: { children: React.ReactNode }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
+    </QueryClientProvider>
+  );
+}
+
 describe("India product pages", () => {
   it("renders the landing page hero copy", () => {
     render(<HomePage />);
@@ -37,7 +51,11 @@ describe("India product pages", () => {
   });
 
   it("renders the dashboard shell and Nyay Assist panel", () => {
-    render(<DashboardPage />);
+    render(
+      <TestWrapper>
+        <DashboardPage />
+      </TestWrapper>
+    );
     expect(screen.getAllByText("Nyay Assist").length).toBeGreaterThan(0);
     expect(screen.getByText("Open matters")).toBeTruthy();
   });

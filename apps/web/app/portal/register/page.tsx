@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import { setTokens } from "@/lib/api";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -104,13 +105,38 @@ export default function StakeholderRegisterPage() {
   const onSubmit = async (data: StakeholderFormData) => {
     setIsLoading(true);
     try {
-      console.log("Stakeholder registration:", data);
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const response = await fetch(`${API_BASE}/api/auth/register/stakeholder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          company: data.company,
+          invitationCode: data.invitationCode,
+          password: data.password,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ message: "Registration failed" }));
+        throw new Error(err?.error?.message || err?.message || "Registration failed");
+      }
+
+      const result = await response.json();
+      const payload = result?.success ? result.data : result;
+
+      if (payload?.accessToken) {
+        setTokens(payload.accessToken, payload.refreshToken);
+      }
+
       toast.success(
         "Stakeholder account created! You can now access shared documents."
       );
       router.push("/dashboard");
     } catch (error) {
-      toast.error("Registration failed. Please check your invitation code.");
+      const message = error instanceof Error ? error.message : "Registration failed. Please check your invitation code.";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }

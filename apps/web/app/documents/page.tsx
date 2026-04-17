@@ -23,6 +23,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { QuotaError, documents as apiDocuments } from "@/lib/api";
+import { UpgradePrompt } from "@/components/shared/UpgradePrompt";
+import { AiFeedbackButton } from "@/components/shared/AiFeedbackButton";
 import { useTranslation } from "react-i18next";
 
 type DocumentStatus = "processing" | "processed" | "failed";
@@ -126,8 +129,50 @@ export default function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const isDebouncing = searchQuery !== debouncedQuery;
   const { t } = useTranslation();
+  const [showUpgrade, setShowUpgrade] = useState<{ feature: string; detail?: string } | null>(null);
+  const [localDocs, setLocalDocs] = useState<DocumentRow[]>([...documents]);
+
+  const handleUpload = async (file: File) => {
+    setIsUploading(true);
+    // Add optimistic uploading state
+    const optimisticDoc: DocumentRow = {
+      id: Math.random().toString(36).substring(7),
+      name: file.name,
+      type: "Document",
+      matter: "Workspace",
+      status: "processing",
+      uploadedAt: "Just now",
+      uploadedBy: "You",
+      pages: 0,
+      clauses: 0,
+      flags: 0,
+      progress: 0,
+    };
+    setLocalDocs((prev) => [optimisticDoc, ...prev]);
+
+    try {
+      await apiDocuments.upload("workspace", file);
+      setLocalDocs((prev) =>
+        prev.map((doc) =>
+          doc.id === optimisticDoc.id ? { ...doc, status: "processed", progress: 100 } : doc
+        )
+      );
+    } catch (error) {
+      if (error instanceof QuotaError) {
+        setShowUpgrade({ feature: "Document Uploads" });
+      }
+      setLocalDocs((prev) =>
+        prev.map((doc) =>
+          doc.id === optimisticDoc.id ? { ...doc, status: "failed", progress: 100 } : doc
+        )
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -138,29 +183,44 @@ export default function DocumentsPage() {
 
   const filteredDocuments = useMemo(() => {
     const query = debouncedQuery.trim().toLowerCase();
-    if (!query) return documents;
-    return documents.filter((doc) =>
+    if (!query) return localDocs;
+    return localDocs.filter((doc) =>
       [doc.name, doc.type, doc.matter, doc.uploadedBy].join(" ").toLowerCase().includes(query)
     );
-  }, [debouncedQuery]);
+  }, [debouncedQuery, localDocs]);
 
   return (
     <AppShell title={t("nav_documents")}>
+      {showUpgrade && (
+        <UpgradePrompt
+          feature={showUpgrade.feature}
+          detail={showUpgrade.detail}
+          onDismiss={() => setShowUpgrade(null)}
+        />
+      )}
       <div className="section-wrap page-enter">
         <div className="section-header">
           <div>
             <h2 className="section-title">{t("doc_title")}</h2>
             <p className="section-subtitle">{t("doc_subtitle")}</p>
           </div>
-          <Button className="btn-ripple">
-            <Upload className="mr-2 h-4 w-4" />
-            {t("doc_uploadDocuments")}
-          </Button>
+          <div className="relative">
+            <input
+              type="file"
+              onChange={(e) => e.target.files && handleUpload(e.target.files[0])}
+              className="absolute inset-0 opacity-0 cursor-pointer z-10"
+              title=""
+            />
+            <Button className="btn-ripple">
+              {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              {isUploading ? t("nyay_uploadingAttachments") : t("doc_uploadDocuments")}
+            </Button>
+          </div>
         </div>
 
         <Card
-          className={`glass border-2 border-dashed transition ${
-            isDragging ? "border-saffron-500 bg-saffron-500/10" : "border-white/20"
+          className={`glass border-2 border-dashed transition-all duration-300 relative ${
+            isDragging ? "border-[#ff9933] bg-[#ff9933]/10 scale-[1.01]" : "border-white/20 hover:border-white/30 hover:bg-white/[0.02]"
           }`}
           onDragOver={(event) => {
             event.preventDefault();
@@ -173,14 +233,28 @@ export default function DocumentsPage() {
           onDrop={(event) => {
             event.preventDefault();
             setIsDragging(false);
+            if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+              handleUpload(event.dataTransfer.files[0]);
+            }
           }}
         >
-          <CardContent className="py-8 text-center">
-            <div className={`mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full ${isDragging ? "bg-saffron-500/20 text-saffron-400" : "bg-white/10 text-white/65"}`}>
-              <Upload className={`h-6 w-6 ${isDragging ? "animate-bounce" : "animate-pulse"}`} />
+          <input
+            type="file"
+            onChange={(e) => e.target.files && handleUpload(e.target.files[0])}
+            className="absolute inset-0 opacity-0 cursor-pointer z-10"
+            title=""
+          />
+          <CardContent className="py-12 text-center pointer-events-none relative z-0">
+            <div className={`mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full transition-all duration-300 ${isDragging || isUploading ? "bg-[#ff9933]/20 text-[#ff9933] shadow-[0_0_20px_rgba(255,153,51,0.2)]" : "bg-white/5 text-white/40 group-hover:bg-white/10"}`}>
+              {isUploading ? <Loader2 className="h-7 w-7 animate-spin" /> : <Upload className={`h-7 w-7 ${isDragging ? "animate-bounce" : ""}`} />}
             </div>
-            <p className="text-lg font-medium">{isDragging ? t("doc_dropHere") : t("doc_dragDrop")}</p>
-            <p className="mt-1 text-sm text-white/55">{t("doc_fileTypes")}</p>
+            <p className="font-serif text-2xl font-light text-white/90">{isDragging ? t("doc_dropHere") : t("doc_dragDrop")}</p>
+            <p className="mt-2 text-sm text-white/40 tracking-wider uppercase">{t("doc_uploadLimit") || t("doc_fileTypes")}</p>
+            {isUploading && (
+              <div className="mt-6 max-w-sm mx-auto">
+                <Progress value={undefined} className="h-1 bg-white/10" />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -304,6 +378,12 @@ export default function DocumentsPage() {
                                 {doc.flags > 0 ? (
                                   <Badge className="border-amber-500/35 bg-amber-500/15 text-amber-300">{doc.flags} flags</Badge>
                                 ) : null}
+                                <AiFeedbackButton
+                                  resultId={doc.id}
+                                  taskType="clause_extraction"
+                                  documentId={doc.id}
+                                  compact
+                                />
                               </div>
                             ) : (
                               <span className="text-white/45">-</span>

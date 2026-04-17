@@ -64,7 +64,8 @@ function AshokaChakra() {
 }
 
 function MfaSteps({ mfaRequired }: { mfaRequired: boolean }) {
-  const steps = ["Credentials", "MFA", "Access"];
+  const { t } = useTranslation();
+  const steps = [t("auth_stepCredentials"), t("auth_stepMFA"), t("auth_stepAccess")];
   return (
     <div className="mt-4 flex items-center gap-2">
       {steps.map((step, index) => {
@@ -182,11 +183,11 @@ export default function LoginPage() {
           <div>
             <span className="gold-rule" />
             <h1 className="text-4xl font-semibold leading-tight text-white">
-              India-Ready Legal <br />
-              <span className="text-saffron-300">Intelligence Platform</span>
+              {t("auth_heroTitle1")} <br />
+              <span className="text-saffron-300">{t("auth_heroTitle2")}</span>
             </h1>
             <p className="mt-4 max-w-md text-lg text-white/75">
-              Run multilingual legal operations with AI workflows across all Indian states and UTs.
+              {t("auth_heroSubtitle")}
             </p>
           </div>
         </div>
@@ -199,9 +200,9 @@ export default function LoginPage() {
           transition={{ delay: 0.4, duration: 0.5 }}
         >
           {[
-            { value: "23", label: "Languages" },
-            { value: "36", label: "Jurisdictions" },
-            { value: "DPDP", label: "Aligned" },
+            { value: "23", label: t("auth_statLanguages") },
+            { value: "36", label: t("auth_statJurisdictions") },
+            { value: "DPDP", label: t("auth_statAligned") },
           ].map((stat, index) => (
             <motion.div
               key={stat.label}
@@ -285,7 +286,7 @@ export default function LoginPage() {
                     <button
                       type="button"
                       onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/55 transition-all hover:text-white hover:scale-110"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/55 transition-all hover:text-white hover:scale-110 z-10 cursor-pointer"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -303,7 +304,7 @@ export default function LoginPage() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in…
+                      {t("auth_signingIn")}
                     </>
                   ) : (
                     t("login")
@@ -315,15 +316,15 @@ export default function LoginPage() {
               <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                 <span className="trust-badge">
                   <ShieldCheck className="h-3 w-3 text-green-400" />
-                  DPDP Compliant
+                  {t("trust_dpdp")}
                 </span>
                 <span className="trust-badge">
                   <Lock className="h-3 w-3 text-saffron-400" />
-                  MFA Protected
+                  {t("trust_mfa")}
                 </span>
                 <span className="trust-badge">
                   <Globe2 className="h-3 w-3 text-blue-400" />
-                  India Data Residency
+                  {t("trust_dataResidency")}
                 </span>
               </div>
             </CardContent>

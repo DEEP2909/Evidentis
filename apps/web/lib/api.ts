@@ -34,7 +34,7 @@ import {
 } from "@evidentis/shared";
 
 // API base URL
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:4000";
 
 // Token storage
 let accessToken: string | null = null;
@@ -1152,3 +1152,68 @@ export const analytics = {
     return apiRequest("GET", `/analytics/risk-trends?days=${days}`);
   },
 };
+
+// ============================================================================
+// Admin API
+// ============================================================================
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  mfaEnabled: boolean;
+  lastLoginAt: string | null;
+}
+
+export const admin = {
+  async listMembers(): Promise<TeamMember[]> {
+    try {
+      const result = await apiRequest<{ members: Record<string, unknown>[] }>(
+        "GET",
+        "/api/admin/members"
+      );
+      return (result.members ?? []).map((m) => ({
+        id: String(m.id ?? ""),
+        name: String(m.display_name ?? m.displayName ?? m.name ?? ""),
+        email: String(m.email ?? ""),
+        role: String(m.role ?? "advocate"),
+        status: String(m.status ?? "active"),
+        mfaEnabled: Boolean(m.mfa_enabled ?? m.mfaEnabled ?? false),
+        lastLoginAt: (m.last_login_at as string | null) ?? (m.lastLoginAt as string | null) ?? null,
+      }));
+    } catch {
+      // Graceful fallback — return empty if endpoint not available
+      return [];
+    }
+  },
+};
+
+// ============================================================================
+// Onboarding API
+// ============================================================================
+
+export const onboarding = {
+  async getStatus(): Promise<Record<string, boolean>> {
+    try {
+      return await apiRequest<Record<string, boolean>>("GET", "/api/onboarding");
+    } catch {
+      return {};
+    }
+  },
+
+  async completeStep(stepKey: string): Promise<void> {
+    try {
+      await apiRequest("POST", "/api/onboarding/complete", { stepKey });
+    } catch {
+      // Graceful degradation — store locally as fallback
+      if (typeof window !== "undefined") {
+        const stored = JSON.parse(localStorage.getItem("evidentis_onboarding") || "{}");
+        stored[stepKey] = true;
+        localStorage.setItem("evidentis_onboarding", JSON.stringify(stored));
+      }
+    }
+  },
+};
+

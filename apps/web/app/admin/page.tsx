@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ComponentType } from "react";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
   CheckCircle2,
@@ -29,6 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTranslation } from "react-i18next";
+import { admin as adminApi, type TeamMember } from "@/lib/api";
 
 type AdminTab = "team" | "security" | "billing" | "sso" | "playbooks" | "webhooks";
 
@@ -45,14 +47,13 @@ const tabs: readonly {
   { id: "webhooks", label: "Webhooks", icon: Webhook },
 ];
 
-const teamMembers = [
-  { name: "Aarav Mehta", email: "aarav@firm.in", role: "admin", status: "active", mfa: true },
-  { name: "Nandini Rao", email: "nandini@firm.in", role: "senior_advocate", status: "active", mfa: true },
-  { name: "Vihaan Kapoor", email: "vihaan@firm.in", role: "junior_advocate", status: "active", mfa: false },
-  { name: "Sana Iqbal", email: "sana@firm.in", role: "paralegal", status: "active", mfa: true },
-];
-
 function TeamTab() {
+  const { data: teamMembers = [], isLoading } = useQuery({
+    queryKey: ["admin", "members"],
+    queryFn: () => adminApi.listMembers(),
+    staleTime: 60_000,
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -91,6 +92,24 @@ function TeamTab() {
 
       <Card className="glass">
         <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={`skel-${i}`} className="flex items-center gap-4 animate-pulse">
+                  <div className="h-10 w-10 rounded-full bg-white/10" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-32 rounded bg-white/10" />
+                    <div className="h-2.5 w-48 rounded bg-white/8" />
+                  </div>
+                  <div className="h-6 w-20 rounded bg-white/8" />
+                </div>
+              ))}
+            </div>
+          ) : teamMembers.length === 0 ? (
+            <div className="p-8 text-center text-white/50">
+              <p className="text-sm">No team members found. Invite your first advocate.</p>
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow className="border-white/10">
@@ -132,7 +151,7 @@ function TeamTab() {
                     <Badge className="border-green-500/35 bg-green-500/15 text-green-300">{member.status}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Switch checked={member.mfa} aria-label={`${member.name} MFA status`} />
+                    <Switch checked={member.mfaEnabled} aria-label={`${member.name} MFA status`} />
                   </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm">
@@ -143,6 +162,7 @@ function TeamTab() {
               ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
     </div>

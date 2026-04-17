@@ -332,7 +332,7 @@ async def generate_research_answer_stream(
     system_prompt = "You are a legal research assistant helping advocates analyze contracts, pleadings, and legal questions."
     user_prompt = prompt.replace(system_prompt, "").strip()
 
-    async def _read_llm_stream_lines() -> list[str]:
+    try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream(
                 "POST",
@@ -352,24 +352,19 @@ async def generate_research_answer_stream(
             ) as response:
                 if response.status_code != 200:
                     raise RuntimeError(f"Ollama error: {response.status_code}")
-                return [line async for line in response.aiter_lines() if line]
-
-    try:
-        stream_lines = await retry_with_backoff(
-            _read_llm_stream_lines,
-            config=LLM_RETRY_CONFIG,
-        )
-
-        for line in stream_lines:
-            try:
-                data = json.loads(line)
-                token = extract_ollama_text(data, "")
-                if token:
-                    yield f"data: {json.dumps({'token': token})}\n\n"
-                if data.get("done"):
-                    break
-            except json.JSONDecodeError:
-                continue
+                
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        token = extract_ollama_text(data, "")
+                        if token:
+                            yield f"data: {json.dumps({'token': token})}\n\n"
+                        if data.get("done"):
+                            break
+                    except json.JSONDecodeError:
+                        continue
 
         # Send citations at the end
         citations = [
@@ -503,8 +498,8 @@ async def research(
 
     response_language = (body.language or "en").strip().lower() or "en"
 
-    if body.chunks or body.context:
-        chunks = build_chunks_from_payload(body.chunks, body.context, body.max_results)
+    if body.chunks is not None or body.context is not None:
+        chunks = build_chunks_from_payload(body.chunks or [], body.context or "", body.max_results)
     else:
         # Generate query embedding
         try:

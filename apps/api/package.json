@@ -17,9 +17,9 @@
     "test:coverage:ci": "vitest run tests/ci-smoke.test.ts --coverage --coverage.reportsDirectory=../../coverage --coverage.include=src/index.ts",
     "test:watch": "vitest",
     "test:isolation": "vitest run src/tests/isolation.test.ts",
-    "migrate": "node-pg-migrate --migrations-dir ../../db/migrations",
-    "migrate:up": "node-pg-migrate up --migrations-dir ../../db/migrations",
-    "migrate:down": "node-pg-migrate down --migrations-dir ../../db/migrations",
+    "migrate": "node-pg-migrate --migrations-dir ../../db/migrations --envPath ../../.env",
+    "migrate:up": "node-pg-migrate up --migrations-dir ../../db/migrations --envPath ../../.env",
+    "migrate:down": "node-pg-migrate down --migrations-dir ../../db/migrations --envPath ../../.env",
     "seed": "tsx ../../scripts/seed.ts"
   },
   "dependencies": {
@@ -44,6 +44,7 @@
     "bullmq": "^5.13.2",
     "clamdjs": "^1.0.2",
     "date-fns": "^3.6.0",
+    "dotenv": "^17.4.2",
     "fastify": "^5.8.4",
     "fastify-plugin": "^4.5.1",
     "ioredis": "^5.4.1",

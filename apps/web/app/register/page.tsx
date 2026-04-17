@@ -9,6 +9,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import { setTokens } from "@/lib/api";
+
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,13 +71,41 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true);
     try {
-      // Mock registration - in real app, call API
-      console.log("Registration data:", data);
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          password: data.password,
+          invitationCode: isStakeholder ? data.invitationCode : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ message: "Registration failed" }));
+        throw new Error(err?.error?.message || err?.message || "Registration failed");
+      }
+
+      const result = await response.json();
+      const payload = result?.success ? result.data : result;
+
+      // Store tokens
+      if (payload?.accessToken) {
+        setTokens(payload.accessToken, payload.refreshToken);
+      }
+
+      // Store trial end date for the trial banner
+      if (payload?.trialEndsAt && typeof window !== "undefined") {
+        localStorage.setItem("evidentis_trial_ends_at", payload.trialEndsAt);
+      }
+
       toast.success("Registration successful! Welcome to your 30-day free trial.");
-      // Redirect to dashboard after registration
       router.push("/dashboard");
     } catch (error) {
-      toast.error("Registration failed. Please try again.");
+      const message = error instanceof Error ? error.message : "Registration failed. Please try again.";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }

@@ -98,17 +98,3 @@ export function UpgradePrompt({ feature, detail, onDismiss }: UpgradePromptProps
   );
 }
 
-/**
- * Quota error class thrown by apiRequest on 402 status.
- */
-export class QuotaError extends Error {
-  public feature: string;
-  public detail?: string;
-
-  constructor(feature: string, detail?: string) {
-    super(`Quota limit reached for ${feature}`);
-    this.name = "QuotaError";
-    this.feature = feature;
-    this.detail = detail;
-  }
-}

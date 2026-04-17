@@ -22,6 +22,7 @@ import { scimRoutes } from './scim.js';
 import { registerSsoRoutes } from './sso.js';
 import { registerWebAuthnRoutes } from './webauthn.js';
 import { registerSamlRoutes } from './saml.js';
+import { dpdpRoutes } from './dpdp.js';
 import { initializeWebSocket } from './websocket.js';
 import { registerTenantIsolation } from './tenant-isolation.js';
 import { registerSecurityHardening } from './security-hardening.js';
@@ -261,6 +262,7 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
   await registerSsoRoutes(app);
   registerWebAuthnRoutes(app, pool);
   await registerSamlRoutes(app);
+  await dpdpRoutes(app);
 
   // Initialize WebSocket server for real-time events (await to ensure Redis adapter connects)
   /* c8 ignore next 3 -- websocket server is intentionally disabled in tests */

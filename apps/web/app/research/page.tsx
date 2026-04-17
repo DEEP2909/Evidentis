@@ -11,8 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { nyayAssistPrompts } from "@/lib/india";
-import { research } from "@/lib/api";
+import { research, QuotaError } from "@/lib/api";
 import { AiFeedbackButton } from "@/components/shared/AiFeedbackButton";
+import { UpgradePrompt } from "@/components/shared/UpgradePrompt";
 import { useTranslation } from "react-i18next";
 
 type Citation = {
@@ -38,6 +39,7 @@ export default function ResearchPage() {
   const [citations, setCitations] = useState<Citation[]>([]);
   const [openCitations, setOpenCitations] = useState<Record<string, boolean>>({});
   const [hasSearched, setHasSearched] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState<{ feature: string; detail?: string } | null>(null);
 
   const runQuery = async () => {
     if (!query.trim() || isThinking) return;
@@ -66,6 +68,10 @@ export default function ResearchPage() {
         );
       }
     } catch (err) {
+      if (err instanceof QuotaError) {
+        setShowUpgrade({ feature: err.feature, detail: err.detail });
+        return;
+      }
       console.error("Research error:", err);
       setResultAnswer(
         "Unable to process your query right now. Please check your connection and try again."
@@ -77,6 +83,13 @@ export default function ResearchPage() {
 
   return (
     <AppShell title={t("research")}>
+      {showUpgrade && (
+        <UpgradePrompt
+          feature={showUpgrade.feature}
+          detail={showUpgrade.detail}
+          onDismiss={() => setShowUpgrade(null)}
+        />
+      )}
       <div className="section-wrap page-enter">
         <section className="glass p-6">
           <div className="section-header">

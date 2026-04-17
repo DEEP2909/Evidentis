@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { nyayAssistPrompts } from "@/lib/india";
-import { documents, matters, research } from "@/lib/api";
+import { documents, matters, research, QuotaError } from "@/lib/api";
+import { UpgradePrompt } from "@/components/shared/UpgradePrompt";
+import { AiFeedbackButton } from "@/components/shared/AiFeedbackButton";
 import { useTranslation } from "react-i18next";
 
 type ChatMessage = {
@@ -40,10 +42,11 @@ export default function NyayAssistPage() {
   const [uploadMatterId, setUploadMatterId] = useState<string | null>(null);
   const [uploadedReferences, setUploadedReferences] = useState<UploadedReference[]>([]);
   const [hiddenPrompts, setHiddenPrompts] = useState<Record<string, boolean>>({});
+  const [showUpgrade, setShowUpgrade] = useState<{ feature: string; detail?: string } | null>(null);
 
   // Set greeting in the user's selected language (runs once + on language change)
   useEffect(() => {
-    if (messages.length === 0 || (messages.length === 1 && messages[0].id === "seed-1" && messages[0].content === "")) {
+    if (messages.length === 0 || (messages.length === 1 && messages[0].id === "seed-1")) {
       setMessages([{ id: "seed-1", role: "assistant", content: t("nyay_greeting") }]);
     }
   }, [t]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -180,6 +183,7 @@ export default function NyayAssistPage() {
       const reader = stream.getReader();
       const decoder = new TextDecoder();
       let accumulated = "";
+      let buffer = "";
 
       // Add empty assistant message that we'll stream into
       setMessages((prev) => [
@@ -191,36 +195,56 @@ export default function NyayAssistPage() {
         const { done, value: chunk } = await reader.read();
         if (done) break;
 
-        const text = decoder.decode(chunk, { stream: true });
-        // Parse SSE format: each line starts with "data: "
-        const lines = text.split("\n");
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data);
-              const token =
-                parsed?.message?.content ??
-                parsed?.response ??
-                parsed?.token ??
-                parsed?.text ??
-                "";
-              if (token) {
-                accumulated += token;
-                const currentContent = accumulated;
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantId
-                      ? { ...msg, content: currentContent }
-                      : msg
-                  )
-                );
+        buffer += decoder.decode(chunk, { stream: true });
+        
+        // Parse SSE format: chunks delimited by \n\n
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? ""; // keep the last incomplete chunk in buffer
+
+        for (const event of events) {
+          const lines = event.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data);
+                const token =
+                  parsed?.message?.content ??
+                  parsed?.response ??
+                  parsed?.token ??
+                  parsed?.content ??
+                  parsed?.text ??
+                  "";
+                if (token) {
+                  accumulated += token;
+                  const currentContent = accumulated;
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantId
+                        ? { ...msg, content: currentContent }
+                        : msg
+                    )
+                  );
+                }
+              } catch {
+                // Plain text token fallback
+                if (data.trim() && !data.includes("{")) {
+                  accumulated += data;
+                  const currentContent = accumulated;
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantId
+                        ? { ...msg, content: currentContent }
+                        : msg
+                    )
+                  );
+                }
               }
-            } catch {
-              // Plain text token
-              if (data.trim()) {
-                accumulated += data;
+            } else if (line.trim() && !line.startsWith(":")) {
+              // Non-SSE plain text
+              if (!line.includes("{")) {
+                accumulated += line;
                 const currentContent = accumulated;
                 setMessages((prev) =>
                   prev.map((msg) =>
@@ -231,17 +255,6 @@ export default function NyayAssistPage() {
                 );
               }
             }
-          } else if (line.trim() && !line.startsWith(":")) {
-            // Non-SSE plain text
-            accumulated += line;
-            const currentContent = accumulated;
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantId
-                  ? { ...msg, content: currentContent }
-                  : msg
-              )
-            );
           }
         }
       }
@@ -253,6 +266,11 @@ export default function NyayAssistPage() {
         )
       );
     } catch (error) {
+      if (error instanceof QuotaError) {
+        setShowUpgrade({ feature: error.feature, detail: error.detail });
+        setIsTyping(false);
+        return;
+      }
       console.error("Research API error:", error);
       // Fallback: show error message
       setMessages((prev) => {
@@ -287,7 +305,14 @@ export default function NyayAssistPage() {
 
   return (
     <AppShell title={t("assistant")}>
-      <div className="grid gap-5 xl:grid-cols-[0.86fr_1.14fr]">
+      {showUpgrade && (
+        <UpgradePrompt
+          feature={showUpgrade.feature}
+          detail={showUpgrade.detail}
+          onDismiss={() => setShowUpgrade(null)}
+        />
+      )}
+      <div className="grid gap-8 py-4 xl:grid-cols-[0.86fr_1.14fr]">
         <section className="glass p-5">
           <p className="text-xs uppercase tracking-[0.28em] text-saffron-300">{t("nyay_suggestedPrompts")}</p>
           <div className="mt-4 space-y-2">
@@ -369,6 +394,15 @@ export default function NyayAssistPage() {
                         transition={{ repeat: Infinity, duration: 0.8 }}
                         className="ml-0.5 inline-block h-4 w-[2px] bg-saffron-400 align-middle"
                       />
+                    )}
+                    {message.role === "assistant" && !message.isStreaming && message.content && message.id !== "seed-1" && (
+                      <div className="mt-2 border-t border-white/10 pt-2">
+                        <AiFeedbackButton
+                          resultId={message.id}
+                          taskType="nyay_assist"
+                          compact
+                        />
+                      </div>
                     )}
                   </div>
                 </motion.div>

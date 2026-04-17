@@ -1058,7 +1058,7 @@ export const research = {
       payload.matterId = input.matterId;
     }
 
-    const response = await fetch(`${API_BASE}/api/research/stream`, {
+    let response = await fetch(`${API_BASE}/api/research/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1066,6 +1066,20 @@ export const research = {
       },
       body: JSON.stringify(payload),
     });
+
+    if (response.status === 401 && accessToken) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        response = await fetch(`${API_BASE}/api/research/stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(payload),
+        });
+      }
+    }
 
     if (!response.ok) {
       throw new ApiError(response.status, "ERROR", "Research query failed");

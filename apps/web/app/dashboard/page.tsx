@@ -123,7 +123,7 @@ const alertClassMap: Record<AlertSeverity, { cls: string; icon: React.ElementTyp
 };
 
 /* ── Onboarding Checklist ── */
-function OnboardingChecklist({ role }: { role: string }) {
+function OnboardingChecklist({ userRole }: { userRole: string }) {
   const [dismissed, setDismissed] = useState(false);
   const [completed, setCompleted] = useState<Record<string, boolean>>({});
 
@@ -143,7 +143,7 @@ function OnboardingChecklist({ role }: { role: string }) {
     }
   }, []);
 
-  if (dismissed || role !== "admin") return null;
+  if (dismissed || userRole !== "admin") return null;
 
   const allDone = completed.invite && completed.upload && completed.analyze;
   if (allDone) return null;
@@ -263,7 +263,7 @@ function AdminDashboard() {
   return (
     <AppShell title={t("dash_firmCommand")}>
       <div className="space-y-6 page-enter">
-        <OnboardingChecklist role="admin" />
+        <OnboardingChecklist userRole="admin" />
 
         <DashboardKpiGrid kpis={kpis} isLoading={isLoading} />
 

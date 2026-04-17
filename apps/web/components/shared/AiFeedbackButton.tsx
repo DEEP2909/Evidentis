@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThumbsDown, ThumbsUp, Send, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,13 @@ export function AiFeedbackButton({
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const commentInputRef = useRef<HTMLInputElement>(null);
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!showComment) return;
+    commentInputRef.current?.focus();
+  }, [showComment]);
 
   const handleRate = async (value: "positive" | "negative") => {
     setRating(value);
@@ -137,12 +143,12 @@ export function AiFeedbackButton({
             className="flex items-center gap-2"
           >
             <input
+              ref={commentInputRef}
               type="text"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder={t("whatWasWrong")}
               className="h-7 rounded border border-white/15 bg-white/5 px-2 text-xs text-white placeholder:text-white/30 focus:border-saffron-500/40 focus:outline-none"
-              autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   submitFeedback("negative", comment);

@@ -4,10 +4,6 @@ omit =
     models/loader.py
     evaluation/*
     config.py
-    apps/ai-service/tests/*
-    apps/ai-service/models/loader.py
-    apps/ai-service/evaluation/*
-    apps/ai-service/config.py
 
 [report]
 exclude_lines =

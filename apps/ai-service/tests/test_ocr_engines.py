@@ -1,8 +1,6 @@
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from routers.ocr import preprocess_image
 import numpy as np
-import cv2
 
 @patch('pytesseract.image_to_data')
 def test_ocr_tesseract_direct(mock_tess_data):

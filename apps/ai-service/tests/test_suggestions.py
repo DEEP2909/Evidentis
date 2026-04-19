@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from routers.suggest import suggest_redlines, generate_template_suggestions
+from routers.suggest import generate_template_suggestions
 from types import SimpleNamespace
 
 @pytest.mark.asyncio

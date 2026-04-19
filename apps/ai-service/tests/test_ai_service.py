@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from io import BytesIO
 
-# sys.path is handled by conftest.py — no need to repeat it here
+# sys.path is handled by conftest.py â€” no need to repeat it here
 from main import app
 
 client = TestClient(app)
@@ -16,7 +16,7 @@ def test_lifespan_events():
     """Test app lifespan (startup/shutdown)"""
     with patch("models.loader.ModelRegistry.load_all") as mock_load:
         with patch("models.loader.ModelRegistry.unload_all") as mock_unload:
-            with TestClient(app) as test_client:
+            with TestClient(app):
                 assert mock_load.called
                 assert hasattr(app.state, "models")
             assert mock_unload.called

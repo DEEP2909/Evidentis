@@ -305,6 +305,38 @@ function parseDateOrNull(value: unknown): Date | null {
   return null;
 }
 
+function asNumber(value: unknown, fallback = 0): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === "object") return value as Record<string, unknown>;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : { raw: value };
+    } catch {
+      return { raw: value };
+    }
+  }
+  return null;
+}
+
+function parseJsonArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function asEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && allowed.includes(value as T) ? (value as T) : fallback;
 }
@@ -451,6 +483,16 @@ function mapDocument(raw: Record<string, unknown>): Document {
   };
 }
 
+function mapDocumentListItem(raw: Record<string, unknown>): DocumentListItem {
+  return {
+    ...mapDocument(raw),
+    matterName:
+      (raw.matter_name as string | null) ??
+      (raw.matterName as string | null) ??
+      null,
+  };
+}
+
 function mapClause(raw: Record<string, unknown>): Clause {
   return {
     id: String(raw.id ?? ""),
@@ -512,6 +554,30 @@ function mapObligation(raw: Record<string, unknown>): Obligation {
     status: normalizeObligationStatus(raw.status),
     assignedTo: (raw.assigned_to as string | null) ?? null,
     notes: (raw.notes as string | null) ?? null,
+    createdAt: parseDate(raw.created_at ?? raw.createdAt),
+  };
+}
+
+function mapPlaybook(raw: Record<string, unknown>): Playbook {
+  const parsedRules = parseJsonArray<Record<string, unknown>>(raw.rules);
+  return {
+    id: String(raw.id ?? ""),
+    tenantId: String(raw.tenant_id ?? raw.tenantId ?? ""),
+    name: String(raw.name ?? ""),
+    description: (raw.description as string | null) ?? null,
+    practiceArea:
+      (raw.practice_area as Playbook["practiceArea"]) ??
+      (raw.practiceArea as Playbook["practiceArea"]) ??
+      null,
+    rules: parsedRules.map((rule, index) => ({
+      id: String(rule.id ?? `rule-${index + 1}`),
+      clauseType: String(rule.clauseType ?? rule.clause_type ?? "custom"),
+      condition: String(rule.condition ?? ""),
+      severity: asEnum(rule.severity, ["critical", "warn", "info"], "warn"),
+      description: String(rule.description ?? ""),
+    })),
+    isActive: Boolean(raw.is_active ?? raw.isActive ?? true),
+    createdBy: (raw.created_by as string | null) ?? (raw.createdBy as string | null) ?? null,
     createdAt: parseDate(raw.created_at ?? raw.createdAt),
   };
 }
@@ -716,6 +782,14 @@ export interface DocumentFilters {
   limit?: number;
 }
 
+export interface GlobalDocumentFilters extends DocumentFilters {
+  search?: string;
+}
+
+export interface DocumentListItem extends Document {
+  matterName: string | null;
+}
+
 export const documents = {
   async list(matterId: string, filters?: DocumentFilters): Promise<PaginatedResponse<Document>> {
     const params = new URLSearchParams();
@@ -730,6 +804,25 @@ export const documents = {
 
     return {
       data: (result.documents ?? []).map((document) => mapDocument(document)),
+      pagination: result.pagination ?? defaultPagination(filters?.page ?? 1, filters?.limit ?? 20),
+    };
+  },
+
+  async listAll(filters?: GlobalDocumentFilters): Promise<PaginatedResponse<DocumentListItem>> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.search) params.set("search", filters.search);
+    if (filters?.page) params.set("page", String(filters.page));
+    if (filters?.limit) params.set("limit", String(filters.limit));
+
+    const suffix = params.toString();
+    const result = await apiRequest<{ documents: Record<string, unknown>[]; pagination?: PaginationShape }>(
+      "GET",
+      `/api/documents${suffix ? `?${suffix}` : ""}`
+    );
+
+    return {
+      data: (result.documents ?? []).map((document) => mapDocumentListItem(document)),
       pagination: result.pagination ?? defaultPagination(filters?.page ?? 1, filters?.limit ?? 20),
     };
   },
@@ -777,8 +870,8 @@ export const documents = {
     });
   },
 
-  async delete(matterId: string, documentId: string): Promise<void> {
-    await apiRequest("DELETE", `/api/documents/${documentId}?matterId=${matterId}`);
+  async delete(_matterId: string, documentId: string): Promise<void> {
+    await apiRequest("DELETE", `/api/documents/${documentId}`);
   },
 
   async downloadUrl(matterId: string, documentId: string): Promise<string> {
@@ -1020,10 +1113,28 @@ export interface ResearchQuery {
   language?: SupportedLanguageCode;
 }
 
+export interface ResearchCitation {
+  id: string;
+  source: string;
+  text: string;
+  page?: number;
+  sourceType?: string;
+}
+
+export interface ResearchSourceItem {
+  documentId: string;
+  title: string;
+  relevance: number;
+  snippet: string;
+  pageFrom?: number | null;
+  pageTo?: number | null;
+  sourceType?: string;
+}
+
 export interface ResearchResult {
   answer: string;
-  citations: Array<{ source: string; text: string; page?: number }>;
-  sources: Array<{ documentId: string; title: string; relevance: number; snippet: string }>;
+  citations: ResearchCitation[];
+  sources: ResearchSourceItem[];
   confidence: number;
 }
 
@@ -1045,7 +1156,63 @@ export const research = {
     if (input.matterId) {
       payload.matterId = input.matterId;
     }
-    return apiRequest("POST", "/api/research/query", payload);
+    const result = await apiRequest<Record<string, unknown>>("POST", "/api/research/query", payload);
+    const rawCitations = Array.isArray(result.citations) ? result.citations : [];
+    const rawSources = Array.isArray(result.sources) ? result.sources : [];
+
+    return {
+      answer: String(result.answer ?? ""),
+      citations: rawCitations.map((citation, index) => {
+        const row = (citation ?? {}) as Record<string, unknown>;
+        return {
+          id: String(row.id ?? `citation-${index}`),
+          source: String(
+            row.source ??
+              row.document_name ??
+              row.documentName ??
+              row.title ??
+              `Source ${index + 1}`
+          ),
+          text: String(row.text ?? row.excerpt ?? row.snippet ?? ""),
+          page:
+            row.page !== undefined
+              ? asNumber(row.page)
+              : row.page_number !== undefined
+              ? asNumber(row.page_number)
+              : row.pageNumber !== undefined
+              ? asNumber(row.pageNumber)
+              : undefined,
+          sourceType:
+            (row.source_type as string | undefined) ??
+            (row.sourceType as string | undefined),
+        };
+      }),
+      sources: rawSources.map((source) => {
+        const row = (source ?? {}) as Record<string, unknown>;
+        return {
+          documentId: String(row.documentId ?? row.document_id ?? ""),
+          title: String(row.title ?? row.document_name ?? row.documentName ?? "Untitled source"),
+          relevance: asNumber(row.relevance ?? row.relevance_score, 0),
+          snippet: String(row.snippet ?? row.text ?? row.excerpt ?? ""),
+          pageFrom:
+            row.pageFrom !== undefined
+              ? asNumber(row.pageFrom)
+              : row.page_from !== undefined
+              ? asNumber(row.page_from)
+              : null,
+          pageTo:
+            row.pageTo !== undefined
+              ? asNumber(row.pageTo)
+              : row.page_to !== undefined
+              ? asNumber(row.page_to)
+              : null,
+          sourceType:
+            (row.sourceType as string | undefined) ??
+            (row.source_type as string | undefined),
+        };
+      }),
+      confidence: asNumber(result.confidence, 0.85),
+    };
   },
 
   async stream(input: ResearchQuery): Promise<ReadableStream<Uint8Array>> {
@@ -1095,8 +1262,17 @@ export const research = {
     const params = new URLSearchParams();
     if (matterId) params.set("matterId", matterId);
     if (limit) params.set("limit", String(limit));
-    const rows = await apiRequest<ResearchHistoryItem[]>("GET", `/api/research/history?${params.toString()}`);
-    return { data: rows };
+    const rows = await apiRequest<Record<string, unknown>[]>("GET", `/api/research/history?${params.toString()}`);
+    return {
+      data: rows.map((row) => ({
+        id: String(row.id ?? ""),
+        question: String(row.question ?? ""),
+        answer: String(row.answer ?? ""),
+        citations: String(row.citations ?? "[]"),
+        sourcesUsed: asNumber(row.sources_used ?? row.sourcesUsed, 0),
+        createdAt: String(row.created_at ?? row.createdAt ?? ""),
+      })),
+    };
   },
 };
 
@@ -1105,24 +1281,36 @@ export const research = {
 // ============================================================================
 
 export const playbooks = {
-  async list(): Promise<PaginatedResponse<Playbook>> {
-    return apiRequest("GET", "/admin/playbooks");
+  async list(): Promise<Playbook[]> {
+    const result = await apiRequest<Record<string, unknown>[]>("GET", "/api/admin/playbooks");
+    return (result ?? []).map((row) => mapPlaybook(row));
   },
 
   async get(id: string): Promise<Playbook> {
-    return apiRequest("GET", `/admin/playbooks/${id}`);
+    const rows = await playbooks.list();
+    const match = rows.find((playbook) => playbook.id === id);
+    if (!match) {
+      throw new ApiError(404, "PLAYBOOK_NOT_FOUND", "Playbook not found");
+    }
+    return match;
   },
 
   async create(input: Partial<Playbook>): Promise<Playbook> {
-    return apiRequest("POST", "/admin/playbooks", input);
+    const result = await apiRequest<Record<string, unknown>>("POST", "/api/admin/playbooks", input);
+    return mapPlaybook(result);
   },
 
   async update(id: string, input: Partial<Playbook>): Promise<Playbook> {
-    return apiRequest("PATCH", `/admin/playbooks/${id}`, input);
+    const result = await apiRequest<Record<string, unknown>>(
+      "PATCH",
+      `/api/admin/playbooks/${id}`,
+      input
+    );
+    return mapPlaybook(result);
   },
 
   async delete(id: string): Promise<void> {
-    await apiRequest("DELETE", `/admin/playbooks/${id}`);
+    await apiRequest("DELETE", `/api/admin/playbooks/${id}`);
   },
 };
 
@@ -1133,13 +1321,30 @@ export const playbooks = {
 export const analytics = {
   async firmOverview(): Promise<{
     totalMatters: number;
-    activeMatters: number;
+    openMatters: number;
     totalDocuments: number;
-    documentsThisMonth: number;
-    flagsResolved: number;
-    avgProcessingTime: number;
+    processedDocuments: number;
+    totalFlags: number;
+    openFlags: number;
+    criticalFlags: number;
+    avgHealthScore: number;
   }> {
-    return apiRequest("GET", "/analytics/overview");
+    const result = await apiRequest<{
+      metrics?: Record<string, unknown>;
+    }>("GET", "/api/analytics/firm");
+
+    const metrics = result.metrics ?? {};
+
+    return {
+      totalMatters: asNumber(metrics.total_matters),
+      openMatters: asNumber(metrics.open_matters),
+      totalDocuments: asNumber(metrics.total_documents),
+      processedDocuments: asNumber(metrics.processed_documents),
+      totalFlags: asNumber(metrics.total_flags),
+      openFlags: asNumber(metrics.open_flags),
+      criticalFlags: asNumber(metrics.critical_flags),
+      avgHealthScore: asNumber(metrics.avg_health_score),
+    };
   },
 
   async attorneyProductivity(): Promise<
@@ -1151,7 +1356,14 @@ export const analytics = {
       flagsResolved: number;
     }>
   > {
-    return apiRequest("GET", "/analytics/attorneys");
+    const rows = await apiRequest<Record<string, unknown>[]>("GET", "/api/analytics/attorneys");
+    return rows.map((row) => ({
+      attorneyId: String(row.id ?? row.attorneyId ?? ""),
+      name: String(row.display_name ?? row.name ?? ""),
+      mattersAssigned: asNumber(row.matters_count ?? row.mattersAssigned),
+      documentsReviewed: asNumber(row.documents_reviewed ?? row.documentsReviewed),
+      flagsResolved: asNumber(row.flags_resolved ?? row.flagsResolved),
+    }));
   },
 
   async riskTrends(days = 30): Promise<
@@ -1164,6 +1376,76 @@ export const analytics = {
     }>
   > {
     return apiRequest("GET", `/analytics/risk-trends?days=${days}`);
+  },
+};
+
+export interface DpdpRequest {
+  id: string;
+  advocateId: string | null;
+  requestType: string;
+  status: string;
+  details: Record<string, unknown> | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface DpdpConsentStatus {
+  active: boolean;
+  consentedAt: string | null;
+  withdrawnAt: string | null;
+  requests: DpdpRequest[];
+}
+
+export const dpdp = {
+  async requests(): Promise<DpdpRequest[]> {
+    const rows = await apiRequest<Record<string, unknown>[]>("GET", "/api/dpdp/requests");
+    return rows.map((row) => ({
+      id: String(row.id ?? ""),
+      advocateId: (row.advocate_id as string | null) ?? (row.advocateId as string | null) ?? null,
+      requestType: String(row.request_type ?? row.requestType ?? ""),
+      status: String(row.status ?? ""),
+      details: parseJsonRecord(row.details),
+      resolvedAt: (row.resolved_at as string | null) ?? (row.resolvedAt as string | null) ?? null,
+      createdAt: String(row.created_at ?? row.createdAt ?? ""),
+    }));
+  },
+
+  async consentStatus(): Promise<DpdpConsentStatus> {
+    const result = await apiRequest<Record<string, unknown>>("GET", "/api/dpdp/consent/status");
+    const requests = Array.isArray(result.requests) ? result.requests : [];
+
+    return {
+      active: Boolean(result.active),
+      consentedAt: (result.consentedAt as string | null) ?? null,
+      withdrawnAt: (result.withdrawnAt as string | null) ?? null,
+      requests: requests.map((row, index) => {
+        const item = (row ?? {}) as Record<string, unknown>;
+        return {
+          id: String(item.id ?? `dpdp-request-${index}`),
+          advocateId:
+            (item.advocateId as string | null) ??
+            (item.advocate_id as string | null) ??
+            null,
+          requestType: String(item.requestType ?? item.request_type ?? ""),
+          status: String(item.status ?? ""),
+          details: parseJsonRecord(item.details),
+          resolvedAt: (item.resolvedAt as string | null) ?? (item.resolved_at as string | null) ?? null,
+          createdAt: String(item.createdAt ?? item.created_at ?? ""),
+        };
+      }),
+    };
+  },
+
+  async withdrawConsent(reason?: string): Promise<{ requestId: string; erasureDeadline: string; message: string }> {
+    const result = await apiRequest<Record<string, unknown>>("POST", "/api/dpdp/consent/withdraw", {
+      ...(reason ? { reason } : {}),
+    });
+
+    return {
+      requestId: String(result.requestId ?? ""),
+      erasureDeadline: String(result.erasureDeadline ?? ""),
+      message: String(result.message ?? ""),
+    };
   },
 };
 
@@ -1181,26 +1463,145 @@ export interface TeamMember {
   lastLoginAt: string | null;
 }
 
+export interface InviteMemberInput {
+  email: string;
+  role: string;
+}
+
+export interface UpdateMemberInput {
+  role?: string;
+  status?: string;
+  mfaEnabled?: boolean;
+}
+
+export interface AdminSecuritySettings {
+  enforceMfa: boolean;
+  sessionTimeoutMinutes: number;
+  maxFailedLogins: number;
+}
+
+export interface AdminWebhook {
+  id: string;
+  url: string;
+  events: string[];
+  isActive: boolean;
+  lastTriggeredAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminSsoConfiguration {
+  id: string;
+  providerType: string;
+  issuerUrl: string | null;
+  ssoUrl: string | null;
+  metadataUrl: string | null;
+  enabled: boolean;
+  updatedAt: string | null;
+}
+
 export const admin = {
   async listMembers(): Promise<TeamMember[]> {
-    try {
-      const result = await apiRequest<{ members: Record<string, unknown>[] }>(
-        "GET",
-        "/api/admin/members"
-      );
-      return (result.members ?? []).map((m) => ({
-        id: String(m.id ?? ""),
-        name: String(m.display_name ?? m.displayName ?? m.name ?? ""),
-        email: String(m.email ?? ""),
-        role: String(m.role ?? "advocate"),
-        status: String(m.status ?? "active"),
-        mfaEnabled: Boolean(m.mfa_enabled ?? m.mfaEnabled ?? false),
-        lastLoginAt: (m.last_login_at as string | null) ?? (m.lastLoginAt as string | null) ?? null,
-      }));
-    } catch {
-      // Graceful fallback — return empty if endpoint not available
-      return [];
-    }
+    const result = await apiRequest<{ members: Record<string, unknown>[] }>(
+      "GET",
+      "/api/admin/members"
+    );
+    return (result.members ?? []).map((m) => ({
+      id: String(m.id ?? ""),
+      name: String(m.display_name ?? m.displayName ?? m.name ?? ""),
+      email: String(m.email ?? ""),
+      role: String(m.role ?? "advocate"),
+      status: String(m.status ?? "active"),
+      mfaEnabled: Boolean(m.mfa_enabled ?? m.mfaEnabled ?? false),
+      lastLoginAt: (m.last_login_at as string | null) ?? (m.lastLoginAt as string | null) ?? null,
+    }));
+  },
+
+  async inviteMember(input: InviteMemberInput): Promise<void> {
+    await apiRequest("POST", "/api/admin/attorneys", input);
+  },
+
+  async updateMember(id: string, input: UpdateMemberInput): Promise<TeamMember> {
+    const result = await apiRequest<Record<string, unknown>>("PATCH", `/api/admin/attorneys/${id}`, input);
+    return {
+      id: String(result.id ?? ""),
+      name: String(result.display_name ?? result.displayName ?? result.name ?? ""),
+      email: String(result.email ?? ""),
+      role: String(result.role ?? "advocate"),
+      status: String(result.status ?? "active"),
+      mfaEnabled: Boolean(result.mfa_enabled ?? result.mfaEnabled ?? false),
+      lastLoginAt: (result.last_login_at as string | null) ?? (result.lastLoginAt as string | null) ?? null,
+    };
+  },
+
+  async getSecuritySettings(): Promise<AdminSecuritySettings> {
+    return apiRequest("GET", "/api/admin/security-settings");
+  },
+
+  async saveSecuritySettings(input: AdminSecuritySettings): Promise<AdminSecuritySettings> {
+    return apiRequest("PATCH", "/api/admin/security-settings", input);
+  },
+
+  async listWebhooks(): Promise<AdminWebhook[]> {
+    const result = await apiRequest<Record<string, unknown>[]>("GET", "/api/webhooks");
+    return (result ?? []).map((webhook) => ({
+      id: String(webhook.id ?? ""),
+      url: String(webhook.url ?? ""),
+      events: Array.isArray(webhook.events) ? webhook.events.map((event) => String(event)) : [],
+      isActive: Boolean(webhook.is_active ?? webhook.isActive ?? false),
+      lastTriggeredAt:
+        (webhook.last_triggered_at as string | null) ??
+        (webhook.lastTriggeredAt as string | null) ??
+        null,
+      createdAt: String(webhook.created_at ?? webhook.createdAt ?? ""),
+    }));
+  },
+
+  async createWebhook(input: { url: string; events: string[] }): Promise<{ id: string; secret: string }> {
+    const result = await apiRequest<{ id: string; secret: string }>("POST", "/api/webhooks", input);
+    return {
+      id: String(result.id ?? ""),
+      secret: String(result.secret ?? ""),
+    };
+  },
+
+  async deleteWebhook(id: string): Promise<void> {
+    await apiRequest("DELETE", `/api/webhooks/${id}`);
+  },
+
+  async listSsoConfigurations(): Promise<AdminSsoConfiguration[]> {
+    const result = await apiRequest<Record<string, unknown>[]>("GET", "/api/admin/sso");
+    return (result ?? []).map((item) => ({
+      id: String(item.id ?? ""),
+      providerType: String(item.provider_type ?? item.providerType ?? ""),
+      issuerUrl:
+        (item.issuer_url as string | null) ??
+        (item.issuerUrl as string | null) ??
+        null,
+      ssoUrl: (item.sso_url as string | null) ?? (item.ssoUrl as string | null) ?? null,
+      metadataUrl:
+        (item.metadata_url as string | null) ??
+        (item.metadataUrl as string | null) ??
+        (((item.issuer_url as string | null) ?? (item.issuerUrl as string | null) ?? null)
+          ? `${String(item.issuer_url ?? item.issuerUrl)}/metadata`
+          : null),
+      enabled: Boolean(item.enabled ?? false),
+      updatedAt: (item.updated_at as string | null) ?? (item.updatedAt as string | null) ?? null,
+    }));
+  },
+
+  async saveSamlConfiguration(input: { ssoUrl: string; certificate: string }): Promise<AdminSsoConfiguration> {
+    const result = await apiRequest<Record<string, unknown>>("POST", "/api/admin/sso/saml", input);
+    return {
+      id: String(result.id ?? ""),
+      providerType: String(result.providerType ?? "saml"),
+      issuerUrl: (result.issuerUrl as string | null) ?? null,
+      ssoUrl: (result.ssoUrl as string | null) ?? null,
+      metadataUrl:
+        (result.metadataUrl as string | null) ??
+        ((result.issuerUrl as string | null) ? `${String(result.issuerUrl)}/metadata` : null),
+      enabled: Boolean(result.enabled ?? true),
+      updatedAt: new Date().toISOString(),
+    };
   },
 };
 

@@ -8,13 +8,14 @@ import {
   ChevronRight, X, Upload, Sparkles, Users, FileText,
   BarChart3, Rocket,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { AppShell } from "@/components/india/AppShell";
 import { useAuthStore } from "@/lib/auth";
-import { analytics } from "@/lib/api";
+import { analytics, documents, dpdp, matters, obligations, research } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { CURRENT_PLAN } from "@/lib/pricing";
 import { useTranslation } from "react-i18next";
 
 type Kpi = {
@@ -23,6 +24,34 @@ type Kpi = {
   delta: string;
   trend?: "up" | "down" | "neutral";
 };
+
+function isAssignedMatter(
+  matter: {
+    leadAdvocateId?: string | null;
+    leadAttorneyId?: string | null;
+    createdBy?: string | null;
+  },
+  userId?: string
+) {
+  if (!userId) return false;
+  return (
+    matter.leadAdvocateId === userId ||
+    matter.leadAttorneyId === userId ||
+    matter.createdBy === userId
+  );
+}
+
+function countDueSoon(
+  rows: Array<{ deadlineDate: Date | null }>,
+  days = 7
+) {
+  const now = Date.now();
+  const cutoff = now + days * 24 * 60 * 60 * 1000;
+  return rows.filter((row) => {
+    const deadline = row.deadlineDate?.getTime();
+    return typeof deadline === "number" && deadline >= now && deadline <= cutoff;
+  }).length;
+}
 
 /* ── KPI Skeleton ── */
 function KpiSkeleton() {
@@ -253,13 +282,23 @@ function AdminDashboard() {
     queryFn: () => analytics.firmOverview(),
     staleTime: 60_000,
   });
+  const { data: productivity = [] } = useQuery({
+    queryKey: ["analytics", "attorneys"],
+    queryFn: () => analytics.attorneyProductivity(),
+    staleTime: 60_000,
+  });
+  const { data: privacyRequests = [] } = useQuery({
+    queryKey: ["dpdp", "requests", "dashboard"],
+    queryFn: () => dpdp.requests(),
+    staleTime: 60_000,
+  });
 
   const kpis: readonly Kpi[] = overview
     ? [
-        { label: "Active Advocates",  value: String(overview.totalMatters > 0 ? Math.min(overview.activeMatters, 99) : 0), delta: "Live from API",       trend: "neutral" },
-        { label: "Open Matters",      value: String(overview.activeMatters),  delta: `${overview.totalMatters} total`,     trend: "neutral" },
-        { label: "Docs Processed",    value: String(overview.totalDocuments).replace(/\B(?=(\d{3})+(?!\d))/g, ","), delta: `${overview.documentsThisMonth} this month`, trend: "up" },
-        { label: "Flags Resolved",    value: String(overview.flagsResolved),  delta: "Action required",                    trend: "down" },
+        { label: "Total Advocates", value: String(productivity.length), delta: "Active team members", trend: "neutral" },
+        { label: "Open Matters", value: String(overview.openMatters), delta: `${overview.totalMatters} total matters`, trend: "neutral" },
+        { label: "Monthly Docs Processed", value: String(overview.processedDocuments).replace(/\B(?=(\d{3})+(?!\d))/g, ","), delta: `${overview.totalDocuments} uploaded overall`, trend: "up" },
+        { label: "DPDP Alerts", value: String(privacyRequests.filter((request) => request.status === "open" || request.status === "processing").length), delta: "Requests needing follow-up", trend: "down" },
       ]
     : [];
 
@@ -317,12 +356,18 @@ function AdminDashboard() {
           <section className="glass p-6">
             <h2 className="mb-4 text-lg font-semibold">{t("dash_subscription")}</h2>
             <div className="rounded-2xl border border-saffron-500/30 bg-saffron-500/10 p-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-saffron-400">Professional Plan</div>
-              <div className="mt-2 kpi-value text-2xl font-semibold">
-                ₹14,999
-                <span className="ml-1 text-sm font-normal text-white/55">/mo + GST</span>
+              <div className="text-xs uppercase tracking-[0.2em] text-saffron-400">
+                {CURRENT_PLAN.name} Plan
               </div>
-              <div className="mt-2 text-sm text-white/70">12 / 15 advocates active</div>
+              <div className="mt-2 kpi-value text-2xl font-semibold">
+                {CURRENT_PLAN.price}
+                <span className="ml-1 text-sm font-normal text-white/55">
+                  {CURRENT_PLAN.billingSuffix}
+                </span>
+              </div>
+              <div className="mt-2 text-sm text-white/70">
+                12 / {CURRENT_PLAN.seatCap ?? "Custom"} advocates active
+              </div>
               <div className="mt-3">
                 <HealthBar value={80} delay={0.2} />
               </div>
@@ -334,7 +379,13 @@ function AdminDashboard() {
               </div>
               <div className="flex justify-between">
                 <span>Docs used</span>
-                <span className="text-white/90">{overview ? `${String(overview.totalDocuments).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} / 5,000` : "— / 5,000"}</span>
+                <span className="text-white/90">
+                  {overview
+                    ? `${String(overview.totalDocuments).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} / ${
+                        CURRENT_PLAN.documentCap?.toLocaleString("en-IN") ?? "Custom"
+                      }`
+                    : `— / ${CURRENT_PLAN.documentCap?.toLocaleString("en-IN") ?? "Custom"}`}
+                </span>
               </div>
             </div>
           </section>
@@ -370,18 +421,45 @@ function AdminDashboard() {
 /* ── Senior Advocate Dashboard ── */
 function SeniorAdvocateDashboard() {
   const { t } = useTranslation();
+  const { user } = useAuthStore();
   const { data: overview, isLoading } = useQuery({
     queryKey: ["analytics", "overview"],
     queryFn: () => analytics.firmOverview(),
     staleTime: 60_000,
   });
+  const { data: mattersPage } = useQuery({
+    queryKey: ["dashboard", "senior", "matters"],
+    queryFn: () => matters.list({ page: 1, limit: 100 }),
+    staleTime: 60_000,
+  });
+  const seniorMatterIds = useMemo(
+    () => (mattersPage?.data ?? []).map((matter) => matter.id),
+    [mattersPage]
+  );
+  const { data: obligationRows = [] } = useQuery({
+    queryKey: ["dashboard", "senior", "obligations", seniorMatterIds],
+    enabled: seniorMatterIds.length > 0,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const pages = await Promise.all(
+        seniorMatterIds.slice(0, 20).map((matterId) => obligations.list(matterId, { limit: 100 }))
+      );
+      return pages.flatMap((page) => page.data);
+    },
+  });
+  const myActiveMatters = useMemo(() => {
+    const rows = mattersPage?.data ?? [];
+    const assigned = rows.filter((matter) => isAssignedMatter(matter, user?.id));
+    const scoped = assigned.length > 0 ? assigned : rows;
+    return scoped.filter((matter) => matter.status === "open").length;
+  }, [mattersPage, user?.id]);
 
   const kpis: readonly Kpi[] = overview
     ? [
-        { label: "My Active Matters",    value: String(overview.activeMatters),                            delta: "Live from API",         trend: "neutral" },
-        { label: "Hearings This Week",   value: "—",                                                     delta: "Check calendar",        trend: "neutral" },
-        { label: "Docs Pending Review",  value: String(overview.totalDocuments - overview.flagsResolved), delta: "Pending review",         trend: "down" },
-        { label: "Avg. Matter Health",   value: overview.avgProcessingTime ? `${Math.round(100 - overview.avgProcessingTime)}%` : "—", delta: "Computed",   trend: "up" },
+        { label: "My Active Matters", value: String(myActiveMatters || overview.openMatters), delta: "Across owned and supervised work", trend: "neutral" },
+        { label: "Hearings This Week", value: String(countDueSoon(obligationRows)), delta: "Upcoming deadlines and appearances", trend: "neutral" },
+        { label: "Docs Pending Review", value: String(overview.openFlags), delta: "Open review items from analytics", trend: "down" },
+        { label: "Avg. Matter Health", value: overview.avgHealthScore ? `${Math.round(overview.avgHealthScore)}%` : "—", delta: `${overview.openMatters} open matters monitored`, trend: "up" },
       ]
     : [];
 
@@ -495,19 +573,63 @@ function SeniorAdvocateDashboard() {
 /* ── Junior Advocate Dashboard ── */
 function JuniorAdvocateDashboard() {
   const { t } = useTranslation();
-  const { data: overview, isLoading } = useQuery({
-    queryKey: ["analytics", "overview"],
-    queryFn: () => analytics.firmOverview(),
+  const { user } = useAuthStore();
+  const { data: mattersPage, isLoading } = useQuery({
+    queryKey: ["dashboard", "junior", "matters"],
+    queryFn: () => matters.list({ page: 1, limit: 100 }),
+    staleTime: 60_000,
+  });
+  const { data: documentsPage } = useQuery({
+    queryKey: ["dashboard", "junior", "documents"],
+    queryFn: () => documents.listAll({ page: 1, limit: 100 }),
+    staleTime: 60_000,
+  });
+  const { data: historyPage } = useQuery({
+    queryKey: ["dashboard", "junior", "research-history"],
+    queryFn: () => research.history(undefined, 100),
     staleTime: 60_000,
   });
 
-  const kpis: readonly Kpi[] = overview
-    ? [
-        { label: "Assigned Matters",  value: String(overview.activeMatters),  delta: "Live from API",       trend: "neutral" },
-        { label: "Pending Documents", value: String(overview.documentsThisMonth), delta: "Review requested",  trend: "down" },
-        { label: "Next Hearing",      value: "—",                            delta: "Check calendar",      trend: "neutral" },
-      ]
-    : [];
+  const assignedMatters = useMemo(() => {
+    const rows = mattersPage?.data ?? [];
+    const mine = rows.filter((matter) => isAssignedMatter(matter, user?.id));
+    return mine.length > 0 ? mine : rows;
+  }, [mattersPage, user?.id]);
+
+  const assignedMatterIds = useMemo(
+    () => assignedMatters.map((matter) => matter.id),
+    [assignedMatters]
+  );
+
+  const { data: obligationRows = [] } = useQuery({
+    queryKey: ["dashboard", "junior", "obligations", assignedMatterIds],
+    enabled: assignedMatterIds.length > 0,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const pages = await Promise.all(
+        assignedMatterIds.slice(0, 20).map((matterId) => obligations.list(matterId, { limit: 100 }))
+      );
+      return pages.flatMap((page) => page.data);
+    },
+  });
+
+  const documentsByMatter = useMemo(
+    () => new Set((documentsPage?.data ?? []).map((doc) => doc.matterId)),
+    [documentsPage]
+  );
+
+  const researchThisWeek = useMemo(() => {
+    const now = Date.now();
+    const cutoff = now - 7 * 24 * 60 * 60 * 1000;
+    return (historyPage?.data ?? []).filter((item) => new Date(item.createdAt).getTime() >= cutoff).length;
+  }, [historyPage]);
+
+  const kpis: readonly Kpi[] = [
+    { label: "My Assigned Matters", value: String(assignedMatters.length), delta: "Scoped to your current work", trend: "neutral" },
+    { label: "Docs I Need To Upload", value: String(Math.max(assignedMatters.length - assignedMatters.filter((matter) => documentsByMatter.has(matter.id)).length, 0)), delta: "Matters without a document set", trend: "down" },
+    { label: "Upcoming Obligations", value: String(countDueSoon(obligationRows)), delta: "Next 7 days", trend: "neutral" },
+    { label: "Research Queries This Week", value: String(researchThisWeek), delta: "Recent Nyay Assist and research usage", trend: "up" },
+  ];
 
   return (
     <AppShell title={t("dash_myWorkspace")}>
@@ -543,18 +665,50 @@ function JuniorAdvocateDashboard() {
 /* ── Paralegal Dashboard ── */
 function ParalegalDashboard() {
   const { t } = useTranslation();
-  const { data: overview, isLoading } = useQuery({
-    queryKey: ["analytics", "overview"],
-    queryFn: () => analytics.firmOverview(),
+  const { user } = useAuthStore();
+  const { data: mattersPage, isLoading } = useQuery({
+    queryKey: ["dashboard", "paralegal", "matters"],
+    queryFn: () => matters.list({ page: 1, limit: 100 }),
+    staleTime: 60_000,
+  });
+  const { data: documentsPage } = useQuery({
+    queryKey: ["dashboard", "paralegal", "documents"],
+    queryFn: () => documents.listAll({ page: 1, limit: 100 }),
     staleTime: 60_000,
   });
 
-  const kpis: readonly Kpi[] = overview
-    ? [
-        { label: "Documents to Upload", value: String(overview.documentsThisMonth), delta: "This month", trend: "neutral" },
-        { label: "Upcoming Tasks",      value: String(overview.flagsResolved),      delta: "Action items", trend: "down" },
-      ]
-    : [];
+  const assignedMatters = useMemo(() => {
+    const rows = mattersPage?.data ?? [];
+    const mine = rows.filter((matter) => isAssignedMatter(matter, user?.id));
+    return mine.length > 0 ? mine : rows;
+  }, [mattersPage, user?.id]);
+
+  const assignedMatterIds = useMemo(
+    () => assignedMatters.map((matter) => matter.id),
+    [assignedMatters]
+  );
+
+  const { data: obligationRows = [] } = useQuery({
+    queryKey: ["dashboard", "paralegal", "obligations", assignedMatterIds],
+    enabled: assignedMatterIds.length > 0,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const pages = await Promise.all(
+        assignedMatterIds.slice(0, 20).map((matterId) => obligations.list(matterId, { limit: 100 }))
+      );
+      return pages.flatMap((page) => page.data);
+    },
+  });
+
+  const documentsByMatter = useMemo(
+    () => new Set((documentsPage?.data ?? []).map((doc) => doc.matterId)),
+    [documentsPage]
+  );
+
+  const kpis: readonly Kpi[] = [
+    { label: "Documents To Upload Today", value: String(Math.max(assignedMatters.length - assignedMatters.filter((matter) => documentsByMatter.has(matter.id)).length, 0)), delta: "Matter workspaces still awaiting uploads", trend: "neutral" },
+    { label: "Upcoming Task Deadlines", value: String(countDueSoon(obligationRows)), delta: "Next 7 days", trend: "down" },
+  ];
 
   return (
     <AppShell title={t("dash_paralegalWorkspace")}>

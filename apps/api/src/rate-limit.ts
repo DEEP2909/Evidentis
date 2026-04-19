@@ -133,7 +133,7 @@ export function createRateLimiter(limitType: keyof typeof RATE_LIMITS) {
     reply: FastifyReply
   ) {
     // Build rate limit key from user/tenant info
-    const userId = (request as any).userId;
+    const userId = (request as any).advocateId || (request as any).userId || (request as any).attorneyId;
     const tenantId = (request as any).tenantId;
     const ip = request.ip;
     

@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { matters, type CreateMatterInput } from "@/lib/api";
+import { useCapabilities } from "@/lib/use-capabilities";
 import { formatDate, INDIAN_STATES } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
@@ -75,6 +76,7 @@ export default function MattersPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const caps = useCapabilities();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>("all");
@@ -136,10 +138,10 @@ export default function MattersPage() {
     mutationFn: (id: string) => matters.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["matters"] });
-      toast.success("Matter deleted");
+      toast.success("Matter archived");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to delete matter");
+      toast.error(error instanceof Error ? error.message : "Failed to archive matter");
     },
   });
 
@@ -174,85 +176,87 @@ export default function MattersPage() {
             <h2 className="mt-1 text-2xl font-semibold">{t("mat_subtitle")}</h2>
           </div>
 
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                {t("mat_createMatter")}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="glass border-white/20 bg-slate-950 text-white sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Create New Matter</DialogTitle>
-                <DialogDescription className="text-white/65">
-                  Enter details for the new legal matter.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Matter Name *</Label>
-                  <Input id="name" placeholder="e.g., Acme Corp Acquisition" {...register("name")} className="focus-saffron" />
-                  {errors.name ? <p className="text-sm text-red-300">{errors.name.message}</p> : null}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="clientName">Client Name *</Label>
-                  <Input id="clientName" placeholder="e.g., Acme Corporation" {...register("clientName")} className="focus-saffron" />
-                  {errors.clientName ? <p className="text-sm text-red-300">{errors.clientName.message}</p> : null}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Input id="description" placeholder="Brief description of the matter" {...register("description")} className="focus-saffron" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+          {caps.canCreateMatter ? (
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("mat_createMatter")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="glass border-white/20 bg-slate-950 text-white sm:max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Create New Matter</DialogTitle>
+                  <DialogDescription className="text-white/65">
+                    Enter details for the new legal matter.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="practiceArea">Practice Area</Label>
-                    <select
-                      id="practiceArea"
-                      className="focus-saffron h-10 w-full rounded-md border border-white/20 bg-slate-900/75 px-3 text-sm outline-none"
-                      {...register("practiceArea")}
-                    >
-                      <option value="">Select...</option>
-                      {practiceAreas.map((area) => (
-                        <option key={area} value={area} className="bg-slate-900">
-                          {area}
-                        </option>
-                      ))}
-                    </select>
+                    <Label htmlFor="name">Matter Name *</Label>
+                    <Input id="name" placeholder="e.g., Acme Corp Acquisition" {...register("name")} className="focus-saffron" />
+                    {errors.name ? <p className="text-sm text-red-300">{errors.name.message}</p> : null}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="jurisdiction">Jurisdiction</Label>
-                    <select
-                      id="jurisdiction"
-                      className="focus-saffron h-10 w-full rounded-md border border-white/20 bg-slate-900/75 px-3 text-sm outline-none"
-                      {...register("jurisdiction")}
-                    >
-                      <option value="">Select...</option>
-                      {INDIAN_STATES.map((state) => (
-                        <option key={state.code} value={state.code} className="bg-slate-900">
-                          {state.name}
-                        </option>
-                      ))}
-                    </select>
+                    <Label htmlFor="clientName">Client Name *</Label>
+                    <Input id="clientName" placeholder="e.g., Acme Corporation" {...register("clientName")} className="focus-saffron" />
+                    {errors.clientName ? <p className="text-sm text-red-300">{errors.clientName.message}</p> : null}
                   </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} className="border-white/25 text-white/75">
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createMutation.isPending}>
-                    {createMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      "Create Matter"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Input id="description" placeholder="Brief description of the matter" {...register("description")} className="focus-saffron" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="practiceArea">Practice Area</Label>
+                      <select
+                        id="practiceArea"
+                        className="focus-saffron h-10 w-full rounded-md border border-white/20 bg-slate-900/75 px-3 text-sm outline-none"
+                        {...register("practiceArea")}
+                      >
+                        <option value="">Select...</option>
+                        {practiceAreas.map((area) => (
+                          <option key={area} value={area} className="bg-slate-900">
+                            {area}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="jurisdiction">Jurisdiction</Label>
+                      <select
+                        id="jurisdiction"
+                        className="focus-saffron h-10 w-full rounded-md border border-white/20 bg-slate-900/75 px-3 text-sm outline-none"
+                        {...register("jurisdiction")}
+                      >
+                        <option value="">Select...</option>
+                        {INDIAN_STATES.map((state) => (
+                          <option key={state.code} value={state.code} className="bg-slate-900">
+                            {state.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} className="border-white/25 text-white/75">
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={createMutation.isPending}>
+                      {createMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        "Create Matter"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
 
           <Dialog
             open={Boolean(matterPendingDeletion)}
@@ -264,9 +268,9 @@ export default function MattersPage() {
           >
             <DialogContent className="glass border-white/20 bg-slate-950 text-white sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Delete Matter</DialogTitle>
+                <DialogTitle>Archive Matter</DialogTitle>
                 <DialogDescription className="text-white/65">
-                  This action cannot be undone. The selected matter and its references will be removed.
+                  The selected matter will be archived and removed from active worklists. You can keep its audit history intact.
                 </DialogDescription>
               </DialogHeader>
               <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">
@@ -285,10 +289,10 @@ export default function MattersPage() {
                   {deleteMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Deleting...
+                      Archiving...
                     </>
                   ) : (
-                    "Delete Matter"
+                    "Archive Matter"
                   )}
                 </Button>
               </DialogFooter>
@@ -409,16 +413,18 @@ export default function MattersPage() {
                       <div className="mt-4 border-t border-white/10 pt-3 text-xs text-white/50">
                         <div className="flex items-center justify-between">
                           <span>Created {formatDate(matter.createdAt)}</span>
-                          <button type="button"
-                            className="rounded-md p-1 text-red-300 transition hover:bg-red-500/10"
-                            aria-label="Delete matter"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setMatterPendingDeletion({ id: matter.id, name: matter.matterName });
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {caps.canArchiveMatter ? (
+                            <button type="button"
+                              className="rounded-md p-1 text-red-300 transition hover:bg-red-500/10"
+                              aria-label="Archive matter"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setMatterPendingDeletion({ id: matter.id, name: matter.matterName });
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          ) : null}
                         </div>
                       </div>
                     </CardContent>
@@ -441,7 +447,7 @@ export default function MattersPage() {
               <p className="mt-1 text-white/60">
                 {searchQuery ? "No matters match your search criteria." : "Create your first matter to get started."}
               </p>
-              {!searchQuery ? (
+              {!searchQuery && caps.canCreateMatter ? (
                 <Button className="mt-4" onClick={() => setIsCreateDialogOpen(true)}>
                   <Plus className="mr-2 h-4 w-4" />
                   Create Matter

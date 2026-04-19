@@ -22,9 +22,6 @@ export const INDIAN_JURISDICTIONS: ReadonlyArray<{ code: IndianStateCode; name: 
   region: code,
 }));
 
-// Backward-compatible alias while callers migrate to India naming.
-export const US_JURISDICTIONS = INDIAN_JURISDICTIONS;
-
 export const DPDP_RULES: StateRule[] = INDIAN_STATE_CODES.map((state) => ({
   state,
   stateName: INDIAN_STATE_NAMES[state],

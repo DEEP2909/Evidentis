@@ -9,13 +9,12 @@ import re
 from typing import Dict, List, Optional
 from enum import Enum
 
-import httpx
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from llm_safety import RetryConfig, extract_ollama_text, retry_with_backoff
+from llm_caller import call_llm, clean_json
 from prompts import OBLIGATION_EXTRACTION, validate_response
 
 logger = logging.getLogger(__name__)
@@ -59,13 +58,6 @@ def calculate_deadline(deadline_str: str, effective_date: Optional[str]) -> Opti
     return deadline_str
 
 router = APIRouter()
-
-LLM_RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    initial_delay=1.0,
-    max_delay=10.0,
-    exponential_base=2.0,
-)
 
 
 class ObligationType(str, Enum):
@@ -336,9 +328,7 @@ async def extract_obligations_llm(
     text: str,
     parties: Optional[Dict[str, str]],
     effective_date: Optional[str],
-    ollama_url: str,
-    model: str,
-    timeout: int
+    settings,
 ) -> List[ExtractedObligation]:
     """Use LLM to extract obligations."""
     # Truncate text if too long
@@ -378,33 +368,17 @@ No additional prose."""
     system_prompt = "You are a contracts analyst extracting obligations from legal documents."
     user_prompt = prompt.replace(system_prompt, "").strip()
 
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": OBLIGATION_EXTRACTION.temperature},
-    }
-
-    async def _call_llm() -> dict:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                f"{ollama_url}/api/chat",
-                json=payload,
-            )
-            if response.status_code != 200:
-                raise RuntimeError(f"Ollama error: {response.status_code}")
-            return response.json()
-
     try:
-        result = await retry_with_backoff(
-            _call_llm,
-            config=LLM_RETRY_CONFIG,
+        response_text = await call_llm(
+            task="obligations",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            settings=settings,
+            temperature=OBLIGATION_EXTRACTION.temperature,
+            max_tokens=3072,
+            json_mode=True,
         )
-        response_text = extract_ollama_text(result, "[]")
+        response_text = clean_json(response_text)
         if not validate_response(response_text, "json"):
             logger.error("Obligation extraction model returned non-JSON content")
             return []
@@ -490,9 +464,7 @@ async def extract_obligations(
             body.text,
             body.parties,
             body.effective_date,
-            settings.ollama_base_url,
-            settings.ollama_model_extract,
-            settings.ollama_timeout
+            settings,
         )
         logger.info(f"LLM found {len(llm_obligations)} obligations")
     

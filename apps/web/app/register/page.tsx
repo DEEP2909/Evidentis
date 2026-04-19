@@ -112,15 +112,15 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="grain-overlay min-h-screen flex bg-[#060709]">
+      <div className="grain-overlay min-h-screen flex bg-[#050506]">
       {/* ── Left Panel — Brand & Trial Info ── */}
       <div className="hidden lg:flex lg:w-[48%] items-center justify-center p-12 relative overflow-hidden">
         {/* Background layers */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#0a0d14] via-[#0d1220] to-[#0f1a2e]" />
         <div className="absolute inset-0 grid-pattern opacity-30" />
-        <div className="absolute top-1/4 left-1/3 w-[400px] h-[400px] bg-[#ff9933]/[0.04] rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-0 w-12 h-12 border-r border-b border-[#ff9933]/10" />
-        <div className="absolute top-0 left-0 w-12 h-12 border-l border-t border-[#ff9933]/10" />
+        <div className="absolute top-1/4 left-1/3 h-[400px] w-[400px] rounded-full bg-saffron-500/10 blur-[120px]" />
+        <div className="absolute bottom-0 right-0 h-12 w-12 border-b border-r border-saffron-400/14" />
+        <div className="absolute left-0 top-0 h-12 w-12 border-l border-t border-saffron-400/14" />
 
         <div className="relative z-10 max-w-md">
           <motion.div
@@ -144,7 +144,7 @@ export default function RegisterPage() {
 
             {/* Trial features */}
             <motion.div variants={fadeUp} className="space-y-3">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-[#ffcf8c] font-semibold">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-saffron-300">
                 Free Trial Includes
               </span>
               <div className="grid gap-2.5 mt-3">
@@ -152,10 +152,10 @@ export default function RegisterPage() {
                   <motion.div
                     key={f.label}
                     variants={fadeUp}
-                    className="flex items-center gap-3 px-4 py-3 border border-white/[0.05] bg-white/[0.02]"
+                    className="flex items-center gap-3 border border-white/[0.05] bg-white/[0.02] px-4 py-3"
                   >
-                    <div className="flex h-8 w-8 items-center justify-center bg-[#ff9933]/[0.06] border border-[#ff9933]/10">
-                      <f.icon className="h-3.5 w-3.5 text-[#ff9933]" />
+                    <div className="flex h-8 w-8 items-center justify-center border border-saffron-400/12 bg-saffron-500/10">
+                      <f.icon className="h-3.5 w-3.5 text-saffron-300" />
                     </div>
                     <span className="text-sm text-white/60">{f.label}</span>
                   </motion.div>
@@ -166,10 +166,10 @@ export default function RegisterPage() {
             {/* Trial badge */}
             <motion.div
               variants={fadeUp}
-              className="inline-flex items-center gap-2.5 rounded-full border border-[#ff9933]/15 bg-[#ff9933]/[0.05] px-5 py-2"
+              className="inline-flex items-center gap-2.5 rounded-full border border-saffron-400/16 bg-saffron-500/10 px-5 py-2"
             >
-              <span className="w-2 h-2 bg-[#ff9933] rounded-full animate-pulse" />
-              <span className="text-xs font-medium tracking-wide text-[#ffcf8c]">
+              <span className="h-2 w-2 rounded-full bg-saffron-400 animate-pulse" />
+              <span className="text-xs font-medium tracking-wide text-saffron-300">
                 30 Days Free — No card required
               </span>
             </motion.div>
@@ -180,7 +180,7 @@ export default function RegisterPage() {
       {/* ── Right Panel — Registration Form ── */}
       <div className="flex-1 flex items-center justify-center p-8 relative">
         {/* Subtle ambient glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#ff9933]/[0.02] rounded-full blur-[100px] pointer-events-none" />
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-saffron-500/8 blur-[110px]" />
 
         <motion.div
           initial={{ opacity: 0, x: 24 }}
@@ -212,7 +212,7 @@ export default function RegisterPage() {
                     id="name"
                     type="text"
                     placeholder="Enter your full name"
-                    className="bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/25 focus:border-[#ff9933]/30 focus:ring-[#ff9933]/10 transition-all"
+                    className="focus-saffron bg-white/[0.03] text-white placeholder:text-white/25"
                     {...register("name")}
                   />
                   {errors.name && (
@@ -228,7 +228,7 @@ export default function RegisterPage() {
                     id="email"
                     type="email"
                     placeholder="Enter your email"
-                    className="bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/25 focus:border-[#ff9933]/30 focus:ring-[#ff9933]/10 transition-all"
+                    className="focus-saffron bg-white/[0.03] text-white placeholder:text-white/25"
                     {...register("email")}
                   />
                   {errors.email && (
@@ -245,7 +245,7 @@ export default function RegisterPage() {
                       id="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="Create a password (min 8 characters)"
-                      className="bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/25 focus:border-[#ff9933]/30 focus:ring-[#ff9933]/10 transition-all pr-10"
+                      className="focus-saffron bg-white/[0.03] pr-10 text-white placeholder:text-white/25"
                       {...register("password")}
                     />
                     <button
@@ -270,7 +270,7 @@ export default function RegisterPage() {
                       id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
                       placeholder="Confirm your password"
-                      className="bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/25 focus:border-[#ff9933]/30 focus:ring-[#ff9933]/10 transition-all pr-10"
+                      className="focus-saffron bg-white/[0.03] pr-10 text-white placeholder:text-white/25"
                       {...register("confirmPassword")}
                     />
                     <button
@@ -296,7 +296,7 @@ export default function RegisterPage() {
                     <div
                       className={`w-4 h-4 border rounded-sm flex items-center justify-center transition-all ${
                         isStakeholder
-                          ? "bg-[#ff9933] border-[#ff9933]"
+                          ? "border-saffron-500 bg-saffron-500"
                           : "border-white/15 bg-transparent"
                       }`}
                     >
@@ -326,7 +326,7 @@ export default function RegisterPage() {
                       id="invitationCode"
                       type="text"
                       placeholder="Enter your invitation code"
-                      className="bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/25 focus:border-[#ff9933]/30 focus:ring-[#ff9933]/10 transition-all font-mono tracking-wider"
+                      className="focus-saffron bg-white/[0.03] font-mono tracking-wider text-white placeholder:text-white/25"
                       {...register("invitationCode")}
                     />
                     <p className="text-[10px] text-white/25">
@@ -337,7 +337,7 @@ export default function RegisterPage() {
 
                 <Button
                   type="submit"
-                  className="w-full h-12 bg-white text-black font-semibold text-sm uppercase tracking-wider hover:bg-[#ff9933] transition-all duration-300 rounded-sm"
+                  className="w-full rounded-xl"
                   disabled={isLoading}
                 >
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -348,15 +348,15 @@ export default function RegisterPage() {
 
               <div className="mt-6 text-center text-sm text-white/30">
                 {t("auth_hasAccount")}{" "}
-                <Link href="/login" className="text-[#ff9933] hover:text-[#ffcf8c] transition-colors">
+                <Link href="/login" className="link-ink">
                   {t("login")}
                 </Link>
               </div>
 
               <div className="mt-4 flex items-center justify-center">
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#ff9933]/10 bg-[#ff9933]/[0.03] px-4 py-1.5">
-                  <span className="w-1.5 h-1.5 bg-[#ff9933] rounded-full animate-pulse" />
-                  <p className="text-[10px] text-[#ffcf8c]/70 uppercase tracking-wider font-medium">
+                <div className="inline-flex items-center gap-2 rounded-full border border-saffron-400/14 bg-saffron-500/10 px-4 py-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-saffron-400 animate-pulse" />
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-saffron-300/80">
                     Trial starts immediately with full access
                   </p>
                 </div>

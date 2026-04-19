@@ -38,7 +38,7 @@ def mock_app_state():
     """
     mock_models = MagicMock()
     mock_models.get_status.return_value = {
-        "embedding": {"loaded": True, "model": "sentence-transformers/LaBSE"},
+        "embedding": {"loaded": True, "model": "BAAI/bge-m3"},
         "spacy": {"loaded": True, "model": "en_core_web_sm"},
         "ocr": {"tesseract": {"available": True}},
     }
@@ -46,15 +46,20 @@ def mock_app_state():
     # Configure encode() to return a proper array that .tolist() works on
     def encode_side_effect(texts, **kwargs):
         if isinstance(texts, list):
-            return np.zeros((len(texts), 768))  # batch: shape (n, 768)
-        return np.zeros(768)  # single text: shape (768,)
+            return np.zeros((len(texts), 1024))  # batch: shape (n, 1024)
+        return np.zeros(1024)  # single text: shape (1024,)
 
     mock_models.embedding_model.encode.side_effect = encode_side_effect
 
     mock_settings = MagicMock()
     mock_settings.ollama_base_url = "http://localhost:11434"
-    mock_settings.embedding_model = "sentence-transformers/LaBSE"
-    mock_settings.embedding_dim = 768
+    mock_settings.ollama_model_fallback = "qwen2.5:3b-instruct-q3_K_M"
+    mock_settings.azure_openai_endpoint = ""
+    mock_settings.azure_openai_api_key = ""
+    mock_settings.azure_openai_deployment = ""
+    mock_settings.groq_api_key = ""
+    mock_settings.embedding_model = "BAAI/bge-m3"
+    mock_settings.embedding_dim = 1024
     mock_settings.ai_service_internal_key = ""
     mock_settings.rate_limit_requests_per_minute = 120
 

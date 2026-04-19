@@ -5,7 +5,7 @@ EvidentIS India AI Service Configuration
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         protected_namespaces=("settings_",),
+        extra="ignore",
     )
 
     host: str = Field(default="0.0.0.0")
@@ -23,18 +24,28 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False)
     environment: str = Field(default="development")
 
-    cors_origins: List[str] = Field(default=[])
+    cors_origins: str = Field(default="")
 
     ollama_base_url: str = Field(default="http://localhost:11434")
-    ollama_model_extract: str = Field(default="mistral:7b-instruct-q4_K_M")
-    ollama_model_research: str = Field(default="mistral:7b-instruct-q4_K_M")
+    ollama_model_extract: str = Field(default="qwen2.5:3b-instruct-q3_K_M")
+    ollama_model_research: str = Field(default="qwen2.5:3b-instruct-q3_K_M")
+    ollama_model_fallback: str = Field(default="qwen2.5:3b-instruct-q3_K_M")
     ollama_timeout: int = Field(default=120)
 
-    openai_fallback_model: str = Field(default="gpt-4o")
-    openai_api_key: str = Field(default="")
+    azure_openai_endpoint: str = Field(default="")
+    azure_openai_api_key: str = Field(default="")
+    azure_openai_api_version: str = Field(default="2024-02-01")
+    azure_openai_deployment: str = Field(default="gpt-4o-mini")
+    azure_openai_timeout: int = Field(default=60)
+    groq_api_key: str = Field(default="")
+    groq_research_model: str = Field(
+        default="llama-3.1-8b-instant",
+        validation_alias=AliasChoices("GROQ_RESEARCH_MODEL", "GROQ_MODEL"),
+    )
+    groq_timeout: int = Field(default=30)
 
-    embedding_model: str = Field(default="sentence-transformers/LaBSE")
-    embedding_dim: int = Field(default=768)
+    embedding_model: str = Field(default="BAAI/bge-m3")
+    embedding_dim: int = Field(default=1024)
     extract_model: str = Field(default="ai4bharat/indic-bert")
     translation_model: str = Field(default="ai4bharat/indictrans2-en-indic-1B")
 
@@ -62,6 +73,10 @@ class Settings(BaseSettings):
     @property
     def ocr_language_list(self) -> List[str]:
         return [language.strip() for language in self.ocr_languages.split("+") if language.strip()]
+
+    @property
+    def cors_origin_list(self) -> List[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 @lru_cache()
 def get_settings() -> Settings:

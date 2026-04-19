@@ -20,6 +20,7 @@ app = Celery(
         'tasks.obligation_remind',
         'tasks.cleanup',
         'tasks.analytics',
+        'tasks.erasure',
     ]
 )
 
@@ -55,6 +56,7 @@ app.conf.update(
         Queue('notifications', Exchange('notifications'), routing_key='notify.#'),
         Queue('analytics', Exchange('analytics'), routing_key='analytics.#'),
         Queue('cleanup', Exchange('cleanup'), routing_key='cleanup.#'),
+        Queue('privacy', Exchange('privacy'), routing_key='privacy.#'),
     ),
     
     task_default_queue='default',
@@ -67,6 +69,7 @@ app.conf.update(
         'tasks.obligation_remind.*': {'queue': 'notifications', 'routing_key': 'notify.obligation'},
         'tasks.analytics.*': {'queue': 'analytics', 'routing_key': 'analytics.compute'},
         'tasks.cleanup.*': {'queue': 'cleanup', 'routing_key': 'cleanup.run'},
+        'tasks.erasure.*': {'queue': 'privacy', 'routing_key': 'privacy.erasure'},
     },
     
     # Beat scheduler for periodic tasks
@@ -132,6 +135,13 @@ app.conf.update(
             'task': 'tasks.batch_embed.retry_failed',
             'schedule': crontab(minute=30, hour='*/2'),
             'options': {'queue': 'embeddings'},
+        },
+
+        # Drain queued DPDP erasure jobs every 10 minutes
+        'process-dpdp-erasure-queue': {
+            'task': 'tasks.erasure.process_erasure_queue',
+            'schedule': crontab(minute='*/10'),
+            'options': {'queue': 'privacy'},
         },
     },
     

@@ -1,15 +1,16 @@
 "use client";
 
 import Image from "next/image";
+
 import { cn } from "@/lib/utils";
 
 type BrandLogoSize = "sm" | "md" | "lg" | "xl";
 
 const SIZE_MAP: Record<BrandLogoSize, string> = {
-  sm: "h-8 sm:h-9",
-  md: "h-10 sm:h-12",
-  lg: "h-14 sm:h-16",
-  xl: "h-20 sm:h-24",
+  sm: "h-8",
+  md: "h-10",
+  lg: "h-12",
+  xl: "h-16",
 };
 
 export function BrandLogo({
@@ -22,20 +23,14 @@ export function BrandLogo({
   priority?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "relative shrink-0 flex items-center justify-start",
-        SIZE_MAP[size],
-        className,
-      )}
-    >
+    <div className={cn("relative inline-flex shrink-0 items-center", SIZE_MAP[size], className)}>
       <Image
-        src="/logo_1.png"
+        src="/logo.png"
         alt="EvidentIS"
-        width={1000}
-        height={250}
+        width={1152}
+        height={648}
         priority={priority}
-        className="w-auto h-full object-contain"
+        className="h-full w-auto object-contain"
       />
     </div>
   );

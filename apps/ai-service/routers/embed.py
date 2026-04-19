@@ -54,7 +54,7 @@ async def create_embeddings(
     """
     Generate embeddings for multiple texts.
     
-    Uses LaBSE (768 dimensions) by default.
+    Uses BAAI/bge-m3 (1024 dimensions) by default.
     Embeddings are L2-normalized for cosine similarity.
     
     Max 100 texts per request.

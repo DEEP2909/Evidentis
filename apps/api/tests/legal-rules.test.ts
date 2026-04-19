@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CENTRAL_RULES,
   DPDP_RULES,
+  INDIAN_JURISDICTIONS,
   LABOUR_RULES,
   RERA_RULES,
   STAMP_DUTY_RULES,
-  US_JURISDICTIONS,
   checkClauseCompliance,
   getApplicableRules,
   getDefaultPlaybookRules,
@@ -16,9 +16,9 @@ import {
 
 describe('India legal rules', () => {
   it('covers all states and union territories in jurisdiction metadata', () => {
-    expect(US_JURISDICTIONS).toHaveLength(36);
-    expect(US_JURISDICTIONS.some((jurisdiction) => jurisdiction.code === 'DL')).toBe(true);
-    expect(US_JURISDICTIONS.some((jurisdiction) => jurisdiction.code === 'MH')).toBe(true);
+    expect(INDIAN_JURISDICTIONS).toHaveLength(36);
+    expect(INDIAN_JURISDICTIONS.some((jurisdiction) => jurisdiction.code === 'DL')).toBe(true);
+    expect(INDIAN_JURISDICTIONS.some((jurisdiction) => jurisdiction.code === 'MH')).toBe(true);
   });
 
   it('publishes DPDP coverage across all jurisdictions', () => {

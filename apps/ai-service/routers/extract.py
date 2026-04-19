@@ -8,24 +8,16 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from explainability import explain_clause_extraction
-from llm_safety import RetryConfig, extract_ollama_text, retry_with_backoff
+from llm_caller import call_llm, clean_json
 from prompts import CLAUSE_EXTRACTION, validate_response
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-LLM_RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    initial_delay=1.0,
-    max_delay=10.0,
-    exponential_base=2.0,
-)
 
 # India-first clause types with compatibility aliases for inherited workflows
 CLAUSE_TYPES = [
@@ -352,13 +344,10 @@ def extract_clauses_regex(text: str, clause_types: List[str]) -> List[ExtractedC
 async def extract_clauses_llm(
     text: str,
     clause_types: List[str],
-    ollama_url: str,
-    model: str,
-    timeout: int
+    settings: Any,
 ) -> List[ExtractedClause]:
     """
     LLM-based clause extraction for higher accuracy.
-    Uses Ollama with structured output.
     """
     max_chars = 6000  # Chunk size for long documents
     overlap = 500
@@ -389,36 +378,17 @@ async def extract_clauses_llm(
         system_prompt = "You are a legal document analyzer specializing in Indian commercial and legal drafting."
         user_prompt = prompt.replace(system_prompt, "").strip()
 
-        payload: Dict[str, Any] = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "stream": False,
-            "format": "json",
-            "options": {
-                "temperature": CLAUSE_EXTRACTION.temperature,
-                "num_predict": 4096,
-            },
-        }
-
-        async def _call_llm() -> Dict[str, Any]:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(
-                    f"{ollama_url}/api/chat",
-                    json=payload,
-                )
-                if response.status_code != 200:
-                    raise RuntimeError(f"Ollama error: {response.status_code}")
-                return response.json()
-
         try:
-            result = await retry_with_backoff(
-                _call_llm,
-                config=LLM_RETRY_CONFIG,
+            response_text = await call_llm(
+                task="extract",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                settings=settings,
+                temperature=CLAUSE_EXTRACTION.temperature,
+                max_tokens=4096,
+                json_mode=True,
             )
-            response_text = extract_ollama_text(result, "")
+            response_text = clean_json(response_text)
 
             # Parse JSON from response
             if validate_response(response_text, "json"):
@@ -525,9 +495,7 @@ async def extract_clauses(
             llm_clauses = await extract_clauses_llm(
                 body.text,
                 clause_types,
-                settings.ollama_base_url,
-                settings.ollama_model_extract,
-                settings.ollama_timeout
+                settings,
             )
             logger.info(f"LLM extraction found {len(llm_clauses)} clauses")
         except Exception as e:

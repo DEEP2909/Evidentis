@@ -159,8 +159,9 @@ class ModelRegistry:
             },
             "llm": {
                 "ollama_url": self.settings.ollama_base_url,
-                "extract_model": self.settings.ollama_model_extract,
-                "research_model": self.settings.ollama_model_research,
+                "azure_model": self.settings.azure_openai_deployment,
+                "groq_model": self.settings.groq_research_model,
+                "fallback_model": self.settings.ollama_model_fallback,
             },
             "extract_model": self.settings.extract_model,
             "translation_model": self.settings.translation_model,

@@ -59,7 +59,7 @@ export default function TemplatesPage() {
               <Plus className="h-3.5 w-3.5" />
               {t("tpl_addTemplate")}
             </span>
-            <div className="absolute inset-0 bg-[#ff9933] translate-y-[100%] transition-transform duration-300 group-hover:translate-y-[0%] z-0" />
+            <div className="absolute inset-0 bg-saffron-500 translate-y-[100%] transition-transform duration-300 group-hover:translate-y-[0%] z-0" />
           </button>
         </div>
 
@@ -73,11 +73,11 @@ export default function TemplatesPage() {
             >
               <Link
                 href={`/templates/${template.id}/generate`}
-                className="group block rounded-[2rem] border border-white/10 bg-[#0c0c0f] p-5 transition-all duration-300 hover:-translate-y-1 hover:border-[#ff9933]/40 hover:shadow-[0_10px_30px_-15px_rgba(255,153,51,0.2)] hover:bg-[#111114]"
+                className="group block rounded-[2rem] border border-white/10 bg-[#0c0c0f] p-5 transition-all duration-300 hover:-translate-y-1 hover:border-saffron-400/40 hover:shadow-[0_10px_30px_-15px_rgba(94,106,210,0.2)] hover:bg-[#111114]"
                 aria-label={`Open ${template.name} template`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#ff9933]">{template.category}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-saffron-300">{template.category}</p>
                   <Badge variant="outline" className="border-white/15 bg-white/5 text-[10px] text-white/60 font-mono">
                     {t("tpl_langsCount", { count: template.minimumLanguages.length })}
                   </Badge>
@@ -93,7 +93,7 @@ export default function TemplatesPage() {
                   transition={{ duration: 0.3 }}
                   className="mt-4 overflow-hidden"
                 >
-                  <div className="rounded-xl border border-[#ff9933]/20 bg-[#ff9933]/[0.03] p-3 text-xs text-white/60 leading-relaxed italic border-l-2 border-l-[#ff9933]">
+                  <div className="rounded-xl border border-saffron-400/20 bg-saffron-500/8 border-l-2 border-l-saffron-400 p-3 text-xs italic leading-relaxed text-white/60">
                     {t("tpl_features")}
                   </div>
                 </motion.div>
@@ -125,7 +125,7 @@ export default function TemplatesPage() {
                 >
                   <X className="h-5 w-5" />
                 </button>
-                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#ff9933]/20 bg-[#ff9933]/10 text-[#ffcf8c]">
+                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl border border-saffron-400/20 bg-saffron-500/10 text-saffron-300">
                   <FileCode2 className="h-6 w-6" />
                 </div>
                 <h2 className="font-serif text-2xl mb-2">{t("tpl_addTemplate")}</h2>
@@ -145,7 +145,7 @@ export default function TemplatesPage() {
                     <span className="relative z-10 flex items-center gap-2 text-sm uppercase tracking-wider font-bold">
                       {t("save", { defaultValue: "Save Template" })}
                     </span>
-                    <div className="absolute inset-0 bg-[#ff9933] translate-y-[100%] transition-transform duration-300 group-hover:translate-y-[0%] z-0" />
+                    <div className="absolute inset-0 bg-saffron-500 translate-y-[100%] transition-transform duration-300 group-hover:translate-y-[0%] z-0" />
                   </button>
                 </div>
               </motion.div>

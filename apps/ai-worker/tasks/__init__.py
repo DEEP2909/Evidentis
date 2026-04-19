@@ -4,6 +4,7 @@ from .report_gen import generate_matter_report, generate_weekly_reports, generat
 from .obligation_remind import send_daily_reminders, check_overdue, send_obligation_reminder
 from .cleanup import cleanup_expired_sessions, cleanup_orphaned_files, cleanup_old_audit_logs
 from .analytics import aggregate_hourly, rollup_daily, compute_health_scores, compute_firm_analytics
+from .erasure import process_erasure_job, process_erasure_queue
 
 __all__ = [
     # Batch embedding
@@ -32,4 +33,8 @@ __all__ = [
     'rollup_daily',
     'compute_health_scores',
     'compute_firm_analytics',
+
+    # DPDP erasure
+    'process_erasure_job',
+    'process_erasure_queue',
 ]

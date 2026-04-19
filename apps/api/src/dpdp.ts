@@ -5,12 +5,43 @@
  * - Right to erasure (consent withdrawal)
  */
 
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import { Redis } from 'ioredis';
+import { config } from './config.js';
+import { pool, withTransaction } from './database.js';
 import { logger } from './logger.js';
+import { authenticateRequest, type AuthenticatedRequest } from './routes.js';
 
-interface WithdrawBody {
-  reason?: string;
+const withdrawConsentSchema = z.object({
+  reason: z.string().trim().max(1000).optional(),
+});
+
+const internalErasureSchema = z.object({
+  tenantId: z.string().uuid(),
+  advocateId: z.string().uuid(),
+  requestId: z.string().uuid().optional(),
+  reason: z.string().trim().max(1000).optional(),
+});
+
+function parseDetails(details: string | null): Record<string, unknown> | null {
+  if (!details) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(details) as Record<string, unknown>;
+  } catch {
+    return { raw: details };
+  }
+}
+
+function isInternalRequestAuthorized(request: FastifyRequest): boolean {
+  if (!config.AI_SERVICE_INTERNAL_KEY) {
+    return true;
+  }
+
+  return request.headers['x-internal-key'] === config.AI_SERVICE_INTERNAL_KEY;
 }
 
 export async function dpdpRoutes(fastify: FastifyInstance): Promise<void> {
@@ -19,61 +50,55 @@ export async function dpdpRoutes(fastify: FastifyInstance): Promise<void> {
    * Withdraw consent and initiate data erasure process
    * Required under DPDP Act for right to erasure
    */
-  fastify.post('/api/dpdp/consent/withdraw', async (request: FastifyRequest, reply: FastifyReply) => {
-    const userId = (request as any).userId;
-    const tenantId = (request as any).tenantId;
-
-    if (!userId || !tenantId) {
-      return reply.status(401).send({
-        success: false,
-        error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-      });
-    }
-
-    const body = (request.body as WithdrawBody) ?? {};
+  fastify.post('/api/dpdp/consent/withdraw', { preHandler: authenticateRequest }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const body = withdrawConsentSchema.parse(request.body ?? {});
 
     try {
-      const { pool } = await import('./database.js');
+      const detailPayload = JSON.stringify({
+        reason: body.reason ?? null,
+        requestedFromIp: request.ip,
+        userAgent: request.headers['user-agent'] || null,
+      });
 
-      // Mark all consent records as withdrawn
-      await pool.query(
-        `UPDATE dpdp_consent 
-         SET withdrawn_at = NOW(), withdrawal_reason = $3
-         WHERE tenant_id = $1 AND user_id = $2 AND withdrawn_at IS NULL`,
-        [tenantId, userId, body.reason ?? null]
+      const result = await pool.query<{ id: string; created_at: string }>(
+        `INSERT INTO dpdp_requests (tenant_id, advocate_id, request_type, status, details)
+         VALUES ($1, $2, 'consent_withdrawal', 'open', $3)
+         RETURNING id, created_at`,
+        [authReq.tenantId, authReq.advocateId, detailPayload]
       );
 
-      // Queue an erasure job for downstream processing
-      // This handles: PII removal, document anonymization, audit log retention
+      const [erasureRequest] = result.rows;
+
       try {
-        const { config } = await import('./config.js');
         if (config.REDIS_URL) {
           const redis = new Redis(config.REDIS_URL);
           await redis.lpush('erasure_jobs', JSON.stringify({
             type: 'dpdp_erasure',
-            tenantId,
-            userId,
-            reason: body.reason,
-            requestedAt: new Date().toISOString(),
+            requestId: erasureRequest.id,
+            tenantId: authReq.tenantId,
+            advocateId: authReq.advocateId,
+            reason: body.reason ?? null,
+            requestedAt: erasureRequest.created_at,
           }));
           await redis.quit();
         }
       } catch (redisErr) {
-        // Log but don't fail the request — erasure can be retried
-        logger.warn({ err: redisErr }, 'Failed to queue erasure job, will retry');
+        logger.warn({ err: redisErr, tenantId: authReq.tenantId, advocateId: authReq.advocateId }, 'Failed to queue erasure job');
       }
 
-      logger.info({ userId, tenantId }, 'DPDP consent withdrawn, erasure job queued');
+      logger.info({ tenantId: authReq.tenantId, advocateId: authReq.advocateId, requestId: erasureRequest.id }, 'DPDP consent withdrawn and erasure queued');
 
       return reply.send({
         success: true,
         data: {
-          message: 'Consent withdrawn. Your personal data will be erased within 30 days as per DPDP Act compliance.',
+          requestId: erasureRequest.id,
+          message: 'Consent withdrawn. Your personal data erasure request has been queued for DPDP processing.',
           erasureDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         },
       });
     } catch (err) {
-      logger.error({ err, userId, tenantId }, 'Failed to process consent withdrawal');
+      logger.error({ err, tenantId: authReq.tenantId, advocateId: authReq.advocateId }, 'Failed to process consent withdrawal');
       return reply.status(500).send({
         success: false,
         error: { code: 'INTERNAL_ERROR', message: 'Failed to process withdrawal' },
@@ -83,45 +108,185 @@ export async function dpdpRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * GET /api/dpdp/consent/status
-   * Check current consent status for the authenticated user
+   * Check current consent/erasure status for the authenticated user
    */
-  fastify.get('/api/dpdp/consent/status', async (request: FastifyRequest, reply: FastifyReply) => {
-    const userId = (request as any).userId;
-    const tenantId = (request as any).tenantId;
-
-    if (!userId || !tenantId) {
-      return reply.status(401).send({
-        success: false,
-        error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-      });
-    }
+  fastify.get('/api/dpdp/consent/status', { preHandler: authenticateRequest }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
 
     try {
-      const { pool } = await import('./database.js');
-      const result = await pool.query(
-        `SELECT purpose, consented_at, withdrawn_at 
-         FROM dpdp_consent 
-         WHERE tenant_id = $1 AND user_id = $2 
-         ORDER BY consented_at DESC`,
-        [tenantId, userId]
+      const result = await pool.query<{
+        id: string;
+        request_type: string;
+        status: string;
+        details: string | null;
+        resolved_at: string | null;
+        created_at: string;
+      }>(
+        `SELECT id, request_type, status, details, resolved_at, created_at
+         FROM dpdp_requests
+         WHERE tenant_id = $1
+           AND advocate_id = $2
+         ORDER BY created_at DESC`,
+        [authReq.tenantId, authReq.advocateId]
       );
+
+      const requests = result.rows.map((row) => ({
+        id: row.id,
+        requestType: row.request_type,
+        status: row.status,
+        details: parseDetails(row.details),
+        resolvedAt: row.resolved_at,
+        createdAt: row.created_at,
+      }));
+
+      const latestConsent = requests.find((entry) => entry.requestType === 'consent');
+      const latestWithdrawal = requests.find((entry) => entry.requestType === 'consent_withdrawal' || entry.requestType === 'erasure');
+
+      const active = latestConsent
+        ? !latestWithdrawal ||
+          new Date(latestConsent.createdAt).getTime() > new Date(latestWithdrawal.createdAt).getTime()
+        : false;
 
       return reply.send({
         success: true,
         data: {
-          consents: result.rows.map((row: any) => ({
-            purpose: row.purpose,
-            consentedAt: row.consented_at,
-            withdrawnAt: row.withdrawn_at,
-            active: !row.withdrawn_at,
-          })),
+          active,
+          consentedAt: latestConsent?.resolvedAt ?? latestConsent?.createdAt ?? null,
+          withdrawnAt: latestWithdrawal?.resolvedAt ?? latestWithdrawal?.createdAt ?? null,
+          requests,
         },
       });
     } catch (err) {
-      logger.error({ err, userId, tenantId }, 'Failed to fetch consent status');
+      logger.error({ err, tenantId: authReq.tenantId, advocateId: authReq.advocateId }, 'Failed to fetch consent status');
       return reply.status(500).send({
         success: false,
         error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch consent status' },
+      });
+    }
+  });
+
+  /**
+   * POST /internal/dpdp/erasure
+   * Internal worker endpoint for DPDP erasure execution.
+   */
+  fastify.post('/internal/dpdp/erasure', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!isInternalRequestAuthorized(request)) {
+      return reply.status(401).send({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Invalid internal service key' },
+      });
+    }
+
+    const body = internalErasureSchema.parse(request.body ?? {});
+
+    try {
+      const result = await withTransaction(async (tx) => {
+        if (body.requestId) {
+          await tx.query(
+            `UPDATE dpdp_requests
+             SET status = 'processing'
+             WHERE id = $1
+               AND tenant_id = $2`,
+            [body.requestId, body.tenantId]
+          );
+        }
+
+        const advocateResult = await tx.query<{ email: string; status: string }>(
+          `SELECT email, status
+           FROM attorneys
+           WHERE id = $1
+             AND tenant_id = $2
+           LIMIT 1`,
+          [body.advocateId, body.tenantId]
+        );
+
+        const advocate = advocateResult.rows[0];
+        if (!advocate) {
+          return null;
+        }
+
+        const placeholderEmail = `erased+${body.advocateId}@redacted.evidentis.local`;
+        const alreadyErased = advocate.email === placeholderEmail || advocate.status === 'erased';
+
+        await tx.query(
+          `UPDATE attorneys
+           SET email = $3,
+               display_name = 'Erased User',
+               practice_group = NULL,
+               bar_number = NULL,
+               bar_state = NULL,
+               bar_council_enrollment_number = NULL,
+               bar_council_state = NULL,
+               bci_enrollment_number = NULL,
+               phone_number = NULL,
+               whatsapp_number = NULL,
+               password_hash = NULL,
+               mfa_enabled = FALSE,
+               mfa_secret = NULL,
+               mfa_recovery_codes = NULL,
+               failed_login_attempts = 0,
+               locked_until = NULL,
+               last_login_at = NULL,
+               otp_enabled = FALSE,
+               otp_last_sent_at = NULL,
+               status = 'erased'
+           WHERE tenant_id = $1
+             AND id = $2`,
+          [body.tenantId, body.advocateId, placeholderEmail]
+        );
+
+        const detailPayload = JSON.stringify({
+          reason: body.reason ?? null,
+          processedAt: new Date().toISOString(),
+          placeholderEmail,
+          alreadyErased,
+        });
+
+        if (body.requestId) {
+          await tx.query(
+            `UPDATE dpdp_requests
+             SET status = 'resolved',
+                 resolved_at = NOW(),
+                 details = $2
+             WHERE id = $1
+               AND tenant_id = $3`,
+            [body.requestId, detailPayload, body.tenantId]
+          );
+        } else {
+          await tx.query(
+            `INSERT INTO dpdp_requests (tenant_id, advocate_id, request_type, status, details, resolved_at)
+             VALUES ($1, $2, 'erasure', 'resolved', $3, NOW())`,
+            [body.tenantId, body.advocateId, detailPayload]
+          );
+        }
+
+        return {
+          placeholderEmail,
+          alreadyErased,
+        };
+      });
+
+      if (!result) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Advocate not found for erasure request' },
+        });
+      }
+
+      logger.info({ tenantId: body.tenantId, advocateId: body.advocateId, requestId: body.requestId }, 'DPDP erasure completed');
+
+      return reply.send({
+        success: true,
+        data: {
+          erased: true,
+          ...result,
+        },
+      });
+    } catch (err) {
+      logger.error({ err, tenantId: body.tenantId, advocateId: body.advocateId, requestId: body.requestId }, 'Failed to process internal DPDP erasure');
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Failed to process DPDP erasure' },
       });
     }
   });

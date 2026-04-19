@@ -8,23 +8,15 @@ import logging
 from typing import List, Optional
 from enum import Enum
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from llm_safety import RetryConfig, extract_ollama_text, retry_with_backoff
+from llm_caller import call_llm, clean_json
 from prompts import REDLINE_SUGGESTION, add_safety_guardrails, validate_response
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-LLM_RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    initial_delay=1.0,
-    max_delay=10.0,
-    exponential_base=2.0,
-)
 
 
 class SuggestionType(str, Enum):
@@ -95,9 +87,7 @@ async def generate_suggestions_llm(
     flag_message: Optional[str],
     playbook_position: Optional[str],
     jurisdiction: Optional[str],
-    ollama_url: str,
-    model: str,
-    timeout: int
+    settings,
 ) -> List[dict]:
     """
     Use LLM to generate redline suggestions.
@@ -131,33 +121,17 @@ No additional prose."""
     system_prompt = "You are an Indian commercial contracts advocate drafting redline suggestions."
     user_prompt = prompt.replace(system_prompt, "").strip()
 
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": REDLINE_SUGGESTION.temperature},
-    }
-
-    async def _call_llm() -> dict:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                f"{ollama_url}/api/chat",
-                json=payload,
-            )
-            if response.status_code != 200:
-                raise RuntimeError(f"Ollama error: {response.status_code}")
-            return response.json()
-
     try:
-        result = await retry_with_backoff(
-            _call_llm,
-            config=LLM_RETRY_CONFIG,
+        response_text = await call_llm(
+            task="suggest",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            settings=settings,
+            temperature=REDLINE_SUGGESTION.temperature,
+            max_tokens=3072,
+            json_mode=True,
         )
-        response_text = extract_ollama_text(result, "[]")
+        response_text = clean_json(response_text)
         if not validate_response(response_text, "json"):
             logger.error("Redline model returned non-JSON content")
             return []
@@ -270,9 +244,7 @@ async def suggest_redlines(
         body.flag_message,
         body.playbook_position,
         body.jurisdiction,
-        settings.ollama_base_url,
-        settings.ollama_model_extract,
-        settings.ollama_timeout
+        settings,
     )
     
     # Add template suggestions as fallback/supplement

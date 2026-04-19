@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { nyayAssistPrompts } from "@/lib/india";
 import { documents, matters, research, QuotaError } from "@/lib/api";
+import { useCapabilities } from "@/lib/use-capabilities";
 import { UpgradePrompt } from "@/components/shared/UpgradePrompt";
 import { AiFeedbackButton } from "@/components/shared/AiFeedbackButton";
 import { useTranslation } from "react-i18next";
@@ -33,6 +34,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 export default function NyayAssistPage() {
   const { t } = useTranslation();
   const searchParams = useSearchParams();
+  const caps = useCapabilities();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -303,6 +305,22 @@ export default function NyayAssistPage() {
     }
   };
 
+  if (!caps.canAccessNyayAssist) {
+    return (
+      <AppShell title={t("assistant")}>
+        <div className="glass mx-auto mt-6 max-w-2xl p-8 text-center">
+          <h2 className="text-2xl font-semibold text-white/90">Nyay Assist is not enabled for your role</h2>
+          <p className="mt-3 text-sm text-white/60">
+            This workspace is reserved for advocate roles that can run AI-assisted legal analysis. You can continue working from the matter and document views.
+          </p>
+          <Button className="mt-5" onClick={() => window.location.assign("/matters")}>
+            Go to Matters
+          </Button>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell title={t("assistant")}>
       {showUpgrade && (
@@ -349,7 +367,7 @@ export default function NyayAssistPage() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isTyping || isUploadingFiles}
+                disabled={isTyping || isUploadingFiles || !caps.canUploadDocuments}
                 className="rounded-lg border border-white/15 bg-white/6 p-2 text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label={isUploadingFiles ? "Uploading attachment" : "Attach files"}
               >

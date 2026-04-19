@@ -8,6 +8,7 @@ import { randomInt } from 'node:crypto';
 import { z } from 'zod';
 import {
   ADVOCATE_ROLES,
+  ATTORNEY_STATUSES,
   INDIAN_STATE_CODES,
   MATTER_TYPES,
   SUPPORTED_LANGUAGE_CODES,
@@ -29,12 +30,13 @@ import {
   hashRecoveryCodes,
 } from './security.js';
 import { query, queryOne, withTransaction } from './database.js';
-import { config, rateLimits } from './config.js';
+import { config, corsOrigins, rateLimits } from './config.js';
 import { sendPasswordResetEmail, sendInvitationEmail } from './email.js';
 import { logger } from './logger.js';
 import { getCachedEmbedding, cacheEmbedding, assertEmbeddingDimension } from './embedding-cache.js';
 import { startDocumentPipeline, getPipelineStatus } from './orchestrator.js';
 import { buildAIContext, formatContextForPrompt } from './ai-context.js';
+import { createDualRateLimiter } from './rate-limit.js';
 import {
   enforceDocumentQuota,
   enforceResearchQuota,
@@ -44,12 +46,13 @@ import {
   incrementResearchUsage,
 } from './billing-enforcement.js';
 import { handleRazorpayWebhook } from './billing.js';
+import { playbookRepo } from './repository.js';
 
 // ============================================================
 // REQUEST TYPES
 // ============================================================
 
-interface AuthenticatedRequest extends FastifyRequest {
+export interface AuthenticatedRequest extends FastifyRequest {
   tenantId: string;
   advocateId: string;
   advocateRole: string;
@@ -71,11 +74,34 @@ interface ResearchChunkRow {
   relevance_score: number;
 }
 
+interface BareActResearchRow {
+  id: string;
+  act_id: string;
+  act_title: string;
+  act_short_title: string | null;
+  section_number: string;
+  section_title: string | null;
+  section_text: string;
+  relevance_score: number;
+}
+
+interface ResearchSource {
+  chunkId: string;
+  documentId: string;
+  title: string;
+  text: string;
+  pageFrom: number | null;
+  pageTo: number | null;
+  relevance: number;
+  sourceType: 'tenant_document' | 'bare_act';
+  sourceVerified: boolean;
+}
+
 // ============================================================
 // AUTH MIDDLEWARE
 // ============================================================
 
-async function authenticateRequest(
+export async function authenticateRequest(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
@@ -97,6 +123,23 @@ async function authenticateRequest(
     (request as AuthenticatedRequest).attorneyId = payload.sub;
     (request as AuthenticatedRequest).attorneyRole = payload.role;
     (request as AuthenticatedRequest).tokenPayload = payload;
+    (
+      request as FastifyRequest & {
+        user?: {
+          tenantId: string;
+          attorneyId: string;
+          email: string;
+          displayName?: string;
+          role: string;
+        };
+      }
+    ).user = {
+      tenantId: payload.tenantId,
+      attorneyId: payload.sub,
+      email: payload.email,
+      displayName: payload.email,
+      role: payload.role,
+    };
   } catch (error) {
     return reply.status(401).send({
       success: false,
@@ -115,6 +158,14 @@ function requireRoles(...roles: string[]) {
       });
     }
   };
+}
+
+function resolveCorsOrigin(originHeader: string | undefined): string {
+  if (originHeader && corsOrigins.includes(originHeader)) {
+    return originHeader;
+  }
+
+  return config.FRONTEND_URL;
 }
 
 function getAiServiceHeaders(base: Record<string, string> = {}): Record<string, string> {
@@ -157,6 +208,20 @@ function generateOtpCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === 'object') return value as Record<string, unknown>;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 async function sendOtpViaMsg91(normalizedPhone: string, otpCode: string): Promise<'sent' | 'logged'> {
   if (!config.MSG91_AUTH_KEY) {
     logger.info({ phone: maskPhoneNumber(normalizedPhone), otpCode }, 'MSG91 auth key not configured; OTP logged');
@@ -191,6 +256,193 @@ function toActSlug(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
+}
+
+function vectorLiteral(embedding: number[]): string {
+  return `[${embedding.join(',')}]`;
+}
+
+async function getResearchEmbedding(question: string, context: string): Promise<number[]> {
+  const cacheKey = question.toLowerCase().trim();
+  const model = config.EMBEDDING_MODEL;
+  const cached = await getCachedEmbedding(cacheKey, model);
+
+  if (cached) {
+    assertEmbeddingDimension(cached, context);
+    logger.debug({ model }, 'Using cached embedding for research request');
+    return cached;
+  }
+
+  const embedRes = await fetch(`${config.AI_SERVICE_URL}/embed`, {
+    method: 'POST',
+    headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ texts: [question] }),
+    signal: AbortSignal.timeout(config.AI_SERVICE_TIMEOUT_MS),
+  });
+
+  if (!embedRes.ok) {
+    throw new Error('Failed to embed research question');
+  }
+
+  const result = await embedRes.json() as { embeddings?: number[][] };
+  if (!result.embeddings || result.embeddings.length === 0) {
+    throw new Error('No embeddings returned from AI service');
+  }
+
+  const [embedding] = result.embeddings;
+  assertEmbeddingDimension(embedding, context);
+  await cacheEmbedding(cacheKey, model, embedding);
+  return embedding;
+}
+
+async function findResearchDocumentChunks(
+  tenantId: string,
+  embedding: number[],
+  matterId?: string | null
+): Promise<ResearchChunkRow[]> {
+  const sql = matterId
+    ? `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
+              d.source_name AS document_title,
+              1 - (dc.embedding <=> $1::vector) AS relevance_score
+       FROM document_chunks dc
+       JOIN documents d ON dc.document_id = d.id
+       WHERE d.tenant_id = $2
+         AND d.matter_id = $3
+         AND dc.embedding IS NOT NULL
+       ORDER BY dc.embedding <=> $1::vector
+       LIMIT 18`
+    : `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
+              d.source_name AS document_title,
+              1 - (dc.embedding <=> $1::vector) AS relevance_score
+       FROM document_chunks dc
+       JOIN documents d ON dc.document_id = d.id
+       WHERE d.tenant_id = $2
+         AND dc.embedding IS NOT NULL
+       ORDER BY dc.embedding <=> $1::vector
+       LIMIT 18`;
+
+  const params = matterId
+    ? [vectorLiteral(embedding), tenantId, matterId]
+    : [vectorLiteral(embedding), tenantId];
+
+  const result = await query<ResearchChunkRow>(sql, params);
+  return result.rows;
+}
+
+async function findRelevantBareActSections(embedding: number[]): Promise<BareActResearchRow[]> {
+  const result = await query<BareActResearchRow>(
+    `SELECT bas.id,
+            ba.id AS act_id,
+            ba.title AS act_title,
+            ba.short_title AS act_short_title,
+            bas.section_number,
+            bas.section_title,
+            bas.section_text,
+            1 - (bas.embedding <=> $1::vector) AS relevance_score
+     FROM bare_act_sections bas
+     JOIN bare_acts ba ON ba.id = bas.act_id
+     WHERE ba.is_active = TRUE
+       AND bas.embedding IS NOT NULL
+     ORDER BY bas.embedding <=> $1::vector
+     LIMIT 6`,
+    [vectorLiteral(embedding)]
+  );
+
+  return result.rows;
+}
+
+function combineResearchSources(
+  chunks: ResearchChunkRow[],
+  bareActSections: BareActResearchRow[]
+): ResearchSource[] {
+  const documentSources: ResearchSource[] = chunks.map((chunk) => ({
+    chunkId: chunk.id,
+    documentId: chunk.document_id,
+    title: chunk.document_title,
+    text: chunk.text_content,
+    pageFrom: chunk.page_from,
+    pageTo: chunk.page_to,
+    relevance: Number(chunk.relevance_score) || 0,
+    sourceType: 'tenant_document',
+    sourceVerified: true,
+  }));
+
+  const statuteSources: ResearchSource[] = bareActSections.map((section) => ({
+    chunkId: section.id,
+    documentId: section.act_id,
+    title: `${section.act_short_title || section.act_title} - Section ${section.section_number}${section.section_title ? ` (${section.section_title})` : ''}`,
+    text: section.section_text,
+    pageFrom: null,
+    pageTo: null,
+    relevance: Number(section.relevance_score) || 0,
+    sourceType: 'bare_act',
+    sourceVerified: true,
+  }));
+
+  return [...documentSources, ...statuteSources]
+    .sort((left, right) => right.relevance - left.relevance)
+    .slice(0, 20);
+}
+
+function buildResearchSourcesPayload(sources: ResearchSource[], language: string) {
+  return sources.map((source, index) => ({
+    chunk_id: source.chunkId,
+    document_id: source.documentId,
+    document_name: source.title,
+    text: source.text,
+    page_number: source.pageFrom ?? source.pageTo ?? null,
+    relevance_score: source.relevance,
+    source_type: source.sourceType,
+    source_verified: source.sourceVerified,
+    rank: index + 1,
+    language,
+  }));
+}
+
+function buildResearchClientSources(sources: ResearchSource[]) {
+  return sources.map((source) => ({
+    documentId: source.documentId,
+    title: source.title,
+    relevance: source.relevance,
+    pageFrom: source.pageFrom,
+    pageTo: source.pageTo,
+    snippet: source.text.slice(0, 200),
+    sourceType: source.sourceType,
+  }));
+}
+
+async function buildResearchContextPrompt(
+  tenantId: string,
+  primaryDocumentId: string | null | undefined,
+  question: string,
+  bareActSections: BareActResearchRow[]
+): Promise<string> {
+  const parts: string[] = [];
+
+  if (primaryDocumentId) {
+    try {
+      const aiContext = await buildAIContext(tenantId, primaryDocumentId, question);
+      const formatted = formatContextForPrompt(aiContext);
+      if (formatted) {
+        parts.push(formatted);
+      }
+    } catch (err) {
+      logger.warn({ err, primaryDocumentId }, 'Failed to build matter research context');
+    }
+  }
+
+  if (bareActSections.length > 0) {
+    const statuteContext = bareActSections
+      .map((section) => {
+        const heading = `${section.act_short_title || section.act_title} - Section ${section.section_number}${section.section_title ? ` (${section.section_title})` : ''}`;
+        return `${heading}\n${section.section_text.slice(0, 1200)}`;
+      })
+      .join('\n\n');
+
+    parts.push(`Relevant bare act sections:\n${statuteContext}`);
+  }
+
+  return parts.join('\n\n').trim();
 }
 
 // ============================================================
@@ -284,6 +536,39 @@ const inviteSchema = z.object({
   displayName: z.string().optional(),
 });
 
+const adminMemberUpdateSchema = z.object({
+  role: z
+    .preprocess((value) => (value === 'attorney' ? 'advocate' : value), z.enum(ADVOCATE_ROLES))
+    .optional(),
+  status: z.enum(ATTORNEY_STATUSES).optional(),
+  mfaEnabled: z.boolean().optional(),
+});
+
+const adminSecuritySettingsSchema = z.object({
+  enforceMfa: z.boolean(),
+  sessionTimeoutMinutes: z.number().int().min(5).max(1440),
+  maxFailedLogins: z.number().int().min(3).max(20),
+});
+
+const adminPlaybookRuleSchema = z.object({
+  id: z.string(),
+  clauseType: z.string(),
+  condition: z.string(),
+  severity: z.enum(['critical', 'warn', 'info']),
+  description: z.string(),
+});
+
+const adminPlaybookCreateSchema = z.object({
+  name: z.string().min(2).max(120),
+  description: z.string().max(1000).optional(),
+  practiceArea: z.string().max(120).optional(),
+  rules: z.array(adminPlaybookRuleSchema).default([]),
+});
+
+const adminPlaybookUpdateSchema = adminPlaybookCreateSchema.partial().extend({
+  isActive: z.boolean().optional(),
+});
+
 const otpSendSchema = z.object({
   phoneNumber: z.string().min(10).max(20),
   purpose: z.enum(['login', 'mfa']).default('login'),
@@ -302,6 +587,9 @@ const otpVerifySchema = z.object({
 // ============================================================
 
 export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
+  const aiResearchRateLimit = createDualRateLimiter('research', 'ai_burst');
+  const aiSuggestionRateLimit = createDualRateLimiter('ai', 'ai_burst');
+
   // ============================================================
   // AUTH ROUTES
   // ============================================================
@@ -1426,6 +1714,162 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     return { success: true, data: document };
   });
 
+  // GET /api/documents - List documents across the tenant
+  fastify.get('/api/documents', { preHandler: authenticateRequest }, async (request) => {
+    const authReq = request as AuthenticatedRequest;
+    const queryParams = z.object({
+      search: z.string().trim().optional(),
+      status: z.string().trim().optional(),
+      page: z.string().optional(),
+      limit: z.string().optional(),
+    }).parse(request.query ?? {});
+
+    const page = Math.max(Number.parseInt(queryParams.page || '1', 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(queryParams.limit || '20', 10) || 20, 1), 100);
+    const offset = (page - 1) * limit;
+
+    let whereClause = 'WHERE d.tenant_id = $1';
+    const params: unknown[] = [authReq.tenantId];
+
+    if (queryParams.search) {
+      params.push(`%${queryParams.search}%`);
+      whereClause += ` AND (d.source_name ILIKE $${params.length} OR m.matter_name ILIKE $${params.length})`;
+    }
+
+    if (queryParams.status) {
+      const status = queryParams.status.toLowerCase();
+      if (status === 'processed') {
+        whereClause += ` AND d.ingestion_status = 'normalized'`;
+      } else if (status === 'processing') {
+        whereClause += ` AND d.ingestion_status IN ('uploaded', 'scanning', 'processing')`;
+      } else if (status === 'failed') {
+        whereClause += ` AND d.ingestion_status = 'failed'`;
+      } else {
+        params.push(queryParams.status);
+        whereClause += ` AND d.ingestion_status = $${params.length}`;
+      }
+    }
+
+    const documents = await query<{
+      id: string;
+      matter_id: string;
+      matter_name: string;
+      source_name: string;
+      mime_type: string;
+      doc_type: string;
+      ingestion_status: string;
+      security_status: string;
+      page_count: number | null;
+      word_count: number | null;
+      created_at: Date;
+      updated_at: Date;
+    }>(
+      `SELECT d.id,
+              d.matter_id,
+              m.matter_name,
+              d.source_name,
+              d.mime_type,
+              d.doc_type,
+              d.ingestion_status,
+              d.security_status,
+              d.page_count,
+              d.word_count,
+              d.created_at,
+              d.updated_at
+       FROM documents d
+       JOIN matters m ON m.id = d.matter_id
+       ${whereClause}
+       ORDER BY d.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset]
+    );
+
+    const countResult = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count
+       FROM documents d
+       JOIN matters m ON m.id = d.matter_id
+       ${whereClause}`,
+      params
+    );
+
+    const total = Number.parseInt(countResult?.count || '0', 10);
+
+    return {
+      success: true,
+      data: {
+        documents: documents.rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    };
+  });
+
+  // DELETE /api/documents/:id - Delete a document and its derived analysis
+  fastify.delete('/api/documents/:id', { preHandler: authenticateRequest }, async (request, reply) => {
+    const authReq = request as AuthenticatedRequest;
+    const { id } = request.params as { id: string };
+
+    const document = await queryOne<{
+      id: string;
+      matter_id: string;
+      source_name: string;
+      file_uri: string | null;
+    }>(
+      `SELECT id, matter_id, source_name, file_uri
+       FROM documents
+       WHERE id = $1 AND tenant_id = $2`,
+      [id, authReq.tenantId]
+    );
+
+    if (!document) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Document not found' },
+      });
+    }
+
+    try {
+      const { cancelPipeline } = await import('./orchestrator.js');
+      await cancelPipeline(authReq.tenantId, id).catch(() => false);
+    } catch (error) {
+      logger.warn({ error, documentId: id }, 'Failed to cancel outstanding document pipeline jobs');
+    }
+
+    if (document.file_uri) {
+      try {
+        const storage = await import('./storage.js');
+        await storage.deleteFile(document.file_uri);
+      } catch (error) {
+        logger.warn({ error, documentId: id, fileUri: document.file_uri }, 'Failed to remove document from storage');
+      }
+    }
+
+    await query(
+      `DELETE FROM documents
+       WHERE id = $1 AND tenant_id = $2`,
+      [id, authReq.tenantId]
+    );
+
+    await query(
+      `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, object_type, object_id)
+       VALUES ($1, $2, 'document.deleted', 'document', $3)`,
+      [authReq.tenantId, authReq.advocateId, id]
+    );
+
+    return {
+      success: true,
+      data: {
+        id,
+        matterId: document.matter_id,
+        sourceName: document.source_name,
+      },
+    };
+  });
+
   // GET /api/documents/:id/clauses
   fastify.get('/api/documents/:id/clauses', { preHandler: authenticateRequest }, async (request) => {
     const authReq = request as AuthenticatedRequest;
@@ -1734,6 +2178,319 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // ADMIN ROUTES
   // ============================================================
 
+  // GET /api/admin/members
+  fastify.get(
+    '/api/admin/members',
+    { preHandler: [authenticateRequest, requireRoles('admin', 'partner')] },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+
+      const members = await query<{
+        id: string;
+        display_name: string;
+        email: string;
+        role: string;
+        status: string;
+        mfa_enabled: boolean;
+        last_login_at: Date | null;
+      }>(
+        `SELECT id, display_name, email, role, status, mfa_enabled, last_login_at
+         FROM attorneys
+         WHERE tenant_id = $1
+         ORDER BY created_at ASC`,
+        [authReq.tenantId]
+      );
+
+      return { success: true, data: { members: members.rows } };
+    }
+  );
+
+  // PATCH /api/admin/attorneys/:id
+  fastify.patch(
+    '/api/admin/attorneys/:id',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const { id } = request.params as { id: string };
+      const body = adminMemberUpdateSchema.parse(request.body);
+
+      if (authReq.advocateId === id && (body.role || body.status)) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'SELF_UPDATE_RESTRICTED', message: 'You cannot change your own role or status from this screen.' },
+        });
+      }
+
+      const updates: string[] = [];
+      const params: unknown[] = [id, authReq.tenantId];
+      let paramIndex = 3;
+
+      if (body.role !== undefined) {
+        updates.push(`role = $${paramIndex++}`);
+        params.push(body.role);
+      }
+      if (body.status !== undefined) {
+        updates.push(`status = $${paramIndex++}`);
+        params.push(body.status);
+      }
+      if (body.mfaEnabled !== undefined) {
+        updates.push(`mfa_enabled = $${paramIndex++}`);
+        params.push(body.mfaEnabled);
+        if (!body.mfaEnabled) {
+          updates.push(`mfa_secret = NULL`);
+          updates.push(`mfa_recovery_codes = NULL`);
+        }
+      }
+
+      if (updates.length === 0) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'NO_UPDATES', message: 'No member updates were provided.' },
+        });
+      }
+
+      const updated = await queryOne<{
+        id: string;
+        display_name: string;
+        email: string;
+        role: string;
+        status: string;
+        mfa_enabled: boolean;
+        last_login_at: Date | null;
+      }>(
+        `UPDATE attorneys
+         SET ${updates.join(', ')}, updated_at = NOW()
+         WHERE id = $1 AND tenant_id = $2
+         RETURNING id, display_name, email, role, status, mfa_enabled, last_login_at`,
+        params
+      );
+
+      if (!updated) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'MEMBER_NOT_FOUND', message: 'Team member not found.' },
+        });
+      }
+
+      await query(
+        `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, object_type, object_id, metadata)
+         VALUES ($1, $2, 'user.updated', 'attorney', $3, $4::jsonb)`,
+        [authReq.tenantId, authReq.advocateId, id, JSON.stringify(body)]
+      );
+
+      return { success: true, data: updated };
+    }
+  );
+
+  // GET /api/admin/security-settings
+  fastify.get(
+    '/api/admin/security-settings',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+      const tenant = await queryOne<{ settings: unknown }>(
+        `SELECT settings FROM tenants WHERE id = $1`,
+        [authReq.tenantId]
+      );
+
+      const settings = parseJsonObject(tenant?.settings);
+      const adminSecurity = parseJsonObject(settings.adminSecurity);
+
+      return {
+        success: true,
+        data: {
+          enforceMfa: Boolean(adminSecurity.enforceMfa ?? true),
+          sessionTimeoutMinutes: Number(adminSecurity.sessionTimeoutMinutes ?? 60),
+          maxFailedLogins: Number(adminSecurity.maxFailedLogins ?? 5),
+        },
+      };
+    }
+  );
+
+  // PATCH /api/admin/security-settings
+  fastify.patch(
+    '/api/admin/security-settings',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+      const body = adminSecuritySettingsSchema.parse(request.body);
+
+      const tenant = await queryOne<{ settings: unknown }>(
+        `SELECT settings FROM tenants WHERE id = $1`,
+        [authReq.tenantId]
+      );
+
+      const currentSettings = parseJsonObject(tenant?.settings);
+      const nextSettings = {
+        ...currentSettings,
+        adminSecurity: body,
+      };
+
+      await query(
+        `UPDATE tenants SET settings = $2::jsonb, updated_at = NOW() WHERE id = $1`,
+        [authReq.tenantId, JSON.stringify(nextSettings)]
+      );
+
+      await query(
+        `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, object_type, metadata)
+         VALUES ($1, $2, 'admin.security_configured', 'tenant', $3::jsonb)`,
+        [authReq.tenantId, authReq.advocateId, JSON.stringify(body)]
+      );
+
+      return { success: true, data: body };
+    }
+  );
+
+  // GET /api/admin/sso
+  fastify.get(
+    '/api/admin/sso',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+
+      const configs = await query<{
+        id: string;
+        provider_type: string;
+        issuer_url: string | null;
+        sso_url: string | null;
+        enabled: boolean;
+        updated_at: Date | null;
+      }>(
+        `SELECT id, provider_type, issuer_url, sso_url, enabled, updated_at
+         FROM sso_configurations
+         WHERE tenant_id = $1
+         ORDER BY updated_at DESC NULLS LAST, created_at DESC`,
+        [authReq.tenantId]
+      );
+
+      return { success: true, data: configs.rows };
+    }
+  );
+
+  // POST /api/admin/sso/saml
+  fastify.post(
+    '/api/admin/sso/saml',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+      const body = z.object({
+        ssoUrl: z.string().url(),
+        certificate: z.string().min(20),
+      }).parse(request.body);
+
+      const entityId = `${config.FRONTEND_URL.replace(/\/$/, '')}/saml/${authReq.tenantId}`;
+      const record = await queryOne<{ id: string }>(
+        `INSERT INTO sso_configurations (
+           tenant_id, provider_type, issuer_url, metadata_url, certificate,
+           sso_url, sign_requests, want_signed_assertions, enabled, created_at
+         )
+         VALUES ($1, 'saml', $2, $3, $4, $5, true, true, true, NOW())
+         ON CONFLICT (tenant_id, provider_type) DO UPDATE SET
+           issuer_url = EXCLUDED.issuer_url,
+           metadata_url = EXCLUDED.metadata_url,
+           certificate = EXCLUDED.certificate,
+           sso_url = EXCLUDED.sso_url,
+           enabled = true,
+           updated_at = NOW()
+         RETURNING id`,
+        [authReq.tenantId, entityId, `${entityId}/metadata`, body.certificate, body.ssoUrl]
+      );
+
+      await query(
+        `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, object_type, object_id, metadata)
+         VALUES ($1, $2, 'admin.sso_configured', 'sso_configuration', $3, $4::jsonb)`,
+        [authReq.tenantId, authReq.advocateId, record?.id ?? null, JSON.stringify({ provider: 'saml', ssoUrl: body.ssoUrl })]
+      );
+
+      return {
+        success: true,
+        data: {
+          id: record?.id ?? '',
+          providerType: 'saml',
+          issuerUrl: entityId,
+          ssoUrl: body.ssoUrl,
+          metadataUrl: `${entityId}/metadata`,
+          enabled: true,
+        },
+      };
+    }
+  );
+
+  // GET /api/admin/playbooks
+  fastify.get(
+    '/api/admin/playbooks',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+      const playbooks = await playbookRepo.list(authReq.tenantId);
+      return { success: true, data: playbooks };
+    }
+  );
+
+  // POST /api/admin/playbooks
+  fastify.post(
+    '/api/admin/playbooks',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const body = adminPlaybookCreateSchema.parse(request.body);
+      const playbook = await playbookRepo.create(authReq.tenantId, {
+        name: body.name,
+        description: body.description,
+        practiceArea: body.practiceArea,
+        rules: body.rules,
+        createdBy: authReq.advocateId,
+      });
+
+      return reply.status(201).send({ success: true, data: playbook });
+    }
+  );
+
+  // PATCH /api/admin/playbooks/:id
+  fastify.patch(
+    '/api/admin/playbooks/:id',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const { id } = request.params as { id: string };
+      const body = adminPlaybookUpdateSchema.parse(request.body);
+      const playbook = await playbookRepo.update(authReq.tenantId, id, body);
+
+      if (!playbook) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'PLAYBOOK_NOT_FOUND', message: 'Playbook not found.' },
+        });
+      }
+
+      return { success: true, data: playbook };
+    }
+  );
+
+  // DELETE /api/admin/playbooks/:id
+  fastify.delete(
+    '/api/admin/playbooks/:id',
+    { preHandler: [authenticateRequest, requireRoles('admin')] },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const { id } = request.params as { id: string };
+
+      const deleted = await query(
+        `DELETE FROM playbooks WHERE tenant_id = $1 AND id = $2`,
+        [authReq.tenantId, id]
+      );
+
+      if (deleted.rowCount === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'PLAYBOOK_NOT_FOUND', message: 'Playbook not found.' },
+        });
+      }
+
+      return { success: true };
+    }
+  );
+
   // POST /api/admin/attorneys (invite)
   fastify.post(
     '/api/admin/attorneys',
@@ -1837,7 +2594,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
   // POST /api/research/query - Standard JSON response for legal research
   fastify.post('/api/research/query', { 
-    preHandler: [authenticateRequest, enforceActiveSubscription, enforceResearchQuota] 
+    preHandler: [authenticateRequest, aiResearchRateLimit, enforceActiveSubscription, enforceResearchQuota] 
   }, async (request, reply) => {
     const authReq = request as AuthenticatedRequest;
     const { question, matterId, language } = z.object({
@@ -1850,100 +2607,24 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     let usageStarted = false;
 
     try {
-      // 1. Embed the question (with caching)
-      let embeddings: number[][] | null = null;
-      const cacheKey = question.toLowerCase().trim();
-      
-      // Try cache first
-      const cached = await getCachedEmbedding(cacheKey, 'sentence-transformers/LaBSE');
-      if (cached) {
-        assertEmbeddingDimension(cached, 'research query cache');
-        embeddings = [cached];
-        logger.debug('Using cached embedding for research query');
-      } else {
-        // Fetch from AI service
-        const embedRes = await fetch(`${config.AI_SERVICE_URL}/embed`, {
-          method: 'POST',
-          headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ texts: [question] }),
-          signal: AbortSignal.timeout(config.AI_SERVICE_TIMEOUT_MS),
-        });
-        
-        if (!embedRes.ok) {
-          throw new Error('Failed to embed question');
-        }
-        const result = await embedRes.json() as { embeddings?: number[][] };
-        if (!result.embeddings || result.embeddings.length === 0) {
-          throw new Error('No embeddings returned from AI service');
-        }
-        assertEmbeddingDimension(result.embeddings[0], 'research query ai-service response');
-        embeddings = result.embeddings;
-        
-        // Cache for future use
-        await cacheEmbedding(cacheKey, 'sentence-transformers/LaBSE', embeddings[0]);
-      }
+      const embedding = await getResearchEmbedding(question, 'research query');
+      const documentChunks = await findResearchDocumentChunks(authReq.tenantId, embedding, matterId);
+      const bareActSections = await findRelevantBareActSections(embedding);
+      const researchSources = combineResearchSources(documentChunks, bareActSections);
+      const contextPrompt = await buildResearchContextPrompt(
+        authReq.tenantId,
+        documentChunks[0]?.document_id ?? null,
+        question,
+        bareActSections
+      );
 
-      if (!embeddings || embeddings.length === 0) {
-        throw new Error('Missing embeddings for research query');
-      }
-
-      // 2. Search for relevant chunks
-      const searchQuery = matterId
-        ? `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
-                  d.source_name as document_title,
-                  1 - (dc.embedding <=> $1::vector) as relevance_score
-           FROM document_chunks dc
-           JOIN documents d ON dc.document_id = d.id
-           WHERE d.tenant_id = $2 AND d.matter_id = $3
-           ORDER BY dc.embedding <=> $1::vector LIMIT 20`
-        : `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
-                  d.source_name as document_title,
-                  1 - (dc.embedding <=> $1::vector) as relevance_score
-           FROM document_chunks dc
-           JOIN documents d ON dc.document_id = d.id
-           WHERE d.tenant_id = $2
-           ORDER BY dc.embedding <=> $1::vector LIMIT 20`;
-
-      const searchParams = matterId 
-        ? [`[${embeddings[0].join(',')}]`, authReq.tenantId, matterId]
-        : [`[${embeddings[0].join(',')}]`, authReq.tenantId];
-
-      const chunks = await query<ResearchChunkRow>(searchQuery, searchParams);
-
-      // 3. Build AI context for enhanced reasoning (if matter-scoped)
-      let contextPrompt = '';
-      if (matterId && chunks.rows.length > 0) {
-        try {
-          const aiContext = await buildAIContext(
-            authReq.tenantId, 
-            chunks.rows[0].document_id, 
-            question
-          );
-          contextPrompt = formatContextForPrompt(aiContext);
-        } catch (err) {
-          logger.warn({ err }, 'Failed to build AI context, proceeding without');
-        }
-      }
-
-      // 4. Call AI service for synthesis
       usageStarted = true;
       const aiResponse = await fetch(`${config.AI_SERVICE_URL}/research`, {
         method: 'POST',
         headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ 
           query: question,
-          chunks: chunks.rows.map((c, index) => ({
-            chunk_id: c.id,
-            document_id: c.document_id,
-            document_name: c.document_title,
-            text: c.text_content,
-            page_number: c.page_from ?? c.page_to ?? null,
-            relevance_score: Number(c.relevance_score) || 0,
-            source_type: 'tenant_document',
-            source_verified: true,
-            rank: index + 1,
-            language: responseLanguage,
-          })),
+          chunks: buildResearchSourcesPayload(researchSources, responseLanguage),
           context: contextPrompt || undefined,
           language: responseLanguage,
           stream: false,
@@ -1967,7 +2648,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
           question, 
           result.answer, 
           JSON.stringify(result.citations || []),
-          chunks.rows.length
+          researchSources.length
         ]
       );
 
@@ -1976,14 +2657,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         data: {
           answer: result.answer,
           citations: result.citations || [],
-          sources: chunks.rows.map((c) => ({
-            documentId: c.document_id,
-            title: c.document_title,
-            relevance: c.relevance_score,
-            pageFrom: c.page_from,
-            pageTo: c.page_to,
-            snippet: c.text_content.slice(0, 200)
-          })),
+          sources: buildResearchClientSources(researchSources),
            confidence: result.confidence || 0.85
          }
        };
@@ -2004,7 +2678,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
   // POST /api/research/stream - SSE streaming response for legal research
   fastify.post('/api/research/stream', { 
-    preHandler: [authenticateRequest, enforceActiveSubscription, enforceResearchQuota] 
+    preHandler: [authenticateRequest, aiResearchRateLimit, enforceActiveSubscription, enforceResearchQuota] 
   }, async (request, reply) => {
     const authReq = request as AuthenticatedRequest;
     const { query: question, matterId, language } = z.object({
@@ -2013,6 +2687,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       language: supportedLanguageSchema.optional(),
     }).parse(request.body);
     const responseLanguage = language ?? 'en';
+    const requestOrigin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
+    const allowedOrigin = resolveCorsOrigin(requestOrigin);
 
     // Set SSE headers
     reply.raw.writeHead(200, {
@@ -2020,8 +2696,9 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Credentials': 'true',
+      'Vary': 'Origin',
     });
 
     const sendEvent = (data: object) => {
@@ -2032,68 +2709,20 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     let streamStarted = false;
 
     try {
-      // 1. Embed question with caching
-      let embeddings: number[][] | null = null;
-      const cacheKey = question.toLowerCase().trim();
-      
-      const cached = await getCachedEmbedding(cacheKey, 'sentence-transformers/LaBSE');
-      if (cached) {
-        assertEmbeddingDimension(cached, 'research stream cache');
-        embeddings = [cached];
-        logger.debug('Using cached embedding for research stream');
-      } else {
-        const embedRes = await fetch(`${config.AI_SERVICE_URL}/embed`, {
-          method: 'POST',
-          headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ texts: [question] }),
-        });
-        const result = await embedRes.json() as { embeddings?: number[][] };
-        if (!result.embeddings || result.embeddings.length === 0) {
-          throw new Error('No embeddings returned from AI service');
-        }
-        assertEmbeddingDimension(result.embeddings[0], 'research stream ai-service response');
-        embeddings = result.embeddings;
-        await cacheEmbedding(cacheKey, 'sentence-transformers/LaBSE', embeddings[0]);
-      }
+      const embedding = await getResearchEmbedding(question, 'research stream');
+      const documentChunks = await findResearchDocumentChunks(authReq.tenantId, embedding, matterId);
+      const bareActSections = await findRelevantBareActSections(embedding);
+      const researchSources = combineResearchSources(documentChunks, bareActSections);
+      const contextPrompt = await buildResearchContextPrompt(
+        authReq.tenantId,
+        documentChunks[0]?.document_id ?? null,
+        question,
+        bareActSections
+      );
 
-      if (!embeddings || embeddings.length === 0) {
-        throw new Error('Missing embeddings for research stream');
-      }
-
-      // 2. Search for relevant chunks
-      const searchQuery = matterId
-        ? `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
-                  d.source_name as document_title,
-                  1 - (dc.embedding <=> $1::vector) as relevance_score
-           FROM document_chunks dc
-           JOIN documents d ON dc.document_id = d.id
-           WHERE d.tenant_id = $2 AND d.matter_id = $3
-           ORDER BY dc.embedding <=> $1::vector LIMIT 20`
-        : `SELECT dc.id, dc.document_id, dc.text_content, dc.chunk_index, dc.page_from, dc.page_to,
-                  d.source_name as document_title,
-                  1 - (dc.embedding <=> $1::vector) as relevance_score
-           FROM document_chunks dc
-           JOIN documents d ON dc.document_id = d.id
-           WHERE d.tenant_id = $2
-           ORDER BY dc.embedding <=> $1::vector LIMIT 20`;
-
-      const searchParams = matterId 
-        ? [`[${embeddings[0].join(',')}]`, authReq.tenantId, matterId]
-        : [`[${embeddings[0].join(',')}]`, authReq.tenantId];
-
-      const chunks = await query<ResearchChunkRow>(searchQuery, searchParams);
-
-      // 3. Send sources immediately
       sendEvent({ 
         type: 'sources', 
-        sources: chunks.rows.map((c) => ({ 
-          documentId: c.document_id, 
-          title: c.document_title, 
-          relevance: c.relevance_score, 
-          pageFrom: c.page_from,
-          pageTo: c.page_to,
-          snippet: c.text_content.slice(0, 200) 
-        })) 
+        sources: buildResearchClientSources(researchSources),
       });
 
       // Mark stream as started (AI service call begins now)
@@ -2105,18 +2734,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         headers: getAiServiceHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ 
           query: question, 
-          chunks: chunks.rows.map((c, index) => ({
-            chunk_id: c.id,
-            document_id: c.document_id,
-            document_name: c.document_title,
-            text: c.text_content,
-            page_number: c.page_from ?? c.page_to ?? null,
-            relevance_score: Number(c.relevance_score) || 0,
-            source_type: 'tenant_document',
-            source_verified: true,
-            rank: index + 1,
-            language: responseLanguage,
-          })),
+          chunks: buildResearchSourcesPayload(researchSources, responseLanguage),
+          context: contextPrompt || undefined,
           language: responseLanguage,
           stream: true 
         }),
@@ -2205,7 +2824,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
           question,
           fullAnswer,
           JSON.stringify(citationsPayload),
-          chunks.rows.length,
+          researchSources.length,
         ]
       );
 
@@ -2878,7 +3497,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // GET /api/analytics/firm
   fastify.get(
     '/api/analytics/firm',
-    { preHandler: [authenticateRequest, requireRoles('admin', 'partner')] },
+    { preHandler: [authenticateRequest, requireRoles('admin', 'partner', 'senior_advocate')] },
     async (request) => {
       const authReq = request as AuthenticatedRequest;
 
@@ -3150,7 +3769,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // ============================================================
 
   // POST /api/documents/:id/suggest - Get AI redline suggestions
-  fastify.post('/api/documents/:id/suggest', { preHandler: authenticateRequest }, async (request, reply) => {
+  fastify.post('/api/documents/:id/suggest', { preHandler: [authenticateRequest, aiSuggestionRateLimit] }, async (request, reply) => {
     const authReq = request as AuthenticatedRequest;
     const { id } = request.params as { id: string };
     const body = z.object({
@@ -3915,7 +4534,7 @@ END:VCALENDAR`;
   // GET /api/analytics/attorneys - Advocate productivity metrics
   fastify.get(
     '/api/analytics/attorneys',
-    { preHandler: [authenticateRequest, requireRoles('admin', 'partner')] },
+    { preHandler: [authenticateRequest, requireRoles('admin', 'partner', 'senior_advocate')] },
     async (request) => {
       const authReq = request as AuthenticatedRequest;
 
@@ -3930,7 +4549,7 @@ END:VCALENDAR`;
         `SELECT a.id, a.display_name, a.role,
                 (SELECT COUNT(*) FROM matters WHERE lead_advocate_id = a.id OR lead_attorney_id = a.id) as matters_count,
                 (SELECT COUNT(*) FROM review_actions WHERE reviewer_id = a.id) as documents_reviewed,
-                (SELECT COUNT(*) FROM flags WHERE reviewed_by = a.id AND status != 'open') as flags_resolved
+                (SELECT COUNT(*) FROM flags WHERE resolved_by = a.id AND status != 'open') as flags_resolved
          FROM attorneys a
          WHERE a.tenant_id = $1 AND a.status = 'active'
          ORDER BY matters_count DESC`,

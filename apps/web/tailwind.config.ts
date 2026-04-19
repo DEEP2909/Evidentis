@@ -19,16 +19,17 @@ const config: Config = {
     extend: {
       colors: {
         navy: {
-          950: "hsl(221,71%,7%)",
-          900: "hsl(221,71%,10%)",
-          800: "hsl(221,65%,14%)",
-          700: "hsl(221,55%,20%)",
+          950: "#020203",
+          900: "#050506",
+          800: "#0a0a0c",
+          700: "#12131a",
         },
         saffron: {
-          400: "#FFD18B",
-          500: "#FF9933",
+          300: "#AAB4FF",
+          400: "#8794FF",
+          500: "#5E6AD2",
         },
-        "india-green": "#138808",
+        "india-green": "#10b981",
         // Existing colors
         // EvidentIS Brand Colors
         // navy: {
@@ -47,19 +48,19 @@ const config: Config = {
         //   950: '#020912',
         // },
         gold: {
-          DEFAULT: '#C9A84C',
-          light: '#E8C97A',
-          dark: '#A88B3D',
-          50: '#FCF8ED',
-          100: '#F7EDCC',
-          200: '#F0DDA7',
-          300: '#E8C97A',
-          400: '#C9A84C',
-          500: '#A88B3D',
-          600: '#876F31',
-          700: '#665425',
-          800: '#45391A',
-          900: '#241D0D',
+          DEFAULT: '#5E6AD2',
+          light: '#AAB4FF',
+          dark: '#4450A8',
+          50: '#EEF1FF',
+          100: '#E2E7FF',
+          200: '#CAD2FF',
+          300: '#AAB4FF',
+          400: '#8794FF',
+          500: '#5E6AD2',
+          600: '#4450A8',
+          700: '#313B7E',
+          800: '#222958',
+          900: '#151934',
         },
         // Risk Level Colors
         critical: { DEFAULT: '#DC2626', light: '#FEE2E2' },
@@ -109,9 +110,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        serif: ["Cormorant Garamond", "Georgia", "serif"],
-        sans: ["Outfit", "system-ui", "sans-serif"],
-        mono:  ['Cascadia Mono', 'Consolas', 'Courier New', 'monospace'],
+        serif: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "Cascadia Mono", "Consolas", "Courier New", "monospace"],
       },
       backgroundOpacity: { 8: "0.08" },
       fontSize: {

@@ -95,11 +95,8 @@ const configSchema = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
   OTEL_SERVICE_NAME: z.string().default('evidentis-india-api'),
 
-  OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().default('gpt-4o'),
-  OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
-  EMBEDDING_MODEL: z.string().default('sentence-transformers/LaBSE'),
-  EMBEDDING_DIM: z.coerce.number().default(768),
+  EMBEDDING_MODEL: z.string().default('BAAI/bge-m3'),
+  EMBEDDING_DIM: z.coerce.number().default(1024),
   INDIC_TRANS_MODEL: z.string().default('ai4bharat/indictrans2-en-indic-1B'),
 
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),

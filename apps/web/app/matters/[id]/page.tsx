@@ -35,6 +35,7 @@ import {
 import { toast } from "sonner";
 
 import { matters, documents, clauses, flags, obligations, research } from "@/lib/api";
+import { useCapabilities } from "@/lib/use-capabilities";
 import { formatDate, getRiskColor, CLAUSE_TYPE_LABELS } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,8 +48,9 @@ type TabType = "documents" | "clauses" | "flags" | "obligations" | "research" | 
 
 export default function MatterDetailPage() {
   const params = useParams();
-  const _router = useRouter();
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const caps = useCapabilities();
   const matterId = params.id as string;
 
   const [activeTab, setActiveTab] = useState<TabType>("documents");
@@ -125,6 +127,52 @@ export default function MatterDetailPage() {
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: () => matters.delete(matterId),
+    onSuccess: () => {
+      toast.success("Matter archived");
+      void queryClient.invalidateQueries({ queryKey: ["matters"] });
+      router.push("/matters");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to archive matter");
+    },
+  });
+
+  const handleShareMatter = async () => {
+    if (typeof window === "undefined") return;
+    const shareUrl = window.location.href;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Matter link copied to clipboard");
+    } catch {
+      toast.error("Unable to copy link right now");
+    }
+  };
+
+  const handleRunAiAnalysis = () => {
+    if (!matter) return;
+    const seedPrompt = `Summarize the key risks, obligations, and next steps for ${matter.matterName}.`;
+    router.push(`/nyay-assist?matterId=${matterId}&q=${encodeURIComponent(seedPrompt)}`);
+  };
+
+  const handleArchiveMatter = () => {
+    if (!window.confirm("Archive this matter? It will be removed from active worklists but preserved for audit and reporting.")) {
+      return;
+    }
+    archiveMutation.mutate();
+  };
+
+  const handleDownloadDocument = async (documentId: string) => {
+    try {
+      const url = await documents.downloadUrl(matterId, documentId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to export document");
+    }
+  };
+
   // Dropzone
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -171,7 +219,7 @@ export default function MatterDetailPage() {
     );
   }
 
-  const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
+  const tabsBase: { id: TabType; label: string; icon: typeof FileText }[] = [
     { id: "documents", label: t("mat_tab_documents"), icon: FileText },
     { id: "clauses", label: t("mat_tab_clauses"), icon: BookOpen },
     { id: "flags", label: t("mat_tab_flags"), icon: Flag },
@@ -180,6 +228,9 @@ export default function MatterDetailPage() {
     { id: "timeline", label: t("mat_tab_timeline"), icon: History },
     { id: "analytics", label: t("mat_tab_analytics"), icon: BarChart3 },
   ];
+  const tabs: { id: TabType; label: string; icon: typeof FileText }[] = tabsBase.filter((tab) =>
+    tab.id === "research" ? caps.canAccessResearch : true
+  );
 
   const totalDocuments = analytics?.totalDocuments ?? 0;
   const totalClauses = analytics?.totalClauses ?? 0;
@@ -215,6 +266,31 @@ export default function MatterDetailPage() {
                 {matter.governingLawState && ` • ${matter.governingLawState}`}
                 {matter.matterType && ` • ${matter.matterType}`}
               </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {caps.canShareMatter ? (
+                <Button variant="outline" onClick={handleShareMatter}>
+                  Share Matter
+                </Button>
+              ) : null}
+              {caps.canRunAIAnalysis ? (
+                <Button variant="gold" onClick={handleRunAiAnalysis}>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Run AI Analysis
+                </Button>
+              ) : null}
+              {caps.canArchiveMatter ? (
+                <Button variant="outline" className="border-red-500/35 text-red-300" onClick={handleArchiveMatter} disabled={archiveMutation.isPending}>
+                  {archiveMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Archiving...
+                    </>
+                  ) : (
+                    "Archive Matter"
+                  )}
+                </Button>
+              ) : null}
             </div>
           </div>
 
@@ -271,33 +347,40 @@ export default function MatterDetailPage() {
         {/* Documents Tab */}
         {activeTab === "documents" && (
           <div className="space-y-6">
-            {/* Upload Zone */}
-            <div
-              {...getRootProps()}
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
-                isDragActive
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/25 hover:border-primary/50"
-              }`}
-            >
-              <input {...getInputProps()} />
-              {isUploading ? (
-                <div className="flex flex-col items-center">
-                  <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-                  <p>Uploading and analyzing...</p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center">
-                  <Upload className="h-10 w-10 text-muted-foreground mb-4" />
-                  <p className="font-medium">
-                    {isDragActive ? "Drop files here" : "Drag & drop documents here"}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    or click to browse (PDF, DOCX up to 50MB)
-                  </p>
-                </div>
-              )}
-            </div>
+            {caps.canUploadDocuments ? (
+              <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+                  isDragActive
+                    ? "border-primary bg-primary/5"
+                    : "border-muted-foreground/25 hover:border-primary/50"
+                }`}
+              >
+                <input {...getInputProps()} />
+                {isUploading ? (
+                  <div className="flex flex-col items-center">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+                    <p>Uploading and analyzing...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <Upload className="h-10 w-10 text-muted-foreground mb-4" />
+                    <p className="font-medium">
+                      {isDragActive ? "Drop files here" : "Drag & drop documents here"}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      or click to browse (PDF, DOCX up to 50MB)
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-4 text-sm text-muted-foreground">
+                  You can review documents on this matter, but uploads are restricted for your role.
+                </CardContent>
+              </Card>
+            )}
 
             {/* Documents List */}
             <div className="space-y-3">
@@ -340,12 +423,14 @@ export default function MatterDetailPage() {
                     {doc.ingestionStatus}
                   </Badge>
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" onClick={() => setActiveTab("clauses")}>
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon">
-                      <Download className="h-4 w-4" />
-                    </Button>
+                    {caps.canExportDocuments ? (
+                      <Button variant="ghost" size="icon" onClick={() => void handleDownloadDocument(doc.id)}>
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    ) : null}
                   </div>
                 </motion.div>
               ))}
@@ -434,7 +519,7 @@ export default function MatterDetailPage() {
         )}
 
         {/* Research Tab — wired to API */}
-        {activeTab === "research" && (
+        {activeTab === "research" && caps.canAccessResearch && (
           <ResearchTabContent matterId={matterId} />
         )}
 

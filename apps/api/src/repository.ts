@@ -843,6 +843,7 @@ export const playbookRepo = {
   async update(tenantId: string, id: string, data: Partial<{
     name: string;
     description: string;
+    practiceArea: string;
     rules: any[];
     isActive: boolean;
   }>) {
@@ -857,6 +858,10 @@ export const playbookRepo = {
     if (data.description !== undefined) {
       updates.push(`description = $${paramIndex++}`);
       params.push(data.description);
+    }
+    if (data.practiceArea !== undefined) {
+      updates.push(`practice_area = $${paramIndex++}`);
+      params.push(data.practiceArea);
     }
     if (data.rules !== undefined) {
       updates.push(`rules = $${paramIndex++}`);

@@ -8,25 +8,17 @@ import logging
 import re
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from explainability import explain_research_result
-from llm_safety import RetryConfig, extract_ollama_text, retry_with_backoff
+from llm_caller import call_llm, stream_llm
 from prompts import RESEARCH_QUERY, add_safety_guardrails
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-LLM_RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    initial_delay=1.0,
-    max_delay=10.0,
-    exponential_base=2.0,
-)
 
 
 class ResearchQuery(BaseModel):
@@ -293,9 +285,7 @@ async def generate_research_answer_stream(
     chunks: List[ChunkForRAG],
     jurisdiction: Optional[str],
     response_language: str,
-    ollama_url: str,
-    model: str,
-    timeout: int
+    settings,
 ) -> AsyncGenerator[str, None]:
     """
     Generate streaming research answer using RAG.
@@ -333,38 +323,16 @@ async def generate_research_answer_stream(
     user_prompt = prompt.replace(system_prompt, "").strip()
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream(
-                "POST",
-                f"{ollama_url}/api/chat",
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "stream": True,
-                    "options": {
-                        "temperature": RESEARCH_QUERY.temperature,
-                        "num_predict": 2048,
-                    },
-                },
-            ) as response:
-                if response.status_code != 200:
-                    raise RuntimeError(f"Ollama error: {response.status_code}")
-                
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        token = extract_ollama_text(data, "")
-                        if token:
-                            yield f"data: {json.dumps({'token': token})}\n\n"
-                        if data.get("done"):
-                            break
-                    except json.JSONDecodeError:
-                        continue
+        async for token in stream_llm(
+            task="research",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            settings=settings,
+            temperature=RESEARCH_QUERY.temperature,
+            max_tokens=2048,
+        ):
+            if token:
+                yield f"data: {json.dumps({'token': token})}\n\n"
 
         # Send citations at the end
         citations = [
@@ -396,9 +364,7 @@ async def generate_research_answer(
     chunks: List[ChunkForRAG],
     jurisdiction: Optional[str],
     response_language: str,
-    ollama_url: str,
-    model: str,
-    timeout: int
+    settings,
 ) -> tuple[str, float]:
     """
     Generate non-streaming research answer.
@@ -433,40 +399,18 @@ async def generate_research_answer(
     system_prompt = "You are a legal research assistant helping advocates analyze contracts, pleadings, and legal questions."
     user_prompt = prompt.replace(system_prompt, "").strip()
 
-    async def _call_llm() -> Dict[str, Any]:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                f"{ollama_url}/api/chat",
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "stream": False,
-                    "options": {
-                        "temperature": RESEARCH_QUERY.temperature,
-                        "num_predict": 2048,
-                    },
-                },
-            )
-            if response.status_code != 200:
-                raise RuntimeError(f"Ollama error: {response.status_code}")
-            return response.json()
-
     try:
-        result = await retry_with_backoff(
-            _call_llm,
-            config=LLM_RETRY_CONFIG,
+        answer = await call_llm(
+            task="research",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            settings=settings,
+            temperature=RESEARCH_QUERY.temperature,
+            max_tokens=2048,
         )
-        answer = add_safety_guardrails(extract_ollama_text(result, "").strip())
+        answer = add_safety_guardrails(answer.strip())
         confidence = score_answer_confidence(answer, chunks, jurisdiction)
         return answer, confidence
-    except RuntimeError as e:
-        if str(e).startswith("Ollama error:"):
-            return "Research service temporarily unavailable.", 0.0
-        logger.error(f"Research generation failed: {e}")
-        return f"Research generation failed: {e}", 0.0
     except Exception as e:
         logger.error(f"Research generation failed: {e}")
         return f"Research generation failed: {e}", 0.0
@@ -536,9 +480,7 @@ async def research(
                 chunks,
                 body.jurisdiction,
                 response_language,
-                settings.ollama_base_url,
-                settings.ollama_model_research,
-                settings.ollama_timeout
+                settings,
             ),
             media_type="text/event-stream",
             headers={
@@ -553,9 +495,7 @@ async def research(
             chunks,
             body.jurisdiction,
             response_language,
-            settings.ollama_base_url,
-            settings.ollama_model_research,
-            settings.ollama_timeout
+            settings,
         )
         
         citations = [

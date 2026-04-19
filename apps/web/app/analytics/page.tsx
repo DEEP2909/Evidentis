@@ -203,7 +203,7 @@ function AnalyticsContent() {
                       color: "#fff",
                     }}
                   />
-                  <Bar dataKey="documents" fill="#ff9933" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="documents" fill="#5e6ad2" radius={[8, 8, 0, 0]} />
                   <Bar dataKey="flags" fill="#60a5fa" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>

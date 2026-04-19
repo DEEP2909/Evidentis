@@ -78,7 +78,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting EvidentIS AI Service...")
     logger.info(f"Embedding model: {settings.embedding_model}")
     logger.info(f"OCR engines: {settings.ocr_engine_list}")
-    logger.info(f"LLM model: {settings.ollama_model_extract}")
+    logger.info(
+        "LLM routing: Azure=%s Groq=%s Ollama fallback=%s",
+        settings.azure_openai_deployment,
+        settings.groq_research_model,
+        settings.ollama_model_fallback,
+    )
     
     # Initialize model registry and load models
     model_registry = ModelRegistry(settings)
@@ -182,7 +187,7 @@ if settings.environment == "development":
 else:
     # Production: No CORS needed (internal service)
     # If CORS is required, configure via environment variable
-    allowed_origins = settings.cors_origins if hasattr(settings, 'cors_origins') else []
+    allowed_origins = settings.cors_origin_list if hasattr(settings, 'cors_origin_list') else []
     if allowed_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -212,7 +217,11 @@ async def root() -> Dict[str, Any]:
         "status": "running",
         "models": {
             "embedding": settings.embedding_model,
-            "llm": settings.ollama_model_extract,
+            "llm": {
+                "azure": settings.azure_openai_deployment,
+                "groq": settings.groq_research_model,
+                "fallback": settings.ollama_model_fallback,
+            },
             "ocr": settings.ocr_engine_list,
         }
     }
@@ -247,7 +256,7 @@ async def run_eval(dataset: str = "default") -> Dict[str, Any]:
             return {"clauses": [], "risk_level": "medium"}
         
         result = await run_evaluation(
-            model_version=settings.ollama_model_extract,
+            model_version=settings.azure_openai_deployment,
             dataset_path=dataset,
             inference_fn=inference_fn,
         )

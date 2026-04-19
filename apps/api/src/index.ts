@@ -150,6 +150,7 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
   app.decorateRequest('tenantId', '');
   app.decorateRequest('advocateId', '');
   app.decorateRequest('advocateRole', '');
+  app.decorateRequest('user', undefined);
   // Backward-compatible aliases (deprecated — use advocateId/advocateRole)
   app.decorateRequest('attorneyId', '');
   app.decorateRequest('attorneyRole', '');

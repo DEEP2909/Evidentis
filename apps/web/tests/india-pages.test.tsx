@@ -45,8 +45,8 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 describe("India product pages", () => {
   it("renders the landing page hero copy", () => {
     render(<HomePage />);
-    expect(screen.getByRole("img", { name: "EvidentIS" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /intelligent decision system/i })).toBeTruthy();
+    expect(screen.getAllByRole("img", { name: "EvidentIS" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /operating system, not a dashboard/i })).toBeTruthy();
     expect(screen.getByRole("link", { name: /open platform/i })).toBeTruthy();
   });
 

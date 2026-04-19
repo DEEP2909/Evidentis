@@ -8,23 +8,15 @@ import logging
 from typing import Any, Dict, List, Optional
 from enum import Enum
 
-import httpx
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from llm_safety import RetryConfig, extract_ollama_text, retry_with_backoff
+from llm_caller import call_llm, clean_json
 from prompts import RISK_ASSESSMENT, validate_response
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-LLM_RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    initial_delay=1.0,
-    max_delay=10.0,
-    exponential_base=2.0,
-)
 
 
 class RiskLevel(str, Enum):
@@ -314,9 +306,7 @@ async def assess_with_llm(
     clause: ClauseForAssessment,
     rules: List[PlaybookRule],
     jurisdiction: Optional[str],
-    ollama_url: str,
-    model: str,
-    timeout: int
+    settings: Any,
 ) -> List[Flag]:
     """
     Use LLM to assess clause against playbook rules.
@@ -373,33 +363,17 @@ Return ONLY a JSON array of rule assessments. No other text."""
     system_prompt = "You are a senior legal counsel analyzing contract risks for an India-based law firm or in-house legal team."
     user_prompt = prompt.replace(system_prompt, "").strip()
 
-    payload: Dict[str, Any] = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": RISK_ASSESSMENT.temperature},
-    }
-
-    async def _call_llm() -> Dict[str, Any]:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(
-                f"{ollama_url}/api/chat",
-                json=payload,
-            )
-            if response.status_code != 200:
-                raise RuntimeError(f"Ollama error: {response.status_code}")
-            return response.json()
-
     try:
-        result = await retry_with_backoff(
-            _call_llm,
-            config=LLM_RETRY_CONFIG,
+        response_text = await call_llm(
+            task="assess",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            settings=settings,
+            temperature=RISK_ASSESSMENT.temperature,
+            max_tokens=3072,
+            json_mode=True,
         )
-        response_text = extract_ollama_text(result, "[]")
+        response_text = clean_json(response_text)
         if not validate_response(response_text, "json"):
             logger.error("Risk assessment model returned non-JSON content")
             return []
@@ -554,9 +528,7 @@ async def assess_risk(
             clause,
             rules,
             body.jurisdiction,
-            settings.ollama_base_url,
-            settings.ollama_model_extract,
-            settings.ollama_timeout
+            settings,
         )
         
         if llm_flags:

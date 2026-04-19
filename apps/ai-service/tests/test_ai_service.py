@@ -123,7 +123,7 @@ class TestEmbeddings:
             data = response.json()
             assert "embeddings" in data
             assert len(data["embeddings"]) == 1
-            assert len(data["embeddings"][0]) == 768  # LaBSE dimension
+            assert len(data["embeddings"][0]) == 1024  # BGE-M3 dimension
     
     def test_embed_multiple_texts(self):
         """Test embedding multiple texts"""

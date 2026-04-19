@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { nyayAssistPrompts } from "@/lib/india";
 import { research, QuotaError } from "@/lib/api";
+import { useCapabilities } from "@/lib/use-capabilities";
 import { AiFeedbackButton } from "@/components/shared/AiFeedbackButton";
 import { UpgradePrompt } from "@/components/shared/UpgradePrompt";
 import { useTranslation } from "react-i18next";
@@ -20,6 +21,8 @@ type Citation = {
   id: string;
   source: string;
   excerpt: string;
+  page?: number;
+  sourceType?: string;
 };
 
 const relatedActs = [
@@ -32,6 +35,7 @@ const relatedActs = [
 export default function ResearchPage() {
   const { t } = useTranslation();
   const router = useRouter();
+  const caps = useCapabilities();
   const [query, setQuery] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -40,6 +44,24 @@ export default function ResearchPage() {
   const [openCitations, setOpenCitations] = useState<Record<string, boolean>>({});
   const [hasSearched, setHasSearched] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState<{ feature: string; detail?: string } | null>(null);
+
+  if (!caps.canAccessResearch) {
+    return (
+      <AppShell title={t("research")}>
+        <div className="section-wrap page-enter">
+          <section className="glass p-8 text-center">
+            <h2 className="text-2xl font-semibold text-white/90">Research access is limited for your role</h2>
+            <p className="mt-3 text-sm text-white/60">
+              Senior and advocate roles can use the research workspace. You can continue working in matters, documents, and calendar views.
+            </p>
+            <Button className="mt-5" onClick={() => router.push("/documents")}>
+              Go to Documents
+            </Button>
+          </section>
+        </div>
+      </AppShell>
+    );
+  }
 
   const runQuery = async () => {
     if (!query.trim() || isThinking) return;
@@ -64,6 +86,8 @@ export default function ResearchPage() {
             id: `c-${i}`,
             source: c.source,
             excerpt: c.text,
+            page: c.page,
+            sourceType: c.sourceType,
           }))
         );
       }
@@ -284,6 +308,16 @@ export default function ResearchPage() {
                         className="rounded-xl border border-white/15 bg-black/20 p-3 text-sm text-white/75"
                       >
                         <p className="font-medium text-white/90">{citation.source}</p>
+                        {citation.page ? (
+                          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-white/45">
+                            Page {citation.page}
+                            {citation.sourceType ? ` • ${citation.sourceType.replaceAll("_", " ")}` : ""}
+                          </p>
+                        ) : citation.sourceType ? (
+                          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-white/45">
+                            {citation.sourceType.replaceAll("_", " ")}
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-white/65">{citation.excerpt}</p>
                       </motion.div>
                     ) : null

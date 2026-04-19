@@ -16,7 +16,7 @@ export default function BareActDetailPage() {
   return (
     <AppShell title={act.shortTitle}>
       <div className="glass p-6">
-        <p className="text-xs uppercase tracking-[0.35em] text-[#ffd18b]">{act.category}</p>
+        <p className="text-xs uppercase tracking-[0.35em] text-saffron-300">{act.category}</p>
         <h2 className="mt-3 text-3xl font-semibold">{act.title}</h2>
         <p className="mt-3 max-w-3xl text-sm text-white/75">
           Section-level navigation, multilingual explanations, bookmarks, and cross-links to successor statutes are configured around this act.
@@ -34,7 +34,7 @@ export default function BareActDetailPage() {
                   : "border-white/10 bg-black/10 hover:bg-black/20"
               }`}
             >
-              <p className="text-sm text-[#ffd18b]">{section}</p>
+              <p className="text-sm text-saffron-300">{section}</p>
               <p className="mt-2 text-sm text-white/75">Plain-language explanation, cross references, and matter save actions appear here.</p>
             </motion.button>
           ))}

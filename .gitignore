@@ -39,4 +39,9 @@ certs/
 # Internal development files — not product code
 skills-main/
 frontend_promt.md
+Master_Promt_India.md
+apps/web/test-results/
+apps/web/playwright-report/
+*.local.md
 *_promt.md
+*_prompt.md

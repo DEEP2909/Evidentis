@@ -20,6 +20,9 @@ import type {
 } from '@simplewebauthn/types';
 import { createHash, randomBytes } from 'crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { Redis } from 'ioredis';
+import { config } from './config.js';
+import { authenticateRequest } from './routes.js';
 
 // ============================================================================
 // TYPES
@@ -65,9 +68,9 @@ declare module 'fastify' {
 // CONFIGURATION
 // ============================================================================
 
-const rpName = 'EvidentIS Legal Platform';
-const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
-const origin = process.env.WEBAUTHN_ORIGIN || `https://${rpID}`;
+const rpName = config.WEBAUTHN_RP_NAME;
+const rpID = config.WEBAUTHN_RP_ID;
+const origin = config.WEBAUTHN_ORIGIN;
 
 // Timeout for WebAuthn ceremonies (5 minutes)
 const CEREMONY_TIMEOUT = 300000;
@@ -80,26 +83,85 @@ const CHALLENGE_EXPIRY_MS = 5 * 60 * 1000;
 // ============================================================================
 
 const challengeStore = new Map<string, StoredChallenge>();
+let challengeRedis: Redis | null | undefined;
 
-function storeChallenge(attorneyId: string, challenge: string, type: 'registration' | 'authentication'): void {
-  const key = `${type}:${attorneyId}`;
-  challengeStore.set(key, {
-    challenge,
-    attorneyId,
-    type,
-    expiresAt: new Date(Date.now() + CHALLENGE_EXPIRY_MS),
+function getChallengeStoreKey(identifier: string, type: 'registration' | 'authentication'): string {
+  return `webauthn:challenge:${type}:${Buffer.from(identifier, 'utf8').toString('base64url')}`;
+}
+
+async function getChallengeRedis(): Promise<Redis | null> {
+  if (challengeRedis !== undefined) {
+    return challengeRedis;
+  }
+
+  if (config.NODE_ENV === 'test' || !config.REDIS_URL) {
+    challengeRedis = null;
+    return challengeRedis;
+  }
+
+  const redis = new Redis(config.REDIS_URL, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
   });
 
-  // Cleanup old challenges periodically
+  try {
+    await redis.connect();
+    challengeRedis = redis;
+  } catch {
+    await redis.quit().catch(() => undefined);
+    challengeRedis = null;
+  }
+
+  return challengeRedis;
+}
+
+async function storeChallenge(
+  identifier: string,
+  challenge: string,
+  type: 'registration' | 'authentication'
+): Promise<void> {
+  const key = getChallengeStoreKey(identifier, type);
+  const record: StoredChallenge = {
+    challenge,
+    attorneyId: identifier,
+    type,
+    expiresAt: new Date(Date.now() + CHALLENGE_EXPIRY_MS),
+  };
+  const redis = await getChallengeRedis();
+
+  if (redis) {
+    await redis.set(key, JSON.stringify(record), 'PX', CHALLENGE_EXPIRY_MS);
+    return;
+  }
+
+  challengeStore.set(key, record);
+
+  // Cleanup old challenges periodically when Redis is unavailable.
   setTimeout(() => {
     challengeStore.delete(key);
   }, CHALLENGE_EXPIRY_MS);
 }
 
-function getChallenge(attorneyId: string, type: 'registration' | 'authentication'): string | null {
-  const key = `${type}:${attorneyId}`;
+async function getChallenge(
+  identifier: string,
+  type: 'registration' | 'authentication'
+): Promise<string | null> {
+  const key = getChallengeStoreKey(identifier, type);
+  const redis = await getChallengeRedis();
+
+  if (redis) {
+    const raw = await redis.get(key);
+    if (!raw) {
+      return null;
+    }
+
+    const stored = JSON.parse(raw) as StoredChallenge;
+    return stored.challenge;
+  }
+
   const stored = challengeStore.get(key);
-  
+
   if (!stored || stored.expiresAt < new Date()) {
     challengeStore.delete(key);
     return null;
@@ -108,11 +170,23 @@ function getChallenge(attorneyId: string, type: 'registration' | 'authentication
   return stored.challenge;
 }
 
-function consumeChallenge(attorneyId: string, type: 'registration' | 'authentication'): string | null {
-  const challenge = getChallenge(attorneyId, type);
-  if (challenge) {
-    challengeStore.delete(`${type}:${attorneyId}`);
+async function consumeChallenge(
+  identifier: string,
+  type: 'registration' | 'authentication'
+): Promise<string | null> {
+  const key = getChallengeStoreKey(identifier, type);
+  const challenge = await getChallenge(identifier, type);
+  if (!challenge) {
+    return null;
   }
+
+  const redis = await getChallengeRedis();
+  if (redis) {
+    await redis.del(key);
+    return challenge;
+  }
+
+  challengeStore.delete(key);
   return challenge;
 }
 
@@ -308,7 +382,7 @@ export async function generatePasskeyRegistrationOptions(
   });
 
   // Store challenge for verification
-  storeChallenge(attorneyId, options.challenge, 'registration');
+  await storeChallenge(attorneyId, options.challenge, 'registration');
 
   return options;
 }
@@ -320,7 +394,7 @@ export async function verifyPasskeyRegistration(
   response: RegistrationResponseJSON,
   friendlyName?: string
 ): Promise<{ success: boolean; credentialId?: string; error?: string }> {
-  const expectedChallenge = consumeChallenge(attorneyId, 'registration');
+  const expectedChallenge = await consumeChallenge(attorneyId, 'registration');
   
   if (!expectedChallenge) {
     return { success: false, error: 'Challenge expired or not found' };
@@ -400,7 +474,7 @@ export async function generatePasskeyAuthenticationOptions(
 
   // Store challenge - use session ID if no attorney ID (for discoverable credential flow)
   const challengeKey = attorneyId || options.challenge;
-  storeChallenge(challengeKey, options.challenge, 'authentication');
+  await storeChallenge(challengeKey, options.challenge, 'authentication');
 
   return options;
 }
@@ -443,10 +517,14 @@ export async function verifyPasskeyAuthentication(
 
   // Get or consume challenge
   const challengeKey = attorneyId || expectedChallenge || response.response.clientDataJSON;
-  const storedChallenge = expectedChallenge || consumeChallenge(challengeKey, 'authentication');
+  const storedChallenge = await consumeChallenge(challengeKey, 'authentication');
 
   if (!storedChallenge) {
     return { success: false, error: 'Challenge expired or not found' };
+  }
+
+  if (expectedChallenge && storedChallenge !== expectedChallenge) {
+    return { success: false, error: 'Challenge mismatch' };
   }
 
   try {
@@ -493,7 +571,7 @@ export async function verifyPasskeyAuthentication(
 
 export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
   // Get registered passkeys for current user
-  app.get('/auth/passkeys', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/auth/passkeys', { preHandler: authenticateRequest }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { tenantId, attorneyId } = request.user as RequestUser;
     
     const credentials = await getCredentialsForUser(db, tenantId, attorneyId);
@@ -509,7 +587,7 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
   });
 
   // Start passkey registration
-  app.post('/auth/passkeys/register/options', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/auth/passkeys/register/options', { preHandler: authenticateRequest }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { tenantId, attorneyId, email = '', displayName = '' } = request.user as RequestUser;
     
     const options = await generatePasskeyRegistrationOptions(
@@ -524,9 +602,10 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
   });
 
   // Complete passkey registration
-  app.post('/auth/passkeys/register/verify', async (request: FastifyRequest<{
-    Body: { response: RegistrationResponseJSON; friendlyName?: string };
-  }>, reply: FastifyReply) => {
+  app.post<{ Body: { response: RegistrationResponseJSON; friendlyName?: string } }>(
+    '/auth/passkeys/register/verify',
+    { preHandler: authenticateRequest },
+    async (request, reply) => {
     const { tenantId, attorneyId } = request.user as RequestUser;
     const { response, friendlyName } = request.body;
     
@@ -543,12 +622,14 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
     }
     
     return { success: true, credentialId: result.credentialId };
-  });
+    }
+  );
 
   // Delete a passkey
-  app.delete('/auth/passkeys/:credentialId', async (request: FastifyRequest<{
-    Params: { credentialId: string };
-  }>, reply: FastifyReply) => {
+  app.delete<{ Params: { credentialId: string } }>(
+    '/auth/passkeys/:credentialId',
+    { preHandler: authenticateRequest },
+    async (request, reply) => {
     const { tenantId, attorneyId } = request.user as RequestUser;
     const { credentialId } = request.params;
     
@@ -576,13 +657,14 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
     }
     
     return { success: true };
-  });
+    }
+  );
 
   // Rename a passkey
-  app.patch('/auth/passkeys/:credentialId', async (request: FastifyRequest<{
-    Params: { credentialId: string };
-    Body: { friendlyName: string };
-  }>, reply: FastifyReply) => {
+  app.patch<{ Params: { credentialId: string }; Body: { friendlyName: string } }>(
+    '/auth/passkeys/:credentialId',
+    { preHandler: authenticateRequest },
+    async (request, reply) => {
     const { tenantId, attorneyId } = request.user as RequestUser;
     const { credentialId } = request.params;
     const { friendlyName } = request.body;
@@ -595,7 +677,8 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
     );
     
     return { success: true };
-  });
+    }
+  );
 
   // Start passwordless authentication (for login page)
   app.post('/auth/passkeys/authenticate/options', async (request: FastifyRequest<{
@@ -624,7 +707,7 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
     // Store the challenge in session/cookie for verification
     reply.setCookie('webauthn_challenge', options.challenge, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: config.NODE_ENV === 'production',
       sameSite: 'strict',
       maxAge: 300, // 5 minutes
       path: '/auth',

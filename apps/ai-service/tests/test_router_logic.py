@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -78,19 +79,16 @@ async def test_extract_clauses_llm_parses_valid_json(monkeypatch):
             }
         )
     }
-    monkeypatch.setattr(
-        extract.httpx,
-        "AsyncClient",
-        lambda timeout: _DummyAsyncClient(_DummyResponse(200, response_payload)),
-    )
+    async def fake_call_llm(**kwargs):
+        return response_payload["response"]
+
+    monkeypatch.setattr(extract, "call_llm", fake_call_llm)
     monkeypatch.setattr(extract, "validate_response", lambda _text, _kind: True)
 
     clauses = await extract.extract_clauses_llm(
         text="Recipient shall keep information confidential.",
         clause_types=["confidentiality"],
-        ollama_url="http://example.invalid",
-        model="unit-model",
-        timeout=10,
+        settings=SimpleNamespace(ollama_url="http://example.invalid", ollama_timeout=10),
     )
 
     assert len(clauses) == 1
@@ -100,19 +98,16 @@ async def test_extract_clauses_llm_parses_valid_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_extract_clauses_llm_rejects_non_json_response(monkeypatch):
-    monkeypatch.setattr(
-        extract.httpx,
-        "AsyncClient",
-        lambda timeout: _DummyAsyncClient(_DummyResponse(200, {"response": "not-json"})),
-    )
+    async def fake_call_llm_failure(**kwargs):
+        return "not-json"
+
+    monkeypatch.setattr(extract, "call_llm", fake_call_llm_failure)
     monkeypatch.setattr(extract, "validate_response", lambda _text, _kind: False)
 
     clauses = await extract.extract_clauses_llm(
         text="Any text",
         clause_types=["indemnification"],
-        ollama_url="http://example.invalid",
-        model="unit-model",
-        timeout=10,
+        settings=SimpleNamespace(ollama_url="http://example.invalid", ollama_timeout=10),
     )
 
     assert clauses == []
@@ -233,20 +228,17 @@ async def test_extract_obligations_llm_normalizes_invalid_enum_values(monkeypatc
             ]
         )
     }
-    monkeypatch.setattr(
-        obligations.httpx,
-        "AsyncClient",
-        lambda timeout: _DummyAsyncClient(_DummyResponse(200, response_payload)),
-    )
+    async def fake_call_llm(**kwargs):
+        return response_payload["response"]
+
+    monkeypatch.setattr(obligations, "call_llm", fake_call_llm)
     monkeypatch.setattr(obligations, "validate_response", lambda _text, _kind: True)
 
     extracted = await obligations.extract_obligations_llm(
         text="Counterparty shall complete onboarding within 15 days.",
         parties=None,
         effective_date=None,
-        ollama_url="http://example.invalid",
-        model="unit-model",
-        timeout=10,
+        settings=SimpleNamespace(ollama_url="http://example.invalid", ollama_timeout=10),
     )
 
     assert len(extracted) == 1
@@ -343,11 +335,10 @@ async def test_assess_with_llm_parses_applicable_flags(monkeypatch):
             ]
         )
     }
-    monkeypatch.setattr(
-        assess.httpx,
-        "AsyncClient",
-        lambda timeout: _DummyAsyncClient(_DummyResponse(200, response_payload)),
-    )
+    async def fake_call_llm(**kwargs):
+        return response_payload["response"]
+
+    monkeypatch.setattr(assess, "call_llm", fake_call_llm)
     monkeypatch.setattr(assess, "validate_response", lambda _text, _kind: True)
 
     clause = assess.ClauseForAssessment(
@@ -369,9 +360,7 @@ async def test_assess_with_llm_parses_applicable_flags(monkeypatch):
         clause=clause,
         rules=rules,
         jurisdiction=None,
-        ollama_url="http://example.invalid",
-        model="unit-model",
-        timeout=10,
+        settings=SimpleNamespace(ollama_url="http://example.invalid", ollama_timeout=10),
     )
 
     assert len(flags) == 1

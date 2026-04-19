@@ -409,7 +409,7 @@ async def extract_clauses_llm(
                             start_offset=max(0, start),
                             end_offset=max(0, end),
                             confidence=float(item.get("confidence", 0.8)),
-                            metadata={"method": "llm", "model": model}
+metadata={"method": "llm", "model": "gpt-4"}
                         ))
 
         except Exception as e:

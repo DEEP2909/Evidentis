@@ -2696,7 +2696,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Origin': 'https://evidentis.com',
       'Access-Control-Allow-Credentials': 'true',
       'Vary': 'Origin',
     });

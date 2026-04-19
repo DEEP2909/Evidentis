@@ -18,7 +18,7 @@ test.describe("Web smoke suite", () => {
 
   test("renders root landing page", async ({ page }) => {
     await gotoPage(page, "/");
-    await expect(page.getByRole("heading", { name: /intelligent decision system/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operating system/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /open platform/i })).toBeVisible();
   });
 

@@ -88,41 +88,40 @@ async def test_get_relevant_chunks_requires_api_provided_context() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_research_answer_success_and_error_paths(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_retry_success(_func, config):
-        assert config == research_router.LLM_RETRY_CONFIG
-        return {"response": "Answer with [Source 1] support."}
+    async def fake_call_llm(**kwargs) -> str:
+        return "Answer with [Source 1] support."
 
-    monkeypatch.setattr(research_router, "retry_with_backoff", fake_retry_success)
+    monkeypatch.setattr(research_router, "call_llm", fake_call_llm)
     answer, confidence = await research_router.generate_research_answer(
         query="What is indemnity?",
         chunks=[_sample_chunk()],
         jurisdiction="MH",
         response_language="en",
-        ollama_url="http://unused",
-        model="mock-model",
-        timeout=10,
+        settings=SimpleNamespace(
+            groq_api_key="mock",
+            groq_research_model="llama3-8b-8192",
+            groq_timeout=10,
+        ),
         system_prompt="You are a legal expert specializing in Indian law.",
         user_prompt="Please provide a comprehensive answer about indemnity in Indian law."
     )
     assert "Answer with" in answer
     assert confidence > 0
 
-    async def fake_retry_failure(_func, config):
+    async def fake_call_llm_failure(**kwargs) -> str:
         raise RuntimeError("Ollama error: 503")
 
-    monkeypatch.setattr(research_router, "retry_with_backoff", fake_retry_failure)
+    monkeypatch.setattr(research_router, "call_llm", fake_call_llm_failure)
     fallback_answer, fallback_confidence = await research_router.generate_research_answer(
         query="What is indemnity?",
         chunks=[_sample_chunk()],
         jurisdiction=None,
         response_language="en",
-        ollama_url="http://unused",
-        model="mock-model",
-        timeout=10,
+        settings=SimpleNamespace(),
         system_prompt="You are a legal expert specializing in Indian law.",
         user_prompt="Please provide a comprehensive answer about indemnity in Indian law."
     )
-    assert fallback_answer == "Research service temporarily unavailable."
+    assert "Research generation failed" in fallback_answer
     assert fallback_confidence == 0.0
 
 

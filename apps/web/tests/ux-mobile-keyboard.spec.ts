@@ -56,7 +56,7 @@ test.describe("UX mobile and keyboard smoke", () => {
     await page.setViewportSize({ width: 390, height: 844 });
 
     await gotoPage(page, "/");
-    await expect(page.getByRole("heading", { name: /intelligent decision system/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /operating system/i })).toBeVisible();
     const landingOverflow = await page.evaluate(
       () => {
         const appRoot =

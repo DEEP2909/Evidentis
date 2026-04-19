@@ -365,6 +365,8 @@ async def generate_research_answer(
     jurisdiction: Optional[str],
     response_language: str,
     settings,
+    system_prompt: str = "You are a legal research assistant helping advocates analyze contracts, pleadings, and legal questions.",
+    user_prompt: str = "",
 ) -> tuple[str, float]:
     """
     Generate non-streaming research answer.

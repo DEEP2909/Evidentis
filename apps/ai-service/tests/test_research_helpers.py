@@ -101,6 +101,8 @@ async def test_generate_research_answer_success_and_error_paths(monkeypatch: pyt
         ollama_url="http://unused",
         model="mock-model",
         timeout=10,
+        system_prompt="You are a legal expert specializing in Indian law.",
+        user_prompt="Please provide a comprehensive answer about indemnity in Indian law."
     )
     assert "Answer with" in answer
     assert confidence > 0
@@ -117,6 +119,8 @@ async def test_generate_research_answer_success_and_error_paths(monkeypatch: pyt
         ollama_url="http://unused",
         model="mock-model",
         timeout=10,
+        system_prompt="You are a legal expert specializing in Indian law.",
+        user_prompt="Please provide a comprehensive answer about indemnity in Indian law."
     )
     assert fallback_answer == "Research service temporarily unavailable."
     assert fallback_confidence == 0.0

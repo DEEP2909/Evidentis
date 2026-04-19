@@ -3,15 +3,23 @@ EvidentIS AI Service - Comprehensive Test Suite
 Tests for OCR, Embeddings, Clause Extraction, Risk Assessment, Research, and Obligations
 """
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from io import BytesIO
 
-# sys.path is handled by conftest.py â€” no need to repeat it here
+# sys.path is handled by conftest.py — no need to repeat it here
 from main import app
 
 client = TestClient(app)
 
+def test_lifespan_events():
+    """Test app lifespan (startup/shutdown)"""
+    with patch("models.loader.ModelRegistry.load_all") as mock_load:
+        with patch("models.loader.ModelRegistry.unload_all") as mock_unload:
+            with TestClient(app) as test_client:
+                assert mock_load.called
+                assert hasattr(app.state, "models")
+            assert mock_unload.called
 
 # =============================================================================
 # Health Check Tests
@@ -38,8 +46,38 @@ class TestHealth:
         assert response.status_code == 200
         data = response.json()
         assert "version" in data
-        assert "service" in data or "models" in data
+        assert "service" in data
 
+    def test_full_health_endpoint(self):
+        """Test comprehensive health check endpoint"""
+        with patch("routers.health.httpx.AsyncClient") as mock_client:
+            # Mock Ollama response
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
+            
+            # Mock models registry status
+            mock_models = MagicMock()
+            mock_models.get_status.return_value = {
+                "embedding": {"loaded": True, "model": "test"},
+                "spacy": {"loaded": True, "model": "test"},
+                "ocr": {"tesseract": {"available": True}}
+            }
+            app.state.models = mock_models
+            
+            response = client.get("/health")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "healthy"
+            assert "components" in data
+
+    def test_root_endpoint_details(self):
+        """Test details returned by root endpoint"""
+        response = client.get("/")
+        assert response.status_code == 200
+        data = response.json()
+        assert "service" in data
+        assert "models" in data
 
 # =============================================================================
 # OCR Tests

@@ -156,13 +156,11 @@ npm run dev:full
 ### Demo Credentials
 
 ```
-Email: admin@sharma-associates.com
-Password: EvidentIS2026Demo!
-Firm: Sharma & Associates LLP
+# Run seed to create demo accounts (do NOT use these in production):
+npm run seed --workspace=apps/api
 
-Alternate demo admins:
-- admin@delhi-corporate.com
-- admin@bengaluru-legal.com
+# Seed creates demo admin accounts for local testing only.
+# Rotate all credentials before any customer-facing deployment.
 ```
 
 ---
@@ -323,10 +321,10 @@ npm run test:isolation --workspace=apps/api
 
 | Component | Tests | Coverage |
 |-----------|-------|----------|
-| API | 325+ | >50% |
-| AI Service | 105 | >30% (structural exclusions) |
+| API | 325+ | ≥70% (CI enforced) |
+| AI Service | 105 | ≥75% (CI enforced) |
 | Frontend | 90+ | >50% |
-| **Total** | **520+** | **>50% / >30%** |
+| **Total** | **520+** | **See CI thresholds** |
 
 ---
 

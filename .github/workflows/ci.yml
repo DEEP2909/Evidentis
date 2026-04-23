@@ -444,11 +444,11 @@ jobs:
                   regressions.append(f'{metric}: {current_score:.2%} (was {base_score:.2%})')
           
           if regressions:
-              print('⚠️ AI performance regressions detected:')
+              print('❌ AI performance regressions detected:')
               for r in regressions:
                   print(f'  - {r}')
-              # Warning only, don't fail the build
-              print('\\nPlease review these regressions before merging.')
+              print('\\nRegressions exceed the allowed 5% threshold. Failing build.')
+              sys.exit(1)
           else:
               print('✓ No AI performance regressions detected')
           "

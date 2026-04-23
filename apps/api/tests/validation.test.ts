@@ -17,6 +17,8 @@ const TEST_TENANT = {
 const TEST_ATTORNEY = {
   id: '00000000-0000-0000-0000-000000000701',
   email: 'validation@test.com',
+  tenantId: TEST_TENANT.id,
+  role: 'attorney',
 };
 
 let app: any;

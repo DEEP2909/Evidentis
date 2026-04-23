@@ -45,3 +45,13 @@ apps/web/playwright-report/
 *.local.md
 *_promt.md
 *_prompt.md
+
+# AI coding context / scratch files — do not ship
+context.md
+prompt.md
+design.md
+skill.md
+issue.md
+
+# Oversized binary — serve from CDN instead
+logo.png

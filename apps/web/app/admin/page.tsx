@@ -1173,6 +1173,13 @@ function AdminContent() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<AdminTab>("team");
 
+  const { data: billing } = useQuery({
+    queryKey: ["billing"],
+    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+  });
+
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -1237,12 +1244,12 @@ function AdminContent() {
                 <div className="mb-2 flex items-center gap-2 text-saffron-300">
                   <Building2 className="h-4 w-4" />
                   <span className="text-sm font-medium">
-                    {CURRENT_PLAN.name} {t("bill_currentPlan")}
+                    {currentPlan.name} {t("bill_currentPlan")}
                   </span>
                 </div>
                 <p className="text-xs text-white/60">
-                  {planLimitLabel(CURRENT_PLAN.seatCap, "users")} •{" "}
-                  {planLimitLabel(CURRENT_PLAN.documentCap, "documents/month")}
+                  {planLimitLabel(currentPlan.seatCap, "users")} •{" "}
+                  {planLimitLabel(currentPlan.documentCap, "documents/month")}
                 </p>
                 <Button asChild size="sm" variant="outline" className="mt-3 w-full border-white/25 text-xs">
                   <Link href="/billing">{t("bill_managePlan")}</Link>

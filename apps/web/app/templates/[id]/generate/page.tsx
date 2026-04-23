@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 
 import { AppShell } from "@/components/india/AppShell";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 
 const wizardSteps = [
@@ -57,7 +58,7 @@ export default function TemplateGeneratePage() {
             </p>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button>Generate Draft</Button>
+            <Button onClick={() => toast.success("Draft generation initiated.")}>Generate Draft</Button>
           </div>
         </section>
       </div>

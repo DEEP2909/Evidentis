@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, X, Search, FileCode2 } from "lucide-react";
-
-import { AppShell } from "@/components/india/AppShell";
+import { AppShell } from "@/components/india/AppShell";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { featuredTemplates } from "@/lib/india";
 import { useTranslation } from "react-i18next";
@@ -141,7 +141,7 @@ export default function TemplatesPage() {
                     <Input id="template-category" placeholder={t("tpl_categoryPlaceholder", { defaultValue: "e.g. Corporate" })} className="bg-white/5 border-white/10 focus-saffron text-sm rounded-xl h-11" />
                   </div>
                   
-                  <button type="button" className="w-full mt-4 group relative flex h-12 items-center justify-center overflow-hidden rounded-xl bg-white font-medium text-black transition-all hover:scale-[1.02] active:scale-[0.98]">
+                  <button type="button" onClick={() => { setIsAddModalOpen(false); toast.success("Template saved successfully."); }} className="w-full mt-4 group relative flex h-12 items-center justify-center overflow-hidden rounded-xl bg-white font-medium text-black transition-all hover:scale-[1.02] active:scale-[0.98]">
                     <span className="relative z-10 flex items-center gap-2 text-sm uppercase tracking-wider font-bold">
                       {t("save", { defaultValue: "Save Template" })}
                     </span>

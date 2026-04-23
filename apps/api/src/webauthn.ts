@@ -240,7 +240,7 @@ async function getCredentialsForUser(
 async function saveCredential(
   db: pg.Pool | pg.PoolClient,
   tenantId: string,
-  attorneyId: string,
+  advocateId: string,
   credential: {
     credentialId: Uint8Array | string;
     credentialPublicKey: Uint8Array;
@@ -264,7 +264,7 @@ async function saveCredential(
     [
       id,
       tenantId,
-      attorneyId,
+      advocateId,
       typeof credential.credentialId === 'string'
         ? Buffer.from(credential.credentialId, 'base64url')
         : Buffer.from(credential.credentialId),
@@ -300,15 +300,15 @@ async function updateCredentialCounter(
 async function deleteCredential(
   db: pg.Pool | pg.PoolClient,
   tenantId: string,
-  attorneyId: string,
+  advocateId: string,
   credentialDbId: string,
 ): Promise<boolean> {
   const result = await db.query(
     `DELETE FROM webauthn_credentials 
     WHERE id = $1 AND tenant_id = $2 AND advocate_id = $3`,
-    [credentialDbId, tenantId, attorneyId],
+    [credentialDbId, tenantId, advocateId],
   );
-  return result.rowCount > 0;
+  return (result.rowCount ?? 0) > 0;
 }
 
 async function getCredentialById(
@@ -515,6 +515,7 @@ export async function verifyPasskeyAuthentication(
 ): Promise<{
   success: boolean;
   tenantId?: string;
+  advocateId?: string;
   attorneyId?: string;
   error?: string;
 }> {
@@ -692,7 +693,7 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: pg.Pool | pg.Po
         // Check if user has password or other auth method
         const attorney = await db.query(
           'SELECT password_hash, mfa_enabled FROM attorneys WHERE tenant_id = $1 AND id = $2',
-          [tenantId, attorneyId],
+          [tenantId, advocateId],
         );
 
         if (!attorney.rows[0]?.password_hash && credentials.length === 1) {
@@ -823,7 +824,7 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: pg.Pool | pg.Po
       FROM attorneys a
       JOIN tenants t ON a.tenant_id = t.id
       WHERE a.id = $1 AND a.tenant_id = $2`,
-        [result.attorneyId, result.tenantId],
+        [result.advocateId, result.tenantId],
       );
 
       if (attorneyResult.rows.length === 0) {

@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <strong>AI-Powered Contract Intelligence for Indian Law Firms</strong><br/>
-  <strong>Enterprise Legal AI Platform</strong>
+  <strong>The Intelligence Layer for Indian Law Firms</strong><br/>
+  <strong>Enterprise-Grade Legal AI & Case Management Platform</strong>
 </p>
 
 <p align="center">
@@ -71,37 +71,30 @@ EvidentIS automates contract analysis, extracts key clauses, assesses risks agai
 - **Research History**: Track and revisit previous research sessions
 
 ### 🇮🇳 India Legal Operations
-- **Bare Acts API**: Search central/state acts and section text
-- **Court Case Tracking**: Tenant-scoped CNR case records and hearing timelines
-- **GST Invoicing**: Tenant invoices with GST line-item and SAC support
-- **DPDP Workflows**: Consent capture and rights-request tracking endpoints
+- **Nyay Assist**: Advanced AI-powered research for Indian statutes, judgments, and local rules.
+- **Bare Acts API**: Search central/state acts and section text with multi-language support.
+- **Court Case Tracking**: Tenant-scoped CNR case records and hearing timelines.
+- **GST Invoicing**: Professional B2B invoices with automated GST line-item and SAC support.
+- **DPDP Workflows**: Compliance-first Digital Personal Data Protection workflows, consent capture, and erasure requests.
 
-### ✏️ Contract Redlining
-- **AI Suggestions**: Intelligent clause modifications based on firm playbook
-- **Track Changes**: Full redline editing with version control
-- **Side-by-Side Comparison**: Compare original vs. suggested changes
-- **Export Options**: PDF, DOCX with tracked changes
-
-### 📅 Obligation Tracking
-- **Automatic Extraction**: Deadlines, milestones, payment terms
-- **Smart Reminders**: Email/SMS notifications before due dates
-- **Calendar Integration**: Sync with Outlook, Google Calendar
-- **Dashboard View**: All upcoming obligations at a glance
+### ✏️ Contract Review & Redlining
+- **Automated Extraction**: Instant extraction of 25+ clause families (Liability, GST, Stamp Duty, RERA, etc.).
+- **AI Risk Scoring**: Intelligent assessment of document risks against your firm's specific legal playbooks.
+- **Suggestion Engine**: Intelligent clause modifications based on historical successful negotiations.
+- **Side-by-Side Comparison**: Compare original drafts vs. AI-suggested professional redlines.
 
 ### 🔐 Enterprise Security
-- **Multi-Tenant Isolation**: Complete data separation between law firms
-- **SOC 2 Type II Ready**: Audit logging, access controls, encryption
-- **MFA Support**: TOTP, SMS, Email verification
-- **SSO/SAML 2.0**: Enterprise identity provider integration
-- **SCIM 2.0**: Automated user provisioning
-- **AI Service Gatekeeping**: Internal API key forwarding + per-IP/per-route AI-service rate limiting
+- **Strict Tenant Isolation**: Complete physical and logical data separation between law firms.
+- **MIME Type Guard**: Strict allowlist validation for all uploads (PDF, DOCX, DOC, TXT, Images).
+- **Audit Logging**: Immutable SOC 2-compliant logs for every system action.
+- **Encrypted Storage**: AES-256-GCM for field-level encryption and TLS 1.3 in transit.
+- **SSO & SCIM**: SAML 2.0 and SCIM 2.0 for automated enterprise user provisioning.
 
-### 💳 Flexible Billing
-- **4 Pricing Tiers**: Starter, Growth, Professional, Enterprise
-- **Usage-Based Quotas**: Documents, research queries, advocate seats
-- **Razorpay Integration**: India-native payment processing with GST-aware billing
-- **Dunning Alerts**: Automatic admin email on invoice payment failure
-- **Self-Service Portal**: Manage subscriptions, invoices, payment methods
+### 💳 Flexible Billing (GST-Native)
+- **Starter (₹4,999/mo)**: Solo advocates (3 users, 100 docs/mo).
+- **Growth (₹14,999/mo)**: Small teams (15 users, 500 docs/mo, Nyay Assist).
+- **Professional (₹24,999/mo)**: Established firms (30 users, 2,000 docs/mo, Premium AI).
+- **Enterprise (₹39,999/mo)**: Large institutions (50+ users, Custom quotas, SSO).
 
 ---
 
@@ -251,15 +244,14 @@ flowchart LR
 
 | Layer | Technology |
 |-------|------------|
-| **Frontend** | Next.js 14, TypeScript, Tailwind CSS, shadcn/ui |
-| **API** | Fastify 4, TypeScript, Zod validation |
-| **AI Service** | FastAPI, Python 3.11, sentence-transformers |
-| **Database** | PostgreSQL 16 + pgvector 0.8 |
+| **Frontend** | Next.js 14 (App Router), TypeScript, Tailwind CSS, Framer Motion |
+| **API Server** | Fastify 4, Node.js 20, Zod |
+| **AI Service** | FastAPI, Python 3.11, PyTorch |
+| **Core Models** | Azure GPT-4o-mini (Optimized), Ollama (Local Fallback) |
+| **Vector DB** | PostgreSQL 16 + pgvector |
 | **Cache/Queue** | Redis 7, BullMQ |
-| **LLM** | Ollama (mistral:7b-instruct) |
-| **Storage** | S3-compatible (AWS S3 / MinIO) |
-| **Auth** | JWT RS256, TOTP MFA, SAML 2.0, SCIM 2.0 |
-| **Observability** | OpenTelemetry, Prometheus, Grafana |
+| **Payments** | Razorpay (GST-Native) |
+| **Auth** | RS256 JWT, TOTP, SAML 2.0, SCIM 2.0 |
 
 ---
 

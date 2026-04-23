@@ -13,6 +13,7 @@ import {
   MATTER_TYPES,
   SUPPORTED_LANGUAGE_CODES,
 } from '@evidentis/shared';
+import * as OTPAuth from 'otpauth';
 import {
   verifyAccessToken,
   generateAccessToken,
@@ -691,8 +692,30 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      // Verify MFA code (would use otpauth library in full implementation)
-      // For now, skip MFA verification in development
+      // Verify MFA code
+      if (!attorney.mfa_secret) {
+        return reply.status(500).send({
+          success: false,
+          error: { code: 'MFA_SETUP_INCOMPLETE', message: 'MFA is enabled but not properly configured' },
+        });
+      }
+
+      const totp = new OTPAuth.TOTP({
+        issuer: 'EvidentIS',
+        label: attorney.email,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(attorney.mfa_secret),
+      });
+
+      const delta = totp.validate({ token: mfaCode, window: 1 });
+      if (delta === null) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'INVALID_MFA_CODE', message: 'Invalid or expired MFA code' },
+        });
+      }
     }
 
     // Generate tokens
@@ -714,7 +737,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Store refresh token hash
     await query(
-      `INSERT INTO refresh_tokens (attorney_id, tenant_id, token_hash, user_agent, ip_address)
+      `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address)
        VALUES ($1, $2, $3, $4, $5)`,
       [
         attorney.id,
@@ -807,13 +830,13 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     // Find and validate refresh token
     const tokenRecord = await queryOne<{
       id: string;
-      attorney_id: string;
+      advocate_id: string;
       tenant_id: string;
       expires_at: Date;
       revoked_at: Date | null;
       rotated_to: string | null;
     }>(
-      `SELECT id, attorney_id, tenant_id, expires_at, revoked_at, rotated_to
+      `SELECT id, advocate_id, tenant_id, expires_at, revoked_at, rotated_to
        FROM refresh_tokens WHERE token_hash = $1`,
       [hashToken(refreshToken)]
     );
@@ -837,8 +860,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     if (tokenRecord.rotated_to) {
       // Revoke entire token family
       await query(
-        `UPDATE refresh_tokens SET revoked_at = NOW() WHERE attorney_id = $1`,
-        [tokenRecord.attorney_id]
+        `UPDATE refresh_tokens SET revoked_at = NOW() WHERE advocate_id = $1`,
+        [tokenRecord.advocate_id]
       );
       return reply.status(401).send({
         success: false,
@@ -854,7 +877,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       status: string;
     }>(
       `SELECT id, email, role, status FROM attorneys WHERE id = $1 AND tenant_id = $2`,
-      [tokenRecord.attorney_id, tokenRecord.tenant_id]
+      [tokenRecord.advocate_id, tokenRecord.tenant_id]
     );
 
     if (!attorney || attorney.status !== 'active') {
@@ -886,7 +909,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     await withTransaction(async (tx) => {
       // Create new token
       const newToken = await tx.queryOne<{ id: string }>(
-        `INSERT INTO refresh_tokens (attorney_id, tenant_id, token_hash, user_agent, ip_address)
+        `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [attorney.id, tokenRecord.tenant_id, newTokenHash, request.headers['user-agent'], request.ip]
       );
@@ -1059,16 +1082,23 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
-    if (new Date(otpRecord.expires_at).getTime() < Date.now()) {
-      await query(`UPDATE advocate_otps SET consumed_at = NOW() WHERE id = $1`, [otpRecord.id]);
+    if (otpRecord.status !== 'active') {
+      return reply.status(401).send({
+        success: false,
+        error: { code: 'ACCOUNT_SUSPENDED', message: 'Account is not active' },
+      });
+    }
+
+    const expectedHash = hashToken(`${normalizedPhone}:${body.purpose}:${body.otp}`);
+    if (expectedHash !== otpRecord.otp_hash) {
       return reply.status(401).send({
         success: false,
         error: { code: 'INVALID_OTP', message: 'Invalid or expired OTP' },
       });
     }
 
-    const expectedHash = hashToken(`${normalizedPhone}:${body.purpose}:${body.otp}`);
-    if (expectedHash !== otpRecord.otp_hash || otpRecord.status !== 'active') {
+    if (new Date(otpRecord.expires_at).getTime() < Date.now()) {
+      await query(`UPDATE advocate_otps SET consumed_at = NOW() WHERE id = $1`, [otpRecord.id]);
       return reply.status(401).send({
         success: false,
         error: { code: 'INVALID_OTP', message: 'Invalid or expired OTP' },
@@ -1093,7 +1123,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     await withTransaction(async (tx) => {
       await tx.query(`UPDATE advocate_otps SET consumed_at = NOW() WHERE id = $1`, [otpRecord.id]);
       await tx.query(
-        `INSERT INTO refresh_tokens (attorney_id, tenant_id, token_hash, user_agent, ip_address)
+        `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
         [otpRecord.advocate_id, otpRecord.tenant_id, hashToken(refreshToken), request.headers['user-agent'], request.ip]
       );
@@ -1163,12 +1193,19 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       return { success: true };
     }
 
+    // Invalidate previous reset tokens
+    await query(
+      `UPDATE password_reset_tokens SET used_at = NOW(), status = 'used' 
+       WHERE advocate_id = $1 AND status = 'active'`,
+      [attorney.id]
+    );
+
     // Generate reset token
     const token = generateSecureToken(32);
     const tokenHash = hashToken(token);
 
     await query(
-      `INSERT INTO password_reset_tokens (attorney_id, token_hash)
+      `INSERT INTO password_reset_tokens (advocate_id, token_hash)
        VALUES ($1, $2)`,
       [attorney.id, tokenHash]
     );
@@ -1204,11 +1241,11 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     const tokenHash = hashToken(token);
     const tokenRecord = await queryOne<{
       id: string;
-      attorney_id: string;
+      advocate_id: string;
       expires_at: Date;
       used_at: Date | null;
     }>(
-      `SELECT id, attorney_id, expires_at, used_at 
+      `SELECT id, advocate_id, expires_at, used_at 
        FROM password_reset_tokens 
        WHERE token_hash = $1 AND status = 'active'`,
       [tokenHash]
@@ -1228,7 +1265,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await tx.query(
         `UPDATE attorneys SET password_hash = $1, failed_login_attempts = 0, locked_until = NULL
          WHERE id = $2`,
-        [passwordHash, tokenRecord.attorney_id]
+        [passwordHash, tokenRecord.advocate_id]
       );
 
       // Mark token as used
@@ -1239,8 +1276,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // Revoke all refresh tokens (log out all sessions)
       await tx.query(
-        `UPDATE refresh_tokens SET revoked_at = NOW() WHERE attorney_id = $1`,
-        [tokenRecord.attorney_id]
+        `UPDATE refresh_tokens SET revoked_at = NOW() WHERE advocate_id = $1`,
+        [tokenRecord.advocate_id]
       );
     });
 
@@ -1298,7 +1335,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // POST /auth/mfa/setup
   fastify.post('/auth/mfa/setup', { preHandler: authenticateRequest }, async (request) => {
     const authReq = request as AuthenticatedRequest;
-    const secret = generateSecureToken(20).toUpperCase();
+    const secret = new OTPAuth.Secret({ size: 20 }).base32;
     const issuer = encodeURIComponent('EvidentIS');
     const label = encodeURIComponent(authReq.tokenPayload.email);
     const qrCodeUrl = `otpauth://totp/${issuer}:${label}?secret=${secret}&issuer=${issuer}`;
@@ -1405,7 +1442,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     const matter = await queryOne<{ id: string }>(
       `INSERT INTO matters (tenant_id, matter_code, matter_name, matter_type, client_name,
-                            counterparty_name, governing_law_state, priority, lead_advocate_id, lead_attorney_id,
+                            counterparty_name, governing_law_state, priority, lead_advocate_id,
                             target_close_date, deal_value_paise, deal_value_cents, notes, tags, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $11, $11, $12, $13, $14)
        RETURNING id`,
@@ -1457,7 +1494,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       priority: string;
       health_score: number;
       lead_advocate_id: string | null;
-      lead_attorney_id: string | null;
       target_close_date: Date | null;
       deal_value_paise: number | null;
       deal_value_cents: number | null;
@@ -1467,7 +1503,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       updated_at: Date;
     }>(
       `SELECT id, matter_code, matter_name, matter_type, client_name, counterparty_name,
-              governing_law_state, status, priority, health_score, lead_advocate_id, lead_attorney_id,
+              governing_law_state, status, priority, health_score, lead_advocate_id,
               target_close_date, deal_value_paise, deal_value_cents, notes, tags, created_at, updated_at
        FROM matters WHERE id = $1 AND tenant_id = $2`,
       [id, authReq.tenantId]
@@ -1528,7 +1564,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       status: 'status',
       priority: 'priority',
       leadAdvocateId: 'lead_advocate_id',
-      leadAttorneyId: 'lead_attorney_id',
+      leadAttorneyId: 'lead_advocate_id',
       targetCloseDate: 'target_close_date',
       dealValuePaise: 'deal_value_paise',
       dealValueCents: 'deal_value_cents',
@@ -2659,7 +2695,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 4. Save to research history
       await query(
-        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, attorney_id, question, answer, citations, sources_used)
+        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, advocate_id, question, answer, citations, sources_used)
          VALUES ($1, $2, $3, $3, $4, $5, $6, $7)`,
         [
           authReq.tenantId, 
@@ -2716,7 +2752,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': 'https://evidentis.com',
+      'Access-Control-Allow-Origin': allowedOrigin || '*',
       'Access-Control-Allow-Credentials': 'true',
       'Vary': 'Origin',
     });
@@ -2835,7 +2871,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 5. Persist to research_history
       await query(
-        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, attorney_id, question, answer, citations, sources_used)
+        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, advocate_id, question, answer, citations, sources_used)
          VALUES ($1, $2, $3, $3, $4, $5, $6, $7)`,
         [
           authReq.tenantId,
@@ -4567,7 +4603,7 @@ END:VCALENDAR`;
         flags_resolved: number;
       }>(
         `SELECT a.id, a.display_name, a.role,
-                (SELECT COUNT(*) FROM matters WHERE lead_advocate_id = a.id OR lead_attorney_id = a.id) as matters_count,
+                (SELECT COUNT(*) FROM matters WHERE lead_advocate_id = a.id OR lead_advocate_id = a.id) as matters_count,
                 (SELECT COUNT(*) FROM review_actions WHERE reviewer_id = a.id) as documents_reviewed,
                 (SELECT COUNT(*) FROM flags WHERE resolved_by = a.id AND status != 'open') as flags_resolved
          FROM attorneys a
@@ -4829,7 +4865,7 @@ END:VCALENDAR`;
     });
 
     await query(
-      `INSERT INTO refresh_tokens (attorney_id, tenant_id, token_hash, user_agent, ip_address)
+      `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address)
        VALUES ($1, $2, $3, $4, $5)`,
       [attorney.id, invitation.tenant_id, hashToken(newRefreshToken), request.headers['user-agent'], request.ip]
     );

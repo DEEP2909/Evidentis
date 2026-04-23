@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { EVIDENTIS_PLANS } from "@/lib/pricing";
+import { billing } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 
@@ -31,12 +32,12 @@ function usagePercent(used: number, cap: number | null) {
 export default function BillingPage() {
   const { t } = useTranslation();
 
-  const { data: billing } = useQuery({
+  const { data: billingData } = useQuery({
     queryKey: ["billing"],
-    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+    queryFn: () => billing.status(),
   });
 
-  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billingData?.plan) ?? EVIDENTIS_PLANS[0];
 
   return (
     <AppShell title={t("billing")}>

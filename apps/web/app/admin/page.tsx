@@ -51,6 +51,7 @@ import {
   type AdminWebhook,
   type AdminSsoConfiguration,
   type TeamMember,
+  billing,
 } from "@/lib/api";
 import { EVIDENTIS_PLANS } from "@/lib/pricing";
 import { useTranslation } from "react-i18next";
@@ -232,12 +233,12 @@ function TeamTab() {
     staleTime: 60_000,
   });
 
-  const { data: billing } = useQuery({
+  const { data: billingData } = useQuery({
     queryKey: ["billing"],
-    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+    queryFn: () => billing.status(),
   });
 
-  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billingData?.plan) ?? EVIDENTIS_PLANS[0];
 
   const inviteMutation = useMutation({
     mutationFn: () => adminApi.inviteMember({ email: email.trim(), role }),
@@ -522,12 +523,12 @@ function SecurityTab() {
 function BillingTab() {
   const { t } = useTranslation();
 
-  const { data: billing } = useQuery({
+  const { data: billingData } = useQuery({
     queryKey: ["billing"],
-    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+    queryFn: () => billing.status(),
   });
 
-  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billingData?.plan) ?? EVIDENTIS_PLANS[0];
 
   return (
     <div className="space-y-4">
@@ -1173,12 +1174,12 @@ function AdminContent() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<AdminTab>("team");
 
-  const { data: billing } = useQuery({
+  const { data: billingData } = useQuery({
     queryKey: ["billing"],
-    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+    queryFn: () => billing.status(),
   });
 
-  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billingData?.plan) ?? EVIDENTIS_PLANS[0];
 
   useEffect(() => {
     if (typeof window === "undefined") return;

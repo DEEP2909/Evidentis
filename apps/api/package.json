@@ -41,7 +41,7 @@
     "@socket.io/redis-adapter": "^8.3.0",
     "axios": "^1.8.3",
     "bcrypt": "^6.0.0",
-    "bullmq": "^5.13.2",
+    "bullmq": "^5.76.1",
     "clamdjs": "^1.0.2",
     "date-fns": "^3.6.0",
     "dotenv": "^17.4.2",

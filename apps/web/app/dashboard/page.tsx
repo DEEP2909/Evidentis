@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { AppShell } from "@/components/india/AppShell";
 import { useAuthStore } from "@/lib/auth";
-import { analytics, documents, dpdp, matters, obligations, research } from "@/lib/api";
+import { analytics, documents, dpdp, matters, obligations, research, billing } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { EVIDENTIS_PLANS } from "@/lib/pricing";
 import { useTranslation } from "react-i18next";
@@ -292,12 +292,12 @@ function AdminDashboard() {
     queryFn: () => dpdp.requests(),
     staleTime: 60_000,
   });
-  const { data: billing } = useQuery({
+  const { data: billingData } = useQuery({
     queryKey: ["billing"],
-    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+    queryFn: () => billing.status(),
   });
 
-  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billingData?.plan) ?? EVIDENTIS_PLANS[0];
 
   const kpis: readonly Kpi[] = overview
     ? [

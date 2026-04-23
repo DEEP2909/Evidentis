@@ -114,28 +114,28 @@ const audienceCards = [
     copy: "Understand workload, privacy requests, matter health, and document throughput without waiting for weekly reports.",
     points: ["Firm analytics", "Billing and quotas", "Security and user controls"],
     icon: Building2,
-    span: "lg:col-span-4 lg:row-span-2",
+    span: "lg:col-span-3",
   },
   {
     title: "For senior advocates",
     copy: "Review high-risk issues, hearings, and AI-supported research from a surface that feels like a command center, not a document dump.",
     points: ["Matter oversight", "Research and bare acts", "Hearing and obligation visibility"],
     icon: Scale,
-    span: "lg:col-span-2",
+    span: "lg:col-span-3",
   },
   {
     title: "For associates",
     copy: "Keep assigned matters moving with document workflows, uploads, clause reviews, and AI-assisted first passes.",
     points: ["Assigned matter queues", "Document review actions", "Research history"],
     icon: Bot,
-    span: "lg:col-span-2",
+    span: "lg:col-span-3",
   },
   {
     title: "For paralegals and clients",
     copy: "Give operations and stakeholders just enough access to complete their work without exposing the entire internal system.",
     points: ["Upload and calendar support", "Portal access", "Share-based collaboration"],
     icon: Users,
-    span: "lg:col-span-4",
+    span: "lg:col-span-3",
   },
 ];
 
@@ -465,7 +465,7 @@ export default function HomePage() {
               </h2>
             </div>
 
-            <div className="mt-10 grid auto-rows-[1fr] gap-4 lg:grid-cols-6">
+            <div className="mt-10 grid gap-4 lg:grid-cols-6">
               {audienceCards.map((card) => (
                 <SpotlightCard key={card.title} className={`p-6 ${card.span}`}>
                   <div className="flex h-full flex-col">

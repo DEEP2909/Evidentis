@@ -1341,7 +1341,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     const qrCodeUrl = `otpauth://totp/${issuer}:${label}?secret=${secret}&issuer=${issuer}`;
 
     await query(
-      `UPDATE attorneys SET mfa_secret = $1 WHERE id = $2 AND tenant_id = $3`,
+      `UPDATE attorneys SET mfa_secret = $1, mfa_enabled = true WHERE id = $2 AND tenant_id = $3`,
       [secret, authReq.advocateId, authReq.tenantId]
     );
 
@@ -1528,7 +1528,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     if (body.leadAdvocateId !== undefined || body.leadAttorneyId !== undefined) {
       const resolvedLead = body.leadAdvocateId ?? body.leadAttorneyId ?? null;
       normalizedBody.leadAdvocateId = resolvedLead;
-      normalizedBody.leadAttorneyId = resolvedLead;
+      // Remove deprecated key so fieldMap doesn't produce a duplicate SET clause
+      delete normalizedBody.leadAttorneyId;
     }
     if (body.dealValuePaise !== undefined || body.dealValueCents !== undefined) {
       const resolvedValue = body.dealValuePaise ?? body.dealValueCents ?? null;
@@ -2695,8 +2696,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 4. Save to research history
       await query(
-        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, advocate_id, question, answer, citations, sources_used)
-         VALUES ($1, $2, $3, $3, $4, $5, $6, $7)`,
+        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, question, answer, citations, sources_used)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           authReq.tenantId, 
           matterId || null, 
@@ -2752,7 +2753,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': allowedOrigin || '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Credentials': 'true',
       'Vary': 'Origin',
     });
@@ -2871,8 +2872,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 5. Persist to research_history
       await query(
-        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, advocate_id, question, answer, citations, sources_used)
-         VALUES ($1, $2, $3, $3, $4, $5, $6, $7)`,
+        `INSERT INTO research_history (tenant_id, matter_id, advocate_id, question, answer, citations, sources_used)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           authReq.tenantId,
           matterId || null,
@@ -4603,7 +4604,7 @@ END:VCALENDAR`;
         flags_resolved: number;
       }>(
         `SELECT a.id, a.display_name, a.role,
-                (SELECT COUNT(*) FROM matters WHERE lead_advocate_id = a.id OR lead_advocate_id = a.id) as matters_count,
+                (SELECT COUNT(*) FROM matters WHERE lead_advocate_id = a.id) as matters_count,
                 (SELECT COUNT(*) FROM review_actions WHERE reviewer_id = a.id) as documents_reviewed,
                 (SELECT COUNT(*) FROM flags WHERE resolved_by = a.id AND status != 'open') as flags_resolved
          FROM attorneys a

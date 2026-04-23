@@ -116,7 +116,7 @@ export async function linkDocuments(
 export async function getLinkedDocuments(
   tenantId: string,
   documentId: string,
-): Promise<Array<DocumentLink & { document: unknown }>> {
+): Promise<Array<DocumentLink & { document: { id: string; title: string; type: string; status: string; created_at: string } }>> {
   const result = await pool.query(
     `SELECT dl.*, 
             json_build_object(
@@ -141,7 +141,7 @@ export async function getLinkedDocuments(
 export async function getBacklinks(
   tenantId: string,
   documentId: string,
-): Promise<Array<DocumentLink & { document: unknown }>> {
+): Promise<Array<DocumentLink & { document: { id: string; title: string; type: string; status: string; created_at: string } }>> {
   const result = await pool.query(
     `SELECT dl.*, 
             json_build_object(

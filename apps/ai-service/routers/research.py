@@ -15,6 +15,9 @@ from pydantic import BaseModel, Field
 from explainability import explain_research_result
 from llm_caller import call_llm, stream_llm
 from prompts import RESEARCH_QUERY, add_safety_guardrails
+import os
+
+MINIMUM_RETRIEVAL_CONFIDENCE = float(os.getenv("MIN_RETRIEVAL_CONFIDENCE", "0.65"))
 
 logger = logging.getLogger(__name__)
 
@@ -473,6 +476,26 @@ async def research(
     
     # Note: In production deployment, the chunks would be fetched by the API
     # and passed to this service, or this service would have DB access
+
+    if not chunks or chunks[0].relevance_score < MINIMUM_RETRIEVAL_CONFIDENCE:
+        if body.stream:
+            # Yield error via SSE format
+            async def insufficient_stream():
+                yield f"data: {json.dumps({'error': 'I could not find sufficient source material in your documents or bare acts to answer this question reliably. Please upload relevant documents or rephrase your query.', 'done': True})}\n\n"
+            return StreamingResponse(
+                insufficient_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+            )
+        return ResearchResult(
+            query=query_text,
+            answer="I could not find sufficient source material in your documents or bare acts to answer this question reliably. Please upload relevant documents or rephrase your query.",
+            citations=[],
+            confidence=0.0,
+            jurisdiction=body.jurisdiction,
+            explanation={"error": "Insufficient evidence"}
+        )
+
     
     if body.stream:
         # Return SSE stream

@@ -3,16 +3,26 @@
  * Required per spec: OpenTelemetry spans on ALL DB queries, AI calls, job processing
  */
 
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { Resource } from '@opentelemetry/resources';
-import { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
+import {
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+  type Tracer,
+  context,
+  trace,
+} from '@opentelemetry/api';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { FastifyInstrumentation } from '@opentelemetry/instrumentation-fastify';
+import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { RedisInstrumentation } from '@opentelemetry/instrumentation-redis-4';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { trace, context, SpanStatusCode, type Span, SpanKind, type Tracer } from '@opentelemetry/api';
+import { Resource } from '@opentelemetry/resources';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import {
+  SEMRESATTRS_SERVICE_NAME,
+  SEMRESATTRS_SERVICE_VERSION,
+} from '@opentelemetry/semantic-conventions';
 import { config } from './config.js';
 
 const SERVICE_NAME = config.OTEL_SERVICE_NAME || 'evidentis-api';
@@ -27,7 +37,7 @@ export function initTracing(): void {
   }
 
   const exporter = new OTLPTraceExporter({
-    url: config.OTEL_EXPORTER_OTLP_ENDPOINT 
+    url: config.OTEL_EXPORTER_OTLP_ENDPOINT
       ? `${config.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces`
       : 'http://localhost:4318/v1/traces',
   });
@@ -56,7 +66,8 @@ export function initTracing(): void {
 
   // Graceful shutdown
   process.on('SIGTERM', () => {
-    sdk?.shutdown()
+    sdk
+      ?.shutdown()
       .then(() => console.log('Tracing terminated'))
       .catch((err) => console.error('Error shutting down tracing', err))
       .finally(() => process.exit(0));
@@ -82,30 +93,34 @@ export interface SpanOptions {
 export async function withSpan<T>(
   name: string,
   fn: (span: Span) => Promise<T>,
-  options?: SpanOptions
+  options?: SpanOptions,
 ): Promise<T> {
   const tracer = getTracer();
-  
-  return tracer.startActiveSpan(name, { kind: SpanKind.INTERNAL }, async (span) => {
-    try {
-      if (options?.attributes) {
-        span.setAttributes(options.attributes);
+
+  return tracer.startActiveSpan(
+    name,
+    { kind: SpanKind.INTERNAL },
+    async (span) => {
+      try {
+        if (options?.attributes) {
+          span.setAttributes(options.attributes);
+        }
+
+        const result = await fn(span);
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error: any) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error?.message || 'Unknown error',
+        });
+        span.recordException(error);
+        throw error;
+      } finally {
+        span.end();
       }
-      
-      const result = await fn(span);
-      span.setStatus({ code: SpanStatusCode.OK });
-      return result;
-    } catch (error: any) {
-      span.setStatus({ 
-        code: SpanStatusCode.ERROR, 
-        message: error?.message || 'Unknown error' 
-      });
-      span.recordException(error);
-      throw error;
-    } finally {
-      span.end();
-    }
-  });
+    },
+  );
 }
 
 /**
@@ -114,7 +129,7 @@ export async function withSpan<T>(
 export async function traceDbOperation<T>(
   operation: string,
   table: string,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   return withSpan(`db.${operation}`, async (span) => {
     span.setAttributes({
@@ -132,7 +147,7 @@ export async function traceDbOperation<T>(
 export async function traceAiCall<T>(
   endpoint: string,
   model: string,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   return withSpan(`ai.${endpoint}`, async (span) => {
     span.setAttributes({
@@ -155,7 +170,7 @@ export async function traceAiCall<T>(
 export async function traceJob<T>(
   jobType: string,
   jobId: string,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   return withSpan(`job.${jobType}`, async (span) => {
     span.setAttributes({
@@ -170,7 +185,10 @@ export async function traceJob<T>(
 /**
  * Add event to current span
  */
-export function addSpanEvent(name: string, attributes?: Record<string, string | number | boolean>): void {
+export function addSpanEvent(
+  name: string,
+  attributes?: Record<string, string | number | boolean>,
+): void {
   const currentSpan = trace.getActiveSpan();
   if (currentSpan) {
     currentSpan.addEvent(name, attributes);
@@ -180,7 +198,10 @@ export function addSpanEvent(name: string, attributes?: Record<string, string | 
 /**
  * Set attribute on current span
  */
-export function setSpanAttribute(key: string, value: string | number | boolean): void {
+export function setSpanAttribute(
+  key: string,
+  value: string | number | boolean,
+): void {
   const currentSpan = trace.getActiveSpan();
   if (currentSpan) {
     currentSpan.setAttribute(key, value);
@@ -193,7 +214,7 @@ export function setSpanAttribute(key: string, value: string | number | boolean):
 export function getTraceInfo(): { traceId: string; spanId: string } | null {
   const currentSpan = trace.getActiveSpan();
   if (!currentSpan) return null;
-  
+
   const spanContext = currentSpan.spanContext();
   return {
     traceId: spanContext.traceId,
@@ -210,6 +231,7 @@ export function getTracingStatus(): Record<string, any> {
     enabled: config.NODE_ENV !== 'test',
     serviceName: SERVICE_NAME,
     serviceVersion: SERVICE_VERSION,
-    exporterEndpoint: config.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318',
+    exporterEndpoint:
+      config.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318',
   };
 }

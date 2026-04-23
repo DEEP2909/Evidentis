@@ -3,8 +3,8 @@
  * PostgreSQL connection pool with proper connection management
  */
 
+import fs from 'node:fs';
 import pg from 'pg';
-import fs from 'fs';
 import { config } from './config.js';
 import { logger } from './logger.js';
 
@@ -21,12 +21,15 @@ function createPool(connectionString = config.DATABASE_URL): pg.Pool {
     max: config.DB_POOL_MAX,
     idleTimeoutMillis: config.DB_IDLE_TIMEOUT_MS,
     connectionTimeoutMillis: config.DB_CONNECT_TIMEOUT_MS,
-    ssl: config.DB_SSL === 'true'
-      ? {
-          rejectUnauthorized: true,
-          ca: config.DB_SSL_CA ? fs.readFileSync(config.DB_SSL_CA, 'utf8') : undefined,
-        }
-      : false,
+    ssl:
+      config.DB_SSL === 'true'
+        ? {
+            rejectUnauthorized: true,
+            ca: config.DB_SSL_CA
+              ? fs.readFileSync(config.DB_SSL_CA, 'utf8')
+              : undefined,
+          }
+        : false,
   });
 }
 
@@ -43,11 +46,15 @@ function attachPoolEventHandlers(dbPool: pg.Pool): void {
 export let pool: pg.Pool = createPool();
 attachPoolEventHandlers(pool);
 
-export async function reinitializePool(connectionString?: string): Promise<void> {
+export async function reinitializePool(
+  connectionString?: string,
+): Promise<void> {
   const previousPool = pool;
   pool = createPool(connectionString ?? config.DATABASE_URL);
   attachPoolEventHandlers(pool);
-  await new Promise((resolve) => setTimeout(resolve, POOL_REINITIALIZE_DRAIN_MS));
+  await new Promise((resolve) =>
+    setTimeout(resolve, POOL_REINITIALIZE_DRAIN_MS),
+  );
   await previousPool.end();
 }
 
@@ -66,13 +73,16 @@ export interface QueryResult<T> {
  */
 export async function query<T = unknown>(
   text: string,
-  values?: unknown[]
+  values?: unknown[],
 ): Promise<QueryResult<T>> {
   const start = Date.now();
   const result = await pool.query(text, values);
   const duration = Date.now() - start;
 
-  logger.debug({ query: text, duration, rows: result.rowCount }, 'Query executed');
+  logger.debug(
+    { query: text, duration, rows: result.rowCount },
+    'Query executed',
+  );
 
   return {
     rows: result.rows as T[],
@@ -85,7 +95,7 @@ export async function query<T = unknown>(
  */
 export async function queryOne<T = unknown>(
   text: string,
-  values?: unknown[]
+  values?: unknown[],
 ): Promise<T | null> {
   const result = await query<T>(text, values);
   return result.rows[0] || null;
@@ -97,7 +107,7 @@ export async function queryOne<T = unknown>(
  */
 export async function queryExactlyOne<T = unknown>(
   text: string,
-  values?: unknown[]
+  values?: unknown[],
 ): Promise<T> {
   const result = await query<T>(text, values);
   if (result.rowCount === 0) {
@@ -137,14 +147,20 @@ export async function beginTransaction(): Promise<Transaction> {
   await client.query('BEGIN');
 
   return {
-    query: async <T>(text: string, values?: unknown[]): Promise<QueryResult<T>> => {
+    query: async <T>(
+      text: string,
+      values?: unknown[],
+    ): Promise<QueryResult<T>> => {
       const result = await client.query(text, values);
       return {
         rows: result.rows as T[],
         rowCount: result.rowCount || 0,
       };
     },
-    queryOne: async <T>(text: string, values?: unknown[]): Promise<T | null> => {
+    queryOne: async <T>(
+      text: string,
+      values?: unknown[],
+    ): Promise<T | null> => {
       const result = await client.query(text, values);
       return (result.rows[0] as T) || null;
     },
@@ -164,7 +180,7 @@ export async function beginTransaction(): Promise<Transaction> {
  * Automatically commits on success, rolls back on error
  */
 export async function withTransaction<T>(
-  fn: (tx: Transaction) => Promise<T>
+  fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
   const tx = await beginTransaction();
   try {

@@ -3,7 +3,10 @@ import crypto from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/config.js', async () => {
-  const actual = await vi.importActual<typeof import('../src/config.js')>('../src/config.js');
+  const actual =
+    await vi.importActual<typeof import('../src/config.js')>(
+      '../src/config.js',
+    );
   return {
     ...actual,
     config: {
@@ -13,7 +16,11 @@ vi.mock('../src/config.js', async () => {
   };
 });
 
-import { PLANS, calculateInvoiceTotals, verifyRazorpayWebhookSignature } from '../src/billing';
+import {
+  PLANS,
+  calculateInvoiceTotals,
+  verifyRazorpayWebhookSignature,
+} from '../src/billing';
 
 describe('India billing', () => {
   it('uses India plan prices and GST configuration', () => {
@@ -31,7 +38,10 @@ describe('India billing', () => {
 
   it('verifies razorpay webhook signatures using HMAC SHA256', () => {
     const body = Buffer.from(JSON.stringify({ event: 'payment.captured' }));
-    const signature = crypto.createHmac('sha256', 'unit-test-secret').update(body).digest('hex');
+    const signature = crypto
+      .createHmac('sha256', 'unit-test-secret')
+      .update(body)
+      .digest('hex');
     expect(verifyRazorpayWebhookSignature(body, signature)).toBe(true);
   });
 

@@ -19,6 +19,7 @@ import { buildAIContext, formatContextForPrompt } from './ai-context.js';
 import {
   type AccessTokenPayload,
   generateAccessToken,
+  generateFingerprint,
   generateRefreshToken,
   verifyAccessToken,
 } from './auth.js';
@@ -133,6 +134,29 @@ export async function authenticateRequest(
   try {
     const token = authHeader.slice(7);
     const payload = await verifyAccessToken(token);
+
+    // Verify session fingerprint to prevent hijacking
+    if (payload.fingerprint) {
+      const currentFingerprint = generateFingerprint(
+        request.headers['user-agent'] || '',
+        request.ip,
+      );
+      if (payload.fingerprint !== currentFingerprint) {
+        logger.warn(
+          {
+            sub: payload.sub,
+            tenantId: payload.tenantId,
+            expected: payload.fingerprint,
+            actual: currentFingerprint,
+          },
+          'Session fingerprint mismatch - potential hijacking attempt',
+        );
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'SESSION_HIJACKED', message: 'Session invalidated due to environment change' },
+        });
+      }
+    }
 
     (request as AuthenticatedRequest).tenantId = payload.tenantId;
     (request as AuthenticatedRequest).advocateId = payload.sub;
@@ -636,9 +660,175 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   const aiResearchRateLimit = createDualRateLimiter('research', 'ai_burst');
   const aiSuggestionRateLimit = createDualRateLimiter('ai', 'ai_burst');
 
-  // ============================================================
-  // AUTH ROUTES
-  // ============================================================
+  // POST /auth/register
+  fastify.post(
+    '/auth/register',
+    {
+      config: {
+        rateLimit: {
+          max: rateLimits.auth.requests,
+          timeWindow: rateLimits.auth.windowMs,
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = z
+        .object({
+          name: z.string().min(2),
+          email: z.string().email(),
+          password: z.string().min(12),
+          invitationCode: z.string().optional(),
+        })
+        .parse(request.body);
+
+      // Validate password
+      const validation = validatePasswordPolicy(body.password);
+      if (!validation.valid) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'INVALID_PASSWORD',
+            message: validation.errors.join(', '),
+          },
+        });
+      }
+
+      const passwordHash = await hashPassword(body.password);
+
+      let tenantId: string;
+      let role = 'admin';
+
+      if (body.invitationCode) {
+        // Invitation-based registration
+        const tokenHash = hashToken(body.invitationCode);
+        const invitation = await queryOne<{
+          id: string;
+          tenant_id: string;
+          email: string;
+          role: string;
+          expires_at: Date;
+          status: string;
+        }>(
+          `SELECT id, tenant_id, email, role, expires_at, status
+           FROM invitations WHERE token_hash = $1`,
+          [tokenHash],
+        );
+
+        if (
+          !invitation ||
+          invitation.status !== 'pending' ||
+          new Date(invitation.expires_at) < new Date()
+        ) {
+          return reply.status(400).send({
+            success: false,
+            error: { message: 'Invalid or expired invitation' },
+          });
+        }
+
+        if (invitation.email.toLowerCase() !== body.email.toLowerCase()) {
+          return reply.status(400).send({
+            success: false,
+            error: { message: 'Email does not match invitation' },
+          });
+        }
+
+        tenantId = invitation.tenant_id;
+        role = invitation.role;
+
+        await withTransaction(async (tx) => {
+          await tx.query(
+            `UPDATE invitations SET status = 'accepted', accepted_at = NOW() WHERE id = $1`,
+            [invitation.id],
+          );
+        });
+      } else {
+        // New tenant registration (Starter Plan)
+        const slug = body.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '');
+        
+        const existingTenant = await tenantRepo.findBySlug(slug);
+        const finalSlug = existingTenant ? `${slug}-${generateSecureToken(4)}` : slug;
+
+        const newTenant = await tenantRepo.create({
+          name: body.name,
+          slug: finalSlug,
+          plan: 'starter',
+        });
+        tenantId = newTenant.id;
+      }
+
+      // Create attorney
+      const attorney = await attorneyRepo.create(tenantId, {
+        email: body.email,
+        displayName: body.name,
+        passwordHash,
+        role,
+        status: 'active' as any,
+      } as any);
+
+      // Generate tokens with fingerprinting
+      const fingerprint = generateFingerprint(
+        request.headers['user-agent'] || '',
+        request.ip,
+      );
+      const tokenId = generateSecureToken(16);
+      const accessToken = await generateAccessToken({
+        sub: attorney.id,
+        tenantId,
+        email: body.email,
+        role,
+        fingerprint,
+      });
+
+      const refreshToken = await generateRefreshToken({
+        sub: attorney.id,
+        tenantId,
+        email: body.email,
+        role,
+        tokenId,
+        fingerprint,
+      });
+
+      // Store refresh token with fingerprint
+      await query(
+        `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address, fingerprint)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          attorney.id,
+          tenantId,
+          hashToken(refreshToken),
+          request.headers['user-agent'] || '',
+          request.ip,
+          fingerprint,
+        ],
+      );
+
+      reply.setCookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: config.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/auth/refresh',
+        maxAge: 7 * 24 * 60 * 60,
+      });
+
+      return reply.status(201).send({
+        success: true,
+        data: {
+          accessToken,
+          attorney: {
+            id: attorney.id,
+            tenantId,
+            email: body.email,
+            displayName: body.name,
+            role,
+          },
+        },
+      });
+    },
+  );
 
   // POST /auth/login
   fastify.post(
@@ -794,13 +984,18 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
 
-      // Generate tokens
+      // Generate tokens with fingerprinting
+      const fingerprint = generateFingerprint(
+        request.headers['user-agent'] || '',
+        request.ip,
+      );
       const tokenId = generateSecureToken(16);
       const accessToken = await generateAccessToken({
         sub: attorney.id,
         tenantId: attorney.tenant_id,
         email: attorney.email,
         role: attorney.role,
+        fingerprint,
       });
 
       const refreshToken = await generateRefreshToken({
@@ -809,18 +1004,20 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         email: attorney.email,
         role: attorney.role,
         tokenId,
+        fingerprint,
       });
 
-      // Store refresh token hash
+      // Store refresh token hash with fingerprint
       await query(
-        `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address)
-       VALUES ($1, $2, $3, $4, $5)`,
+        `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address, fingerprint)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           attorney.id,
           attorney.tenant_id,
           hashToken(refreshToken),
           request.headers['user-agent'] || '',
           request.ip,
+          fingerprint,
         ],
       );
 
@@ -929,8 +1126,9 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       expires_at: Date;
       revoked_at: Date | null;
       rotated_to: string | null;
+      fingerprint: string | null;
     }>(
-      `SELECT id, advocate_id, tenant_id, expires_at, revoked_at, rotated_to
+      `SELECT id, advocate_id, tenant_id, expires_at, revoked_at, rotated_to, fingerprint
        FROM refresh_tokens WHERE token_hash = $1`,
       [hashToken(refreshToken)],
     );
@@ -950,6 +1148,26 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(401).send({
         success: false,
         error: { code: 'TOKEN_EXPIRED', message: 'Refresh token has expired' },
+      });
+    }
+
+    // Verify session fingerprint to prevent hijacking
+    const currentFingerprint = generateFingerprint(
+      request.headers['user-agent'] || '',
+      request.ip,
+    );
+    if (tokenRecord.fingerprint && tokenRecord.fingerprint !== currentFingerprint) {
+      logger.warn(
+        {
+          sub: tokenRecord.advocate_id,
+          expected: tokenRecord.fingerprint,
+          actual: currentFingerprint,
+        },
+        'Refresh token fingerprint mismatch',
+      );
+      return reply.status(401).send({
+        success: false,
+        error: { code: 'SESSION_HIJACKED', message: 'Environment change detected' },
       });
     }
 
@@ -987,13 +1205,14 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
-    // Generate new tokens
+    // Generate new tokens with fingerprinting
     const newTokenId = generateSecureToken(16);
     const accessToken = await generateAccessToken({
       sub: attorney.id,
       tenantId: tokenRecord.tenant_id,
       email: attorney.email,
       role: attorney.role,
+      fingerprint: currentFingerprint,
     });
 
     const newRefreshToken = await generateRefreshToken({
@@ -1002,21 +1221,23 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       email: attorney.email,
       role: attorney.role,
       tokenId: newTokenId,
+      fingerprint: currentFingerprint,
     });
 
     // Rotate token
     const newTokenHash = hashToken(newRefreshToken);
     await withTransaction(async (tx) => {
-      // Create new token
+      // Create new token with fingerprint
       const newToken = await tx.queryOne<{ id: string }>(
-        `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        `INSERT INTO refresh_tokens (advocate_id, tenant_id, token_hash, user_agent, ip_address, fingerprint)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
         [
           attorney.id,
           tokenRecord.tenant_id,
           newTokenHash,
           request.headers['user-agent'],
           request.ip,
+          currentFingerprint,
         ],
       );
 
@@ -1152,7 +1373,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         deliveryMode,
         ...(deliveryMode === 'logged' &&
         config.NODE_ENV !== 'production' &&
-        config.EXPOSE_OTP_PREVIEW
+        config.EXPOSE_OTP_PREVIEW === 'true'
           ? { otpPreview: otpCode }
           : {}),
       },
@@ -1205,9 +1426,12 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       display_name: string;
       role: string;
       status: string;
+      otp_failed_attempts: number;
+      otp_locked_until: Date | null;
     }>(
       `SELECT o.id, o.tenant_id, o.advocate_id, o.otp_hash, o.expires_at,
-              a.email, a.display_name, a.role, a.status
+              a.email, a.display_name, a.role, a.status,
+              a.otp_failed_attempts, a.otp_locked_until
        FROM advocate_otps o
        JOIN attorneys a ON a.id = o.advocate_id
        JOIN tenants t ON t.id = o.tenant_id
@@ -1233,10 +1457,28 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
+    if (
+      otpRecord.otp_locked_until &&
+      new Date(otpRecord.otp_locked_until).getTime() > Date.now()
+    ) {
+      return reply.status(429).send({
+        success: false,
+        error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed OTP attempts. Try again later.' },
+      });
+    }
+
     const expectedHash = hashToken(
       `${normalizedPhone}:${body.purpose}:${body.otp}`,
     );
     if (expectedHash !== otpRecord.otp_hash) {
+      const attempts = otpRecord.otp_failed_attempts + 1;
+      const lockedUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
+      
+      await query(
+        `UPDATE attorneys SET otp_failed_attempts = $1, otp_locked_until = $2 WHERE id = $3`,
+        [attempts, lockedUntil, otpRecord.advocate_id]
+      );
+
       return reply.status(401).send({
         success: false,
         error: { code: 'INVALID_OTP', message: 'Invalid or expired OTP' },
@@ -1287,7 +1529,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       );
       await tx.query(
         `UPDATE attorneys
-         SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW()
+         SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW(),
+             otp_failed_attempts = 0, otp_locked_until = NULL
          WHERE id = $1`,
         [otpRecord.advocate_id],
       );
@@ -1516,6 +1759,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   // POST /auth/mfa/setup
+  // POST /auth/mfa/setup
   fastify.post(
     '/auth/mfa/setup',
     { preHandler: authenticateRequest },
@@ -1538,6 +1782,45 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
           qrCodeUrl,
         },
       };
+    },
+  );
+
+  // POST /auth/mfa/disable
+  fastify.post(
+    '/auth/mfa/disable',
+    { preHandler: authenticateRequest },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const { password } = z.object({ password: z.string() }).parse(request.body);
+
+      // Verify password before allowing MFA disable
+      const attorney = await queryOne<{ password_hash: string }>(
+        'SELECT password_hash FROM attorneys WHERE id = $1 AND tenant_id = $2',
+        [authReq.advocateId, authReq.tenantId],
+      );
+
+      if (!attorney) {
+        return reply.status(401).send({ success: false, error: { message: 'User not found' } });
+      }
+
+      const isValid = await verifyPassword(password, attorney.password_hash);
+      if (!isValid) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'INVALID_PASSWORD', message: 'Invalid password' },
+        });
+      }
+
+      await attorneyRepo.disableMfa(authReq.tenantId, authReq.advocateId);
+
+      // Log audit event
+      await query(
+        `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, ip_address)
+         VALUES ($1, $2, 'auth.mfa_disabled', $3)`,
+        [authReq.tenantId, authReq.advocateId, request.ip],
+      );
+
+      return { success: true };
     },
   );
 
@@ -1641,7 +1924,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const authReq = request as AuthenticatedRequest;
       const body = matterCreateSchema.parse(request.body);
-      const leadAdvocateId = body.leadAdvocateId ?? body.leadAttorneyId ?? null;
+      const leadAdvocateId = body.leadAdvocateId ?? null;
       const dealValuePaise = body.dealValuePaise ?? body.dealValueCents ?? null;
 
       const matter = await queryOne<{ id: string }>(
@@ -1742,14 +2025,10 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       const { id } = request.params as { id: string };
       const body = matterUpdateSchema.parse(request.body);
       const normalizedBody = { ...body } as Record<string, unknown>;
-      if (
-        body.leadAdvocateId !== undefined ||
-        body.leadAttorneyId !== undefined
-      ) {
+      if (body.leadAdvocateId !== undefined || body.leadAttorneyId !== undefined) {
         const resolvedLead = body.leadAdvocateId ?? body.leadAttorneyId ?? null;
         normalizedBody.leadAdvocateId = resolvedLead;
-        // Remove deprecated key so fieldMap doesn't produce a duplicate SET clause
-        normalizedBody.leadAttorneyId = undefined;
+        delete normalizedBody.leadAttorneyId;
       }
       if (
         body.dealValuePaise !== undefined ||
@@ -1789,7 +2068,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         status: 'status',
         priority: 'priority',
         leadAdvocateId: 'lead_advocate_id',
-        leadAttorneyId: 'lead_advocate_id',
         targetCloseDate: 'target_close_date',
         dealValuePaise: 'deal_value_paise',
         dealValueCents: 'deal_value_cents',
@@ -1890,16 +2168,16 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       const buffer = await data.toBuffer();
       const detected = await fileTypeFromBuffer(buffer);
 
-      // file-type returns undefined for text files, so we fall back to the client-provided mimetype
-      // ONLY if it's a text type and detected is null.
       let mimeType = detected?.mime;
       if (
         !mimeType &&
         (data.mimetype === 'text/plain' || data.mimetype === 'text/html')
       ) {
+        // file-type cannot detect plain text reliably, allow if client claims it's text
         mimeType = data.mimetype;
       } else if (!mimeType) {
-        mimeType = data.mimetype; // Fallback for other potential types, but file-type covers most of our list
+        // Do not trust the client mimetype for binary files. If file-type can't detect it, reject it.
+        mimeType = 'application/octet-stream';
       }
 
       if (!ALLOWED_MIME_TYPES.has(mimeType)) {
@@ -3440,6 +3718,38 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
+  // POST /api/research/:id/feedback - Submit feedback on an AI research answer
+  fastify.post(
+    '/api/research/:id/feedback',
+    {
+      preHandler: authenticateRequest,
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          rating: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+          correction: z.string().max(2000).optional(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const { id } = request.params as { id: string };
+      const { rating, correction } = request.body as {
+        rating: -1 | 0 | 1;
+        correction?: string;
+      };
+
+      await authReq.getTenantQuery()(
+        `UPDATE research_history
+         SET user_rating = $1, user_correction = $2, feedback_given_at = NOW()
+         WHERE id = $3`,
+        [rating, correction ?? null, id]
+      );
+
+      return reply.send({ success: true });
+    },
+  );
+
   // GET /api/research/indiankanoon - Proxy/fallback legal case search
   fastify.get(
     '/api/research/indiankanoon',
@@ -4089,6 +4399,48 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         throw error;
       }
     },
+  );
+
+  // PATCH /api/invoices/:id/finalize
+  fastify.patch(
+    '/api/invoices/:id/finalize',
+    { preHandler: authenticateRequest },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+
+      // Validate FIRM_GSTIN format
+      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!config.FIRM_GSTIN || !gstinRegex.test(config.FIRM_GSTIN)) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'INVALID_FIRM_GSTIN',
+            message: 'A valid firm GSTIN must be configured in settings before issuing invoices.',
+          },
+        });
+      }
+
+      const result = await query(
+        `UPDATE invoices 
+         SET status = 'issued', firm_gstin = $1
+         WHERE id = $2 AND tenant_id = $3 AND status = 'draft'
+         RETURNING id`,
+        [config.FIRM_GSTIN, id, authReq.tenantId]
+      );
+
+      if (result.rowCount === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'NOT_FOUND_OR_NOT_DRAFT',
+            message: 'Invoice not found or already issued.',
+          },
+        });
+      }
+
+      return reply.send({ success: true });
+    }
   );
 
   // GET /api/dpdp/requests

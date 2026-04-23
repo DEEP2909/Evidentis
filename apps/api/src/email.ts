@@ -129,7 +129,7 @@ function wrapTemplate(content: string): string {
 export async function sendPasswordResetEmail(
   email: string,
   resetUrl: string,
-  advocateName: string
+  advocateName: string,
 ): Promise<void> {
   const html = wrapTemplate(`
     <h2>Reset Your Password</h2>
@@ -156,7 +156,7 @@ export async function sendInvitationEmail(
   email: string,
   inviteUrl: string,
   firmName: string,
-  inviterName: string
+  inviterName: string,
 ): Promise<void> {
   const html = wrapTemplate(`
     <h2>You've Been Invited to EvidentIS</h2>
@@ -178,7 +178,7 @@ export async function sendInvitationEmail(
 
 export async function sendMFAEnabledEmail(
   email: string,
-  advocateName: string
+  advocateName: string,
 ): Promise<void> {
   const html = wrapTemplate(`
     <h2>Two-Factor Authentication Enabled</h2>
@@ -204,10 +204,10 @@ export async function sendObligationReminderEmail(
   obligationDescription: string,
   matterName: string,
   deadlineDate: string,
-  daysUntilDue: number
+  daysUntilDue: number,
 ): Promise<void> {
   const urgencyClass = daysUntilDue <= 3 ? 'warning' : '';
-  
+
   const html = wrapTemplate(`
     <h2>Upcoming Obligation Reminder</h2>
     <p>Hi ${advocateName},</p>
@@ -234,11 +234,12 @@ export async function sendDocumentProcessedEmail(
   documentName: string,
   matterName: string,
   flagCount: number,
-  criticalFlags: number
+  criticalFlags: number,
 ): Promise<void> {
-  const flagSummary = flagCount > 0
-    ? `<p>We found <strong>${flagCount} flags</strong>${criticalFlags > 0 ? ` including <strong style="color: #DC2626;">${criticalFlags} critical issues</strong>` : ''} that require your attention.</p>`
-    : '<p>No flags were raised during analysis.</p>';
+  const flagSummary =
+    flagCount > 0
+      ? `<p>We found <strong>${flagCount} flags</strong>${criticalFlags > 0 ? ` including <strong style="color: #DC2626;">${criticalFlags} critical issues</strong>` : ''} that require your attention.</p>`
+      : '<p>No flags were raised during analysis.</p>';
 
   const html = wrapTemplate(`
     <h2>Document Analysis Complete</h2>

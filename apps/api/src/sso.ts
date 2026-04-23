@@ -17,18 +17,10 @@ interface OIDCProviderConfig {
   clientSecret?: string;
   scopes: string[];
 }
+import { redis } from './redis.js';
 
-// SSO State stored in Redis/memory
-interface SSOState {
-  tenantId: string;
-  codeVerifier: string;
-  nonce: string;
-  redirectUri: string;
-  provider: string;
-  createdAt: number;
-}
-
-const ssoStates = new Map<string, SSOState>();
+const SSO_STATE_TTL = 600; // 10 minutes
+const SSO_STATE_PREFIX = 'sso:state:';
 
 // Generate PKCE code verifier and challenge
 function generatePKCE(): { verifier: string; challenge: string } {
@@ -87,23 +79,19 @@ export async function initiateOIDCLogin(
   const state = generateSecureRandom();
   const nonce = generateSecureRandom();
 
-  // Store state for callback verification
-  ssoStates.set(state, {
-    tenantId,
-    codeVerifier: verifier,
-    nonce,
-    redirectUri,
-    provider: 'oidc',
-    createdAt: Date.now(),
-  });
-
-  // Clean up old states (older than 10 minutes)
-  const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-  for (const [key, value] of ssoStates.entries()) {
-    if (value.createdAt < tenMinutesAgo) {
-      ssoStates.delete(key);
-    }
-  }
+  // Store state for callback verification in Redis
+  await redis.set(
+    `${SSO_STATE_PREFIX}${state}`,
+    JSON.stringify({
+      tenantId,
+      codeVerifier: verifier,
+      nonce,
+      redirectUri,
+      provider: 'oidc',
+    }),
+    'EX',
+    SSO_STATE_TTL,
+  );
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -133,12 +121,22 @@ export async function handleOIDCCallback(
   sub: string;
   tenantId: string;
 }> {
-  const storedState = ssoStates.get(state);
-  if (!storedState) {
+  const stateKey = `${SSO_STATE_PREFIX}${state}`;
+  const storedStateJson = await redis.get(stateKey);
+
+  if (!storedStateJson) {
     throw new Error('Invalid or expired state');
   }
 
-  ssoStates.delete(state);
+  const storedState = JSON.parse(storedStateJson) as {
+    tenantId: string;
+    codeVerifier: string;
+    nonce: string;
+    redirectUri: string;
+    provider: string;
+  };
+
+  await redis.del(stateKey);
 
   const oidcConfig = await getOIDCConfig(storedState.tenantId);
   if (!oidcConfig) {
@@ -288,14 +286,19 @@ export async function initiateOAuth2Login(
   const state = generateSecureRandom();
   const nonce = generateSecureRandom();
 
-  ssoStates.set(state, {
-    tenantId,
-    codeVerifier: verifier,
-    nonce,
-    redirectUri,
-    provider,
-    createdAt: Date.now(),
-  });
+  // Store state for callback verification in Redis
+  await redis.set(
+    `${SSO_STATE_PREFIX}${state}`,
+    JSON.stringify({
+      tenantId,
+      codeVerifier: verifier,
+      nonce,
+      redirectUri,
+      provider,
+    }),
+    'EX',
+    SSO_STATE_TTL,
+  );
 
   const params = new URLSearchParams({
     response_type: 'code',

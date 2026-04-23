@@ -3,12 +3,16 @@
  * Starts all BullMQ workers for async document processing pipeline
  */
 
-import { startWorkers, gracefulShutdown as drainWorkers, documentQueue } from './worker.js';
-import { logger } from './logger.js';
-import { closeDatabasePool } from './database.js';
 import fs from 'node:fs';
 import http from 'node:http';
-import { collectDefaultMetrics, Gauge, Registry, Counter } from 'prom-client';
+import { Counter, Gauge, Registry, collectDefaultMetrics } from 'prom-client';
+import { closeDatabasePool } from './database.js';
+import { logger } from './logger.js';
+import {
+  documentQueue,
+  gracefulShutdown as drainWorkers,
+  startWorkers,
+} from './worker.js';
 
 const HEARTBEAT_PATH = '/tmp/worker-heartbeat';
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -121,13 +125,13 @@ const shutdown = async (signal: string) => {
   });
   clearInterval(metricsInterval);
   clearInterval(heartbeatInterval);
-  
+
   // 1. Drain BullMQ workers and close Redis
   await drainWorkers();
-  
+
   // 2. Close database connections
   await closeDatabasePool();
-  
+
   logger.info('Worker shutdown complete');
   process.exit(0);
 };

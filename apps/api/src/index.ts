@@ -3,38 +3,49 @@
  * Main entry point for the Fastify API server
  */
 
-import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
-import cookie from '@fastify/cookie';
-import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
+import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 
-import { config, corsOrigins, rateLimits, isProduction, isDevelopment, isTest, trustProxy } from './config.js';
-import { logger } from './logger.js';
-import { pool, checkDatabaseHealth, closeDatabasePool } from './database.js';
-import { initializeAuth } from './auth.js';
-import { checkClamAVHealth } from './malware.js';
-import { registerRoutes } from './routes.js';
-import { scimRoutes } from './scim.js';
-import { registerSsoRoutes } from './sso.js';
-import { registerWebAuthnRoutes } from './webauthn.js';
-import { registerSamlRoutes } from './saml.js';
-import { dpdpRoutes } from './dpdp.js';
-import { initializeWebSocket } from './websocket.js';
-import { registerTenantIsolation } from './tenant-isolation.js';
-import { registerSecurityHardening } from './security-hardening.js';
-import { closeOrchestrator } from './orchestrator.js';
-import { addVersionNegotiation } from './api-versioning.js';
 import crypto from 'node:crypto';
+import { addVersionNegotiation } from './api-versioning.js';
+import { initializeAuth } from './auth.js';
+import {
+  config,
+  corsOrigins,
+  isDevelopment,
+  isProduction,
+  isTest,
+  rateLimits,
+  trustProxy,
+} from './config.js';
+import { checkDatabaseHealth, closeDatabasePool, pool } from './database.js';
+import { dpdpRoutes } from './dpdp.js';
+import { logger } from './logger.js';
+import { checkClamAVHealth } from './malware.js';
+import { closeOrchestrator } from './orchestrator.js';
+import { registerRoutes } from './routes.js';
+import { registerSamlRoutes } from './saml.js';
+import { scimRoutes } from './scim.js';
+import { registerSecurityHardening } from './security-hardening.js';
+import { registerSsoRoutes } from './sso.js';
+import { registerTenantIsolation } from './tenant-isolation.js';
+import { registerWebAuthnRoutes } from './webauthn.js';
+import { initializeWebSocket } from './websocket.js';
 
 // ============================================================
 // SERVER SETUP
 // ============================================================
 
-async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null }> {
+async function createApp(): Promise<{
+  app: FastifyInstance;
+  redis: Redis | null;
+}> {
   const app = Fastify({
     logger: {
       level: isProduction ? 'info' : 'debug',
@@ -66,7 +77,6 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
 
   // Security headers
   await app.register(helmet, {
-    /* c8 ignore next 9 -- CSP directives are enabled only in production */
     contentSecurityPolicy: isProduction
       ? {
           directives: {
@@ -74,22 +84,29 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
             styleSrc: ["'self'", "'unsafe-inline'"],
             scriptSrc: ["'self'"],
             imgSrc: ["'self'", 'data:', 'blob:'],
+            frameAncestors: ["'none'"],
+            objectSrc: ["'none'"],
           },
         }
       : false,
-    /* c8 ignore next 6 -- HSTS is enabled only in production */
     hsts: isProduction
       ? {
           maxAge: 31536000,
           includeSubDomains: true,
+          preload: true,
         }
       : false,
+    xFrameOptions: { action: 'deny' },
   });
 
   // Cookies - Issue #9 fix: use random key in dev instead of hardcoded string
-  const cookieSecret = config.APP_ENCRYPTION_KEY?.slice(0, 32) ?? crypto.randomBytes(16).toString('hex');
+  const cookieSecret =
+    config.APP_ENCRYPTION_KEY?.slice(0, 32) ??
+    crypto.randomBytes(16).toString('hex');
   if (!config.APP_ENCRYPTION_KEY) {
-    logger.warn('⚠️  APP_ENCRYPTION_KEY not set — using ephemeral cookie secret (not for production!)');
+    logger.warn(
+      '⚠️  APP_ENCRYPTION_KEY not set — using ephemeral cookie secret (not for production!)',
+    );
   }
   await app.register(cookie, {
     secret: cookieSecret,
@@ -98,6 +115,7 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
       secure: isProduction,
       sameSite: 'strict',
       path: '/',
+      maxAge: 7 * 24 * 60 * 60, // 7 days
     },
   });
 
@@ -161,14 +179,21 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
 
   // Request logging
   app.addHook('onRequest', async (request) => {
-    request.log.info({ method: request.method, url: request.url }, 'Request started');
+    request.log.info(
+      { method: request.method, url: request.url },
+      'Request started',
+    );
   });
 
   // Response logging
   app.addHook('onResponse', async (request, reply) => {
     request.log.info(
-      { method: request.method, url: request.url, statusCode: reply.statusCode },
-      'Request completed'
+      {
+        method: request.method,
+        url: request.url,
+        statusCode: reply.statusCode,
+      },
+      'Request completed',
     );
   });
 
@@ -250,7 +275,7 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
           done(err as Error, undefined);
         }
       }
-    }
+    },
   );
 
   // Add version negotiation before routes (Issue #6 fix)
@@ -268,14 +293,21 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
   // Initialize WebSocket server for real-time events (await to ensure Redis adapter connects)
   /* c8 ignore next 3 -- websocket server is intentionally disabled in tests */
   if (!isTest) {
-    await initializeWebSocket(app.server, config.REDIS_URL, config.JWT_PUBLIC_KEY_PATH);
+    await initializeWebSocket(
+      app.server,
+      config.REDIS_URL,
+      config.JWT_PUBLIC_KEY_PATH,
+    );
   }
 
   return { app, redis };
 }
 
 /* c8 ignore start -- signal/bootstrap paths are exercised only in runtime, not unit tests */
-function registerShutdownHandlers(app: FastifyInstance, redis: Redis | null): void {
+function registerShutdownHandlers(
+  app: FastifyInstance,
+  redis: Redis | null,
+): void {
   const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 
   for (const signal of signals) {

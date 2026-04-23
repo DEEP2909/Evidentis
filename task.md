@@ -1,0 +1,17 @@
+- `[ ]` Issue 1: SAML XML Signature Never Verified
+- `[x]` Issue 2: WebAuthn Challenge Falls Back to In-Memory
+- `[x]` Issue 3: SCIM Provisioning Bypasses Quota
+- `[x]` Issue 4: AI Answer Refusal on Low Confidence
+- `[x]` Issue 5: User Feedback Loop on AI Answers
+- `[x]` Issue 6: DB_SSL Guard
+- `[x]` Issue 7: OTP Failed Attempt Counter
+- `[x]` Issue 8: FIRM_GSTIN Validation
+- `[x]` Issue 9: MIME Type Validation
+- `[ ]` Issue 10: Register Rate Limit
+- `[ ]` Issue 11: MFA Disable Re-Auth
+- `[ ]` Issue 12: SSO States In-Memory
+- `[ ]` Issue 13: leadAttorneyId Cleanup
+- `[x]` Issue 14: otpPreview Leak
+- `[ ]` Issue 15: CD Pipeline
+- `[ ]` Issue 16: DB Backup CronJob
+- `[ ]` Issue 17: AI Evaluation Gate

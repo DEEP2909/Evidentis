@@ -4,9 +4,12 @@
  */
 
 import crypto from 'node:crypto';
-import Razorpay from 'razorpay';
-import { PRIMARY_LANGUAGE_CODES, SUPPORTED_LANGUAGE_CODES } from '@evidentis/shared';
+import {
+  PRIMARY_LANGUAGE_CODES,
+  SUPPORTED_LANGUAGE_CODES,
+} from '@evidentis/shared';
 import type { PoolClient } from 'pg';
+import Razorpay from 'razorpay';
 
 import { config } from './config.js';
 import { pool } from './database.js';
@@ -109,7 +112,10 @@ function getRazorpayClient(): Razorpay {
   });
 }
 
-export function calculateInvoiceTotals(subtotalPaise: number, gstRatePercent: number) {
+export function calculateInvoiceTotals(
+  subtotalPaise: number,
+  gstRatePercent: number,
+) {
   const gstAmountPaise = Math.round((subtotalPaise * gstRatePercent) / 100);
   const totalPaise = subtotalPaise + gstAmountPaise;
 
@@ -121,7 +127,10 @@ export function calculateInvoiceTotals(subtotalPaise: number, gstRatePercent: nu
   };
 }
 
-export function verifyRazorpayWebhookSignature(rawBody: Buffer, signature: string): boolean {
+export function verifyRazorpayWebhookSignature(
+  rawBody: Buffer,
+  signature: string,
+): boolean {
   if (!config.RAZORPAY_WEBHOOK_SECRET) {
     throw new Error('RAZORPAY_WEBHOOK_SECRET is not configured');
   }
@@ -138,12 +147,6 @@ export function verifyRazorpayWebhookSignature(rawBody: Buffer, signature: strin
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }
 
-async function getTenantPlan(tenantId: string): Promise<PlanType> {
-  const result = await pool.query<{ plan: string }>('SELECT plan FROM tenants WHERE id = $1', [tenantId]);
-  const plan = result.rows[0]?.plan;
-  return plan && plan in PLANS ? (plan as PlanType) : 'starter';
-}
-
 function getFinancialYearLabel(referenceDate: Date): string {
   const year = referenceDate.getUTCFullYear();
   const month = referenceDate.getUTCMonth() + 1;
@@ -152,18 +155,24 @@ function getFinancialYearLabel(referenceDate: Date): string {
   return `${startYear}-${endYearShort}`;
 }
 
-async function generateSequentialInvoiceNumber(client: PoolClient, tenantId: string, issueDate: Date): Promise<string> {
+async function generateSequentialInvoiceNumber(
+  client: PoolClient,
+  tenantId: string,
+  issueDate: Date,
+): Promise<string> {
   const financialYearLabel = getFinancialYearLabel(issueDate);
   const prefix = `EVD/${financialYearLabel}/`;
 
-  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice:${tenantId}:${financialYearLabel}`]);
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+    `invoice:${tenantId}:${financialYearLabel}`,
+  ]);
 
   const sequenceResult = await client.query<{ max_seq: number | null }>(
     `SELECT COALESCE(MAX(NULLIF(substring(invoice_number FROM '([0-9]{4,})$'), '')::integer), 0) AS max_seq
      FROM invoices
      WHERE tenant_id = $1
        AND invoice_number LIKE $2`,
-    [tenantId, `${prefix}%`]
+    [tenantId, `${prefix}%`],
   );
 
   const nextSequence = (sequenceResult.rows[0]?.max_seq ?? 0) + 1;
@@ -176,14 +185,17 @@ export async function createCheckoutSession(
   firmName: string,
   plan: PlanType,
   successUrl: string,
-  _cancelUrl: string
+  _cancelUrl: string,
 ): Promise<{ sessionId: string; url: string; orderId?: string }> {
   const planConfig = PLANS[plan];
   if (planConfig.priceInPaise === null) {
     throw new Error('Custom plan requires sales-assisted onboarding');
   }
 
-  const totals = calculateInvoiceTotals(planConfig.priceInPaise, planConfig.gstRatePercent);
+  const totals = calculateInvoiceTotals(
+    planConfig.priceInPaise,
+    planConfig.gstRatePercent,
+  );
   const razorpay = getRazorpayClient();
 
   const paymentLink = await razorpay.paymentLink.create({
@@ -210,7 +222,7 @@ export async function createCheckoutSession(
     `UPDATE tenants
      SET razorpay_customer_id = COALESCE(razorpay_customer_id, $2)
      WHERE id = $1`,
-    [tenantId, paymentLink.customer?.email ?? advocateEmail]
+    [tenantId, paymentLink.customer?.email ?? advocateEmail],
   );
 
   return {
@@ -219,18 +231,23 @@ export async function createCheckoutSession(
   };
 }
 
-export async function createCustomerPortalSession(_tenantId: string, returnUrl: string): Promise<{ url: string }> {
+export async function createCustomerPortalSession(
+  _tenantId: string,
+  returnUrl: string,
+): Promise<{ url: string }> {
   return { url: `${returnUrl}?billing=managed` };
 }
 
-export async function getBillingStatus(tenantId: string): Promise<BillingStatus> {
+export async function getBillingStatus(
+  tenantId: string,
+): Promise<BillingStatus> {
   const tenant = await pool.query<{
     plan: string;
     subscription_status: string;
     trial_ends_at: Date | null;
   }>(
-    `SELECT plan, subscription_status, trial_ends_at FROM tenants WHERE id = $1`,
-    [tenantId]
+    'SELECT plan, subscription_status, trial_ends_at FROM tenants WHERE id = $1',
+    [tenantId],
   );
 
   const quotaResult = await pool.query<{
@@ -241,16 +258,18 @@ export async function getBillingStatus(tenantId: string): Promise<BillingStatus>
   }>(
     `SELECT monthly_doc_limit, monthly_research_limit, current_month_docs, current_month_research
      FROM tenant_ai_quotas WHERE tenant_id = $1`,
-    [tenantId]
+    [tenantId],
   );
 
   // DB table remains `attorneys` for backward-compatibility, but rows represent advocates.
   const advocatesResult = await pool.query<{ count: string }>(
     `SELECT COUNT(*) FROM attorneys WHERE tenant_id = $1 AND status = 'active'`,
-    [tenantId]
+    [tenantId],
   );
 
-  const plan = (tenant.rows[0]?.plan in PLANS ? tenant.rows[0]?.plan : 'starter') as PlanType;
+  const plan = (
+    tenant.rows[0]?.plan in PLANS ? tenant.rows[0]?.plan : 'starter'
+  ) as PlanType;
   const planConfig = PLANS[plan];
   const quota = quotaResult.rows[0] ?? {
     monthly_doc_limit: planConfig.features.maxDocumentsPerMonth,
@@ -261,16 +280,23 @@ export async function getBillingStatus(tenantId: string): Promise<BillingStatus>
 
   return {
     plan,
-    status: (tenant.rows[0]?.subscription_status as BillingStatus['status']) ?? 'none',
+    status:
+      (tenant.rows[0]?.subscription_status as BillingStatus['status']) ??
+      'none',
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,
-    trialEndsAt: tenant.rows[0]?.trial_ends_at ? new Date(tenant.rows[0].trial_ends_at) : null,
+    trialEndsAt: tenant.rows[0]?.trial_ends_at
+      ? new Date(tenant.rows[0].trial_ends_at)
+      : null,
     usage: {
       documentsThisMonth: quota.current_month_docs,
       documentsLimit: quota.monthly_doc_limit,
       researchThisMonth: quota.current_month_research,
       researchLimit: quota.monthly_research_limit,
-      advocatesActive: Number.parseInt(advocatesResult.rows[0]?.count ?? '0', 10),
+      advocatesActive: Number.parseInt(
+        advocatesResult.rows[0]?.count ?? '0',
+        10,
+      ),
       advocatesLimit: planConfig.features.maxAdvocates,
     },
   };
@@ -278,7 +304,7 @@ export async function getBillingStatus(tenantId: string): Promise<BillingStatus>
 
 export async function checkQuota(
   tenantId: string,
-  quotaType: 'document' | 'research'
+  quotaType: 'document' | 'research',
 ): Promise<{ allowed: boolean; remaining: number; limit: number | null }> {
   const billingStatus = await getBillingStatus(tenantId);
 
@@ -287,7 +313,8 @@ export async function checkQuota(
     const used = billingStatus.usage.documentsThisMonth;
     return {
       allowed: limit === null || used < limit,
-      remaining: limit === null ? Number.POSITIVE_INFINITY : Math.max(0, limit - used),
+      remaining:
+        limit === null ? Number.POSITIVE_INFINITY : Math.max(0, limit - used),
       limit,
     };
   }
@@ -296,25 +323,41 @@ export async function checkQuota(
   const used = billingStatus.usage.researchThisMonth;
   return {
     allowed: limit === null || used < limit,
-    remaining: limit === null ? Number.POSITIVE_INFINITY : Math.max(0, limit - used),
+    remaining:
+      limit === null ? Number.POSITIVE_INFINITY : Math.max(0, limit - used),
     limit,
   };
 }
 
-export async function incrementQuota(tenantId: string, quotaType: 'document' | 'research'): Promise<void> {
-  const column = quotaType === 'document' ? 'current_month_docs' : 'current_month_research';
+export async function incrementQuota(
+  tenantId: string,
+  quotaType: 'document' | 'research',
+): Promise<void> {
+  const column =
+    quotaType === 'document' ? 'current_month_docs' : 'current_month_research';
 
   await pool.query(
     `INSERT INTO tenant_ai_quotas (tenant_id, monthly_doc_limit, monthly_research_limit, api_tier)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (tenant_id) DO NOTHING`,
-    [tenantId, PLANS.starter.features.maxDocumentsPerMonth, PLANS.starter.features.maxResearchQueriesPerMonth, 'opensource']
+    [
+      tenantId,
+      PLANS.starter.features.maxDocumentsPerMonth,
+      PLANS.starter.features.maxResearchQueriesPerMonth,
+      'opensource',
+    ],
   );
 
-  await pool.query(`UPDATE tenant_ai_quotas SET ${column} = ${column} + 1 WHERE tenant_id = $1`, [tenantId]);
+  await pool.query(
+    `UPDATE tenant_ai_quotas SET ${column} = ${column} + 1 WHERE tenant_id = $1`,
+    [tenantId],
+  );
 }
 
-export async function handleRazorpayWebhook(rawBody: Buffer, signature: string): Promise<{ received: boolean }> {
+export async function handleRazorpayWebhook(
+  rawBody: Buffer,
+  signature: string,
+): Promise<{ received: boolean }> {
   if (!verifyRazorpayWebhookSignature(rawBody, signature)) {
     throw new Error('Invalid webhook signature');
   }
@@ -337,7 +380,7 @@ export async function handleRazorpayWebhook(rawBody: Buffer, signature: string):
        SET subscription_status = 'active',
            plan = $2
        WHERE id = $1`,
-      [tenantId, plan]
+      [tenantId, plan],
     );
 
     const planConfig = PLANS[plan];
@@ -351,41 +394,74 @@ export async function handleRazorpayWebhook(rawBody: Buffer, signature: string):
          current_month_docs = 0,
          current_month_research = 0,
          quota_reset_at = now() + interval '1 month'`,
-      [tenantId, planConfig.features.maxDocumentsPerMonth, planConfig.features.maxResearchQueriesPerMonth, planConfig.features.aiTier]
+      [
+        tenantId,
+        planConfig.features.maxDocumentsPerMonth,
+        planConfig.features.maxResearchQueriesPerMonth,
+        planConfig.features.aiTier,
+      ],
     );
 
     await pool.query(
       `INSERT INTO audit_events (tenant_id, event_type, object_type, metadata)
        VALUES ($1, 'billing.payment_captured', 'payment', $2)`,
-      [tenantId, JSON.stringify({ razorpayPaymentId: payment?.id, plan, amount: payment?.amount })]
+      [
+        tenantId,
+        JSON.stringify({
+          razorpayPaymentId: payment?.id,
+          plan,
+          amount: payment?.amount,
+        }),
+      ],
     );
   }
 
   if (eventType === 'payment.failed') {
-    await pool.query(`UPDATE tenants SET subscription_status = 'past_due' WHERE id = $1`, [tenantId]);
+    await pool.query(
+      `UPDATE tenants SET subscription_status = 'past_due' WHERE id = $1`,
+      [tenantId],
+    );
   }
 
   return { received: true };
 }
 
-export async function reportUsage(subscriptionId: string, quantity: number, action: 'set' | 'increment' = 'increment'): Promise<void> {
-  logger.info({ subscriptionId, quantity, action }, 'Usage reporting recorded for internal analytics');
+export async function reportUsage(
+  subscriptionId: string,
+  quantity: number,
+  action: 'set' | 'increment' = 'increment',
+): Promise<void> {
+  logger.info(
+    { subscriptionId, quantity, action },
+    'Usage reporting recorded for internal analytics',
+  );
 }
 
-export async function createInvoiceForPlan(tenantId: string, plan: PlanType, createdBy: string | null) {
+export async function createInvoiceForPlan(
+  tenantId: string,
+  plan: PlanType,
+  createdBy: string | null,
+) {
   const planConfig = PLANS[plan];
   if (planConfig.priceInPaise === null) {
     throw new Error('Custom billing invoices must be generated manually');
   }
 
-  const totals = calculateInvoiceTotals(planConfig.priceInPaise, planConfig.gstRatePercent);
+  const totals = calculateInvoiceTotals(
+    planConfig.priceInPaise,
+    planConfig.gstRatePercent,
+  );
   const issueDate = new Date();
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    const invoiceNumber = await generateSequentialInvoiceNumber(client, tenantId, issueDate);
+    const invoiceNumber = await generateSequentialInvoiceNumber(
+      client,
+      tenantId,
+      issueDate,
+    );
     const invoice = await client.query<{ id: string }>(
       `INSERT INTO invoices (
          tenant_id, client_name, invoice_number, issue_date, due_date,
@@ -393,7 +469,16 @@ export async function createInvoiceForPlan(tenantId: string, plan: PlanType, cre
        )
        VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '15 days', $4, $5, $6, $7, 'draft', $8)
        RETURNING id`,
-      [tenantId, 'Tenant Billing Account', invoiceNumber, totals.subtotalPaise, totals.gstRatePercent, totals.gstAmountPaise, totals.totalPaise, createdBy]
+      [
+        tenantId,
+        'Tenant Billing Account',
+        invoiceNumber,
+        totals.subtotalPaise,
+        totals.gstRatePercent,
+        totals.gstAmountPaise,
+        totals.totalPaise,
+        createdBy,
+      ],
     );
 
     const invoiceId = invoice.rows[0]?.id;
@@ -403,7 +488,15 @@ export async function createInvoiceForPlan(tenantId: string, plan: PlanType, cre
            invoice_id, sac_code, gst_rate, taxable_amount_paise, cgst_amount_paise, sgst_amount_paise, igst_amount_paise
          )
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [invoiceId, '998212', totals.gstRatePercent, totals.subtotalPaise, 0, 0, totals.gstAmountPaise]
+        [
+          invoiceId,
+          '998212',
+          totals.gstRatePercent,
+          totals.subtotalPaise,
+          0,
+          0,
+          totals.gstAmountPaise,
+        ],
       );
     }
 

@@ -3,9 +3,15 @@
  * S3/MinIO abstraction for file storage
  */
 
-import fs from 'fs';
-import path from 'path';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import fs from 'node:fs';
+import path from 'node:path';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -80,7 +86,7 @@ function getLocalPath(key: string): string {
 export async function uploadFile(
   key: string,
   data: Buffer | NodeJS.ReadableStream,
-  options: UploadOptions
+  options: UploadOptions,
 ): Promise<void> {
   if (config.STORAGE_BACKEND === 'local') {
     const filePath = getLocalPath(key);
@@ -105,7 +111,7 @@ export async function uploadFile(
         contentType: options.contentType,
         metadata: options.metadata || {},
         uploadedAt: new Date().toISOString(),
-      })
+      }),
     );
 
     logger.debug({ key }, 'File uploaded to local storage');
@@ -123,7 +129,7 @@ export async function uploadFile(
       Body: bodyData,
       ContentType: options.contentType,
       Metadata: options.metadata,
-    })
+    }),
   );
 
   logger.debug({ key, bucket: config.S3_BUCKET }, 'File uploaded to S3');
@@ -146,7 +152,7 @@ export async function downloadFile(key: string): Promise<Buffer> {
     new GetObjectCommand({
       Bucket: config.S3_BUCKET,
       Key: key,
-    })
+    }),
   );
 
   if (!response.Body) {
@@ -159,7 +165,9 @@ export async function downloadFile(key: string): Promise<Buffer> {
 /**
  * Get a readable stream for a file
  */
-export async function getFileStream(key: string): Promise<NodeJS.ReadableStream> {
+export async function getFileStream(
+  key: string,
+): Promise<NodeJS.ReadableStream> {
   if (config.STORAGE_BACKEND === 'local') {
     const filePath = getLocalPath(key);
     if (!fs.existsSync(filePath)) {
@@ -173,7 +181,7 @@ export async function getFileStream(key: string): Promise<NodeJS.ReadableStream>
     new GetObjectCommand({
       Bucket: config.S3_BUCKET,
       Key: key,
-    })
+    }),
   );
 
   if (!response.Body) {
@@ -207,7 +215,7 @@ export async function deleteFile(key: string): Promise<void> {
     new DeleteObjectCommand({
       Bucket: config.S3_BUCKET,
       Key: key,
-    })
+    }),
   );
 
   logger.debug({ key, bucket: config.S3_BUCKET }, 'File deleted from S3');
@@ -227,7 +235,7 @@ export async function fileExists(key: string): Promise<boolean> {
       new HeadObjectCommand({
         Bucket: config.S3_BUCKET,
         Key: key,
-      })
+      }),
     );
     return true;
   } catch {
@@ -238,7 +246,10 @@ export async function fileExists(key: string): Promise<boolean> {
 /**
  * Move a file from one key to another (copy + delete)
  */
-export async function moveFile(sourceKey: string, destKey: string): Promise<void> {
+export async function moveFile(
+  sourceKey: string,
+  destKey: string,
+): Promise<void> {
   if (config.STORAGE_BACKEND === 'local') {
     const sourcePath = getLocalPath(sourceKey);
     const destPath = getLocalPath(destKey);
@@ -265,7 +276,7 @@ export async function moveFile(sourceKey: string, destKey: string): Promise<void
     new HeadObjectCommand({
       Bucket: config.S3_BUCKET,
       Key: sourceKey,
-    })
+    }),
   );
 
   await uploadFile(destKey, data, {
@@ -274,13 +285,19 @@ export async function moveFile(sourceKey: string, destKey: string): Promise<void
   });
 
   await deleteFile(sourceKey);
-  logger.debug({ sourceKey, destKey, bucket: config.S3_BUCKET }, 'File moved in S3');
+  logger.debug(
+    { sourceKey, destKey, bucket: config.S3_BUCKET },
+    'File moved in S3',
+  );
 }
 
 /**
  * Generate a pre-signed URL for direct upload/download
  */
-export async function getSignedDownloadUrl(key: string, expiresInSeconds = 3600): Promise<string> {
+export async function getSignedDownloadUrl(
+  key: string,
+  expiresInSeconds = 3600,
+): Promise<string> {
   if (config.STORAGE_BACKEND === 'local') {
     throw new Error('Signed URLs not supported for local storage');
   }
@@ -314,7 +331,7 @@ export function generateDocumentKey(
   tenantId: string,
   documentId: string,
   filename: string,
-  prefix: 'quarantine' | 'uploads' = 'uploads'
+  prefix: 'quarantine' | 'uploads' = 'uploads',
 ): string {
   // Sanitize filename
   const sanitized = filename

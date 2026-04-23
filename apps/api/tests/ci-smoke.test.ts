@@ -30,7 +30,10 @@ describe('CI Smoke', () => {
     });
 
     expect([200, 503]).toContain(response.statusCode);
-    const body = JSON.parse(response.body) as { status?: string; checks?: unknown };
+    const body = JSON.parse(response.body) as {
+      status?: string;
+      checks?: unknown;
+    };
     expect(body.status).toBeDefined();
     expect(body.checks).toBeDefined();
   });

@@ -435,7 +435,7 @@ function mapMatter(raw: Record<string, unknown>): Matter {
     priority: asEnum(raw.priority, PRIORITIES, "normal"),
     healthScore: Number(raw.health_score ?? raw.healthScore ?? 0),
     leadAdvocateId: normalizedLeadAdvocateId,
-    leadAttorneyId: normalizedLeadAdvocateId,
+
     targetCloseDate: parseDateOrNull(raw.target_close_date ?? raw.targetCloseDate),
     valueInPaise: (raw.value_in_paise as number | null) ?? null,
     dealValuePaise: normalizedDealValuePaise,

@@ -97,6 +97,3 @@ export const EVIDENTIS_PLANS: EvidentisPlan[] = [
   },
 ];
 
-export function getPlanByKey(key: string): EvidentisPlan | undefined {
-  return EVIDENTIS_PLANS.find((p) => p.key === key);
-}

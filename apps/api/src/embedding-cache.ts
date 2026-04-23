@@ -3,8 +3,8 @@
  * Redis-based caching for embeddings and search results
  */
 
+import crypto from 'node:crypto';
 import { Redis } from 'ioredis';
-import crypto from 'crypto';
 import { config } from './config.js';
 import { logger } from './logger.js';
 
@@ -54,11 +54,11 @@ const EMBEDDING_TTL_SECONDS = 86400 * 30; // 30 days (embeddings rarely change)
 
 export function assertEmbeddingDimension(
   vector: number[],
-  context: string
+  context: string,
 ): void {
   if (vector.length !== config.EMBEDDING_DIM) {
     throw new Error(
-      `Embedding dimension mismatch (${context}): expected ${config.EMBEDDING_DIM}, got ${vector.length}`
+      `Embedding dimension mismatch (${context}): expected ${config.EMBEDDING_DIM}, got ${vector.length}`,
     );
   }
 }
@@ -68,20 +68,23 @@ export function assertEmbeddingDimension(
  */
 export async function getCachedEmbedding(
   text: string,
-  model: string
+  model: string,
 ): Promise<number[] | null> {
   try {
     const client = getRedis();
     const key = `${EMBEDDING_PREFIX}:${model}:${hashText(text)}`;
-    
+
     const cached = await client.get(key);
     if (!cached) return null;
-    
+
     const parsed: CachedEmbedding = JSON.parse(cached);
     try {
       assertEmbeddingDimension(parsed.vector, `cache read for model ${model}`);
     } catch (error) {
-      logger.warn({ key, model, error }, 'Discarding invalid embedding cache entry');
+      logger.warn(
+        { key, model, error },
+        'Discarding invalid embedding cache entry',
+      );
       await client.del(key);
       return null;
     }
@@ -99,19 +102,19 @@ export async function getCachedEmbedding(
 export async function cacheEmbedding(
   text: string,
   model: string,
-  vector: number[]
+  vector: number[],
 ): Promise<void> {
   assertEmbeddingDimension(vector, `cache write for model ${model}`);
   try {
     const client = getRedis();
     const key = `${EMBEDDING_PREFIX}:${model}:${hashText(text)}`;
-    
+
     const data: CachedEmbedding = {
       vector,
       model,
       cachedAt: new Date().toISOString(),
     };
-    
+
     await client.setex(key, EMBEDDING_TTL_SECONDS, JSON.stringify(data));
     logger.debug({ key, model, dimensions: vector.length }, 'Embedding cached');
   } catch (error) {
@@ -144,16 +147,16 @@ const SEARCH_TTL_SECONDS = 300; // 5 minutes (search results change more often)
 export async function getCachedSearch(
   tenantId: string,
   query: string,
-  filters: Record<string, any> = {}
+  filters: Record<string, any> = {},
 ): Promise<CachedSearchResult['results'] | null> {
   try {
     const client = getRedis();
     const filterHash = hashText(JSON.stringify(filters));
     const key = `${SEARCH_PREFIX}:${tenantId}:${hashText(query)}:${filterHash}`;
-    
+
     const cached = await client.get(key);
     if (!cached) return null;
-    
+
     const parsed: CachedSearchResult = JSON.parse(cached);
     logger.debug({ key, query: query.slice(0, 50) }, 'Search cache hit');
     return parsed.results;
@@ -170,20 +173,20 @@ export async function cacheSearchResults(
   tenantId: string,
   query: string,
   filters: Record<string, any>,
-  results: CachedSearchResult['results']
+  results: CachedSearchResult['results'],
 ): Promise<void> {
   try {
     const client = getRedis();
     const filterHash = hashText(JSON.stringify(filters));
     const key = `${SEARCH_PREFIX}:${tenantId}:${hashText(query)}:${filterHash}`;
-    
+
     const data: CachedSearchResult = {
       results,
       query,
       filters,
       cachedAt: new Date().toISOString(),
     };
-    
+
     await client.setex(key, SEARCH_TTL_SECONDS, JSON.stringify(data));
     logger.debug({ key, resultCount: results.length }, 'Search results cached');
   } catch (error) {
@@ -202,15 +205,15 @@ const DOCUMENT_TTL_SECONDS = 3600; // 1 hour
  */
 export async function getCachedDocument<T>(
   tenantId: string,
-  documentId: string
+  documentId: string,
 ): Promise<T | null> {
   try {
     const client = getRedis();
     const key = `${DOCUMENT_PREFIX}:${tenantId}:${documentId}`;
-    
+
     const cached = await client.get(key);
     if (!cached) return null;
-    
+
     return JSON.parse(cached);
   } catch (error) {
     logger.warn({ error }, 'Document cache read error');
@@ -224,12 +227,12 @@ export async function getCachedDocument<T>(
 export async function cacheDocument(
   tenantId: string,
   documentId: string,
-  data: any
+  data: any,
 ): Promise<void> {
   try {
     const client = getRedis();
     const key = `${DOCUMENT_PREFIX}:${tenantId}:${documentId}`;
-    
+
     await client.setex(key, DOCUMENT_TTL_SECONDS, JSON.stringify(data));
   } catch (error) {
     logger.warn({ error }, 'Document cache write error');
@@ -241,7 +244,7 @@ export async function cacheDocument(
  */
 export async function invalidateDocumentCache(
   tenantId: string,
-  documentId: string
+  documentId: string,
 ): Promise<void> {
   try {
     const client = getRedis();
@@ -255,15 +258,20 @@ export async function invalidateDocumentCache(
 /**
  * Invalidate all search caches for tenant (call when documents change)
  */
-export async function invalidateTenantSearchCache(tenantId: string): Promise<void> {
+export async function invalidateTenantSearchCache(
+  tenantId: string,
+): Promise<void> {
   try {
     const client = getRedis();
     const pattern = `${SEARCH_PREFIX}:${tenantId}:*`;
-    
+
     const keys = await client.keys(pattern);
     if (keys.length > 0) {
       await client.del(...keys);
-      logger.debug({ tenantId, keysDeleted: keys.length }, 'Search cache invalidated');
+      logger.debug(
+        { tenantId, keysDeleted: keys.length },
+        'Search cache invalidated',
+      );
     }
   } catch (error) {
     logger.warn({ error }, 'Search cache invalidation error');
@@ -285,14 +293,16 @@ interface AIQuotaUsage {
 /**
  * Get current AI usage for tenant
  */
-export async function getAIQuotaUsage(tenantId: string): Promise<AIQuotaUsage | null> {
+export async function getAIQuotaUsage(
+  tenantId: string,
+): Promise<AIQuotaUsage | null> {
   try {
     const client = getRedis();
     const key = `${AI_QUOTA_PREFIX}:${tenantId}`;
-    
+
     const cached = await client.get(key);
     if (!cached) return null;
-    
+
     return JSON.parse(cached);
   } catch (error) {
     logger.warn({ error }, 'AI quota read error');
@@ -305,24 +315,24 @@ export async function getAIQuotaUsage(tenantId: string): Promise<AIQuotaUsage | 
  */
 export async function incrementAIQuota(
   tenantId: string,
-  tokensUsed: number
+  tokensUsed: number,
 ): Promise<AIQuotaUsage> {
   try {
     const client = getRedis();
     const key = `${AI_QUOTA_PREFIX}:${tenantId}`;
-    
+
     const existing = await getAIQuotaUsage(tenantId);
     const now = new Date();
-    
+
     // Reset window at start of month
     const windowStart = existing?.windowStart
       ? new Date(existing.windowStart)
       : now;
-    
-    const isNewMonth = 
+
+    const isNewMonth =
       now.getUTCMonth() !== windowStart.getUTCMonth() ||
       now.getUTCFullYear() !== windowStart.getUTCFullYear();
-    
+
     const usage: AIQuotaUsage = isNewMonth
       ? {
           tokensUsed,
@@ -334,18 +344,26 @@ export async function incrementAIQuota(
           requestCount: (existing?.requestCount || 0) + 1,
           windowStart: existing?.windowStart || now.toISOString(),
         };
-    
+
     // Set TTL to end of month + 1 day buffer
-    const daysInMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getUTCDate();
+    const daysInMonth = new Date(
+      now.getUTCFullYear(),
+      now.getUTCMonth() + 1,
+      0,
+    ).getUTCDate();
     const daysRemaining = daysInMonth - now.getUTCDate() + 1;
     const ttl = daysRemaining * 86400;
-    
+
     await client.setex(key, ttl, JSON.stringify(usage));
     return usage;
   } catch (error) {
     logger.warn({ error }, 'AI quota increment error');
     // Return empty usage on error to avoid blocking requests
-    return { tokensUsed, requestCount: 1, windowStart: new Date().toISOString() };
+    return {
+      tokensUsed,
+      requestCount: 1,
+      windowStart: new Date().toISOString(),
+    };
   }
 }
 

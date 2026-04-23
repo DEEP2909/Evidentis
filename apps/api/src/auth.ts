@@ -3,8 +3,8 @@
  * RS256 JWT token issuance and validation
  */
 
-import fs from 'fs';
-import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
+import fs from 'node:fs';
+import { type JWTPayload, SignJWT, jwtVerify } from 'jose';
 import { config, isProduction } from './config.js';
 import { logger } from './logger.js';
 
@@ -18,6 +18,7 @@ export interface TokenPayload extends JWTPayload {
   email: string;
   role: string;
   type: 'access' | 'refresh';
+  fingerprint?: string; // Hash of User-Agent + truncated IP
 }
 
 export interface AccessTokenPayload extends TokenPayload {
@@ -42,7 +43,9 @@ async function loadKeys(): Promise<void> {
   try {
     // In development/test without keys, generate ephemeral keys
     if (!fs.existsSync(config.JWT_PRIVATE_KEY_PATH) && !isProduction) {
-      logger.warn('JWT keys not found, using ephemeral keys (development only)');
+      logger.warn(
+        'JWT keys not found, using ephemeral keys (development only)',
+      );
       const keyPair = await crypto.subtle.generateKey(
         {
           name: 'RSASSA-PKCS1-v1_5',
@@ -51,7 +54,7 @@ async function loadKeys(): Promise<void> {
           hash: 'SHA-256',
         },
         true,
-        ['sign', 'verify']
+        ['sign', 'verify'],
       );
       privateKey = keyPair.privateKey;
       publicKey = keyPair.publicKey;
@@ -66,7 +69,7 @@ async function loadKeys(): Promise<void> {
       pemToBuffer(privateKeyPem, 'PRIVATE'),
       { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
       false,
-      ['sign']
+      ['sign'],
     );
 
     publicKey = await crypto.subtle.importKey(
@@ -74,7 +77,7 @@ async function loadKeys(): Promise<void> {
       pemToBuffer(publicKeyPem, 'PUBLIC'),
       { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
       false,
-      ['verify']
+      ['verify'],
     );
 
     logger.info('JWT keys loaded successfully');
@@ -108,6 +111,7 @@ export async function generateAccessToken(payload: {
   tenantId: string;
   email: string;
   role: string;
+  fingerprint?: string;
 }): Promise<string> {
   await loadKeys();
   if (!privateKey) throw new Error('Private key not loaded');
@@ -135,6 +139,7 @@ export async function generateRefreshToken(payload: {
   email: string;
   role: string;
   tokenId: string;
+  fingerprint?: string;
 }): Promise<string> {
   await loadKeys();
   if (!privateKey) throw new Error('Private key not loaded');
@@ -159,19 +164,19 @@ export async function createAccessToken(payload: {
   tenantId: string;
   email: string;
   role: string;
+  fingerprint?: string;
 }): Promise<string> {
   return generateAccessToken(payload);
 }
 
-export async function createRefreshToken(
-  payload: {
-    sub: string;
-    tenantId: string;
-    email: string;
-    role: string;
-    tokenId?: string;
-  }
-): Promise<string> {
+export async function createRefreshToken(payload: {
+  sub: string;
+  tenantId: string;
+  email: string;
+  role: string;
+  tokenId?: string;
+  fingerprint?: string;
+}): Promise<string> {
   return generateRefreshToken({
     sub: payload.sub,
     tenantId: payload.tenantId,
@@ -181,6 +186,24 @@ export async function createRefreshToken(
   });
 }
 
+/**
+ * Generate a fingerprint for a request
+ */
+export function generateFingerprint(userAgent: string, ip: string): string {
+  // Truncate IP to /24 (IPv4) or /48 (IPv6) to handle slight network variations
+  let ipRange = ip;
+  if (ip.includes('.')) {
+    ipRange = ip.split('.').slice(0, 3).join('.');
+  } else if (ip.includes(':')) {
+    ipRange = ip.split(':').slice(0, 3).join(':');
+  }
+
+  return crypto
+    .createHash('sha256')
+    .update(`${userAgent}|${ipRange}`)
+    .digest('hex');
+}
+
 // ============================================================
 // TOKEN VERIFICATION
 // ============================================================
@@ -188,7 +211,9 @@ export async function createRefreshToken(
 /**
  * Verify and decode an access token
  */
-export async function verifyAccessToken(token: string): Promise<AccessTokenPayload> {
+export async function verifyAccessToken(
+  token: string,
+): Promise<AccessTokenPayload> {
   await loadKeys();
   if (!publicKey) throw new Error('Public key not loaded');
 
@@ -208,7 +233,9 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenPaylo
 /**
  * Verify and decode a refresh token
  */
-export async function verifyRefreshToken(token: string): Promise<RefreshTokenPayload> {
+export async function verifyRefreshToken(
+  token: string,
+): Promise<RefreshTokenPayload> {
   await loadKeys();
   if (!publicKey) throw new Error('Public key not loaded');
 

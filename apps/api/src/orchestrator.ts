@@ -4,7 +4,7 @@
  * Uses BullMQ Flow for declarative job chaining
  */
 
-import { FlowProducer, type FlowJob, Queue, Job } from 'bullmq';
+import { type FlowJob, FlowProducer, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -15,11 +15,11 @@ import { logger } from './logger.js';
 
 /**
  * Document processing pipeline stages:
- * 1. Upload (sync) → 2. Scan → 3. Ingest/OCR → 4. Chunk/Embed → 
+ * 1. Upload (sync) → 2. Scan → 3. Ingest/OCR → 4. Chunk/Embed →
  * 5. Extract Clauses → 6. Assess Risk → 7. Extract Obligations → 8. Complete
  */
 
-export type PipelineStage = 
+export type PipelineStage =
   | 'uploaded'
   | 'scanning'
   | 'scanned'
@@ -128,15 +128,24 @@ export interface StartPipelineOptions {
  * Start the full document processing pipeline
  * Creates a flow of dependent jobs
  */
-export async function startDocumentPipeline(options: StartPipelineOptions): Promise<string> {
-  const { tenantId, documentId, matterId, fileUri, priority = 0, skipScan = false } = options;
-  
+export async function startDocumentPipeline(
+  options: StartPipelineOptions,
+): Promise<string> {
+  const {
+    tenantId,
+    documentId,
+    matterId,
+    fileUri,
+    priority = 0,
+    skipScan = false,
+  } = options;
+
   const flowId = `pipeline:${documentId}`;
-  
+
   logger.info({ tenantId, documentId, matterId }, 'Starting document pipeline');
 
   const producer = getFlowProducer();
-  
+
   // Build the flow tree (executed bottom-up)
   const flow: FlowJob = {
     name: 'pipeline.complete',
@@ -173,30 +182,35 @@ export async function startDocumentPipeline(options: StartPipelineOptions): Prom
                         queueName: 'document',
                         data: { tenantId, documentId },
                         opts: { priority },
-                        children: skipScan ? [] : [
-                          {
-                            name: 'document.scan',
-                            queueName: 'document',
-                            data: { tenantId, documentId, fileUri },
-                            opts: { priority },
-                          }
-                        ],
-                      }
+                        children: skipScan
+                          ? []
+                          : [
+                              {
+                                name: 'document.scan',
+                                queueName: 'document',
+                                data: { tenantId, documentId, fileUri },
+                                opts: { priority },
+                              },
+                            ],
+                      },
                     ],
-                  }
+                  },
                 ],
-              }
+              },
             ],
-          }
+          },
         ],
-      }
+      },
     ],
   };
 
   const result = await producer.add(flow);
-  
-  logger.info({ tenantId, documentId, flowId: result.job.id }, 'Document pipeline started');
-  
+
+  logger.info(
+    { tenantId, documentId, flowId: result.job.id },
+    'Document pipeline started',
+  );
+
   return result.job.id || flowId;
 }
 
@@ -205,15 +219,15 @@ export async function startDocumentPipeline(options: StartPipelineOptions): Prom
  */
 export async function getPipelineStatus(
   tenantId: string,
-  documentId: string
+  documentId: string,
 ): Promise<PipelineStatus | null> {
   const redis = getStatusClient();
-  
+
   const key = `pipeline:status:${tenantId}:${documentId}`;
   const data = await redis.get(key);
-  
+
   if (!data) return null;
-  
+
   return JSON.parse(data) as PipelineStatus;
 }
 
@@ -227,18 +241,24 @@ export async function updatePipelineStatus(
   documentId: string,
   stage: PipelineStage,
   progress?: number,
-  errorMessage?: string
+  errorMessage?: string,
 ): Promise<void> {
   const redis = getStatusClient();
-  
+
   const key = `pipeline:status:${tenantId}:${documentId}`;
   const existing = await redis.get(key);
-  
+
   const now = new Date();
-  const computedProgress = progress !== undefined ? progress : STAGE_WEIGHTS[stage];
-  
-  const status: PipelineStatus = existing 
-    ? { ...JSON.parse(existing), stage, updatedAt: now, progress: computedProgress }
+  const computedProgress =
+    progress !== undefined ? progress : STAGE_WEIGHTS[stage];
+
+  const status: PipelineStatus = existing
+    ? {
+        ...JSON.parse(existing),
+        stage,
+        updatedAt: now,
+        progress: computedProgress,
+      }
     : {
         documentId,
         tenantId,
@@ -248,26 +268,29 @@ export async function updatePipelineStatus(
         startedAt: now,
         updatedAt: now,
       };
-  
+
   if (errorMessage) {
     status.error = errorMessage;
   }
-  
+
   if (stage === 'completed' || stage === 'failed') {
     status.completedAt = now;
   }
-  
+
   // Store with 24h TTL
   await redis.setex(key, 86400, JSON.stringify(status));
-  
+
   // Publish status update for real-time notifications
-  await redis.publish(`pipeline:${tenantId}`, JSON.stringify({
-    type: 'pipeline_status',
-    documentId,
-    stage,
-    progress: status.progress,
-    error: errorMessage,
-  }));
+  await redis.publish(
+    `pipeline:${tenantId}`,
+    JSON.stringify({
+      type: 'pipeline_status',
+      documentId,
+      stage,
+      progress: status.progress,
+      error: errorMessage,
+    }),
+  );
 }
 
 /**
@@ -276,67 +299,81 @@ export async function updatePipelineStatus(
  */
 export async function cancelPipeline(
   tenantId: string,
-  documentId: string
+  documentId: string,
 ): Promise<boolean> {
   const connection = getQueueConnection();
-  
+
   try {
     // Get current status
     const status = await getPipelineStatus(tenantId, documentId);
     if (!status) {
-      logger.warn({ tenantId, documentId }, 'Cannot cancel: pipeline not found');
+      logger.warn(
+        { tenantId, documentId },
+        'Cannot cancel: pipeline not found',
+      );
       return false;
     }
-    
+
     if (status.stage === 'completed' || status.stage === 'failed') {
-      logger.info({ tenantId, documentId }, 'Pipeline already finished, nothing to cancel');
+      logger.info(
+        { tenantId, documentId },
+        'Pipeline already finished, nothing to cancel',
+      );
       return true;
     }
-    
+
     // List of all pipeline queues to check
     const queueNames = ['document', 'clause', 'risk', 'obligation'];
-    
+
     let removedCount = 0;
-    
+
     // Iterate each queue and remove jobs matching this document
     for (const queueName of queueNames) {
       const queue = new Queue(queueName, { connection });
-      
+
       // Get waiting jobs
       const waitingJobs = await queue.getWaiting(0, 1000);
       for (const job of waitingJobs) {
-        if (job.data?.documentId === documentId && job.data?.tenantId === tenantId) {
+        if (
+          job.data?.documentId === documentId &&
+          job.data?.tenantId === tenantId
+        ) {
           await job.remove();
           removedCount++;
           logger.debug({ queueName, jobId: job.id }, 'Removed waiting job');
         }
       }
-      
+
       // Get delayed jobs
       const delayedJobs = await queue.getDelayed(0, 1000);
       for (const job of delayedJobs) {
-        if (job.data?.documentId === documentId && job.data?.tenantId === tenantId) {
+        if (
+          job.data?.documentId === documentId &&
+          job.data?.tenantId === tenantId
+        ) {
           await job.remove();
           removedCount++;
           logger.debug({ queueName, jobId: job.id }, 'Removed delayed job');
         }
       }
-      
+
       await queue.close();
     }
-    
+
     // Update pipeline status to failed with cancellation message
     await updatePipelineStatus(
       tenantId,
       documentId,
       'failed',
       -1,
-      'Cancelled by user'
+      'Cancelled by user',
     );
-    
-    logger.info({ tenantId, documentId, removedCount }, 'Pipeline cancelled successfully');
+
+    logger.info(
+      { tenantId, documentId, removedCount },
+      'Pipeline cancelled successfully',
+    );
     return true;
-    
   } catch (error) {
     logger.error({ tenantId, documentId, error }, 'Failed to cancel pipeline');
     return false;

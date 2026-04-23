@@ -134,6 +134,10 @@ async function storeChallenge(
     return;
   }
 
+  if (config.NODE_ENV === 'production') {
+    throw new Error('Redis unavailable — cannot store WebAuthn challenge');
+  }
+
   challengeStore.set(key, record);
 
   // Cleanup old challenges periodically when Redis is unavailable.
@@ -640,15 +644,22 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: pg.Pool | pg.Po
         displayName = '',
       } = request.user as RequestUser;
 
-      const options = await generatePasskeyRegistrationOptions(
-        db,
-        tenantId,
-        advocateId,
-        email,
-        displayName,
-      );
+      try {
+        const options = await generatePasskeyRegistrationOptions(
+          db,
+          tenantId,
+          advocateId,
+          email,
+          displayName,
+        );
 
-      return options;
+        return options;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Redis unavailable')) {
+          return _reply.status(503).send({ error: 'Authentication service temporarily unavailable' });
+        }
+        throw error;
+      }
     },
   );
 
@@ -768,22 +779,29 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: pg.Pool | pg.Po
         }
       }
 
-      const options = await generatePasskeyAuthenticationOptions(
-        db,
-        tenantId,
-        advocateId,
-      );
+      try {
+        const options = await generatePasskeyAuthenticationOptions(
+          db,
+          tenantId,
+          advocateId,
+        );
 
-      // Store the challenge in session/cookie for verification
-      reply.setCookie('webauthn_challenge', options.challenge, {
-        httpOnly: true,
-        secure: config.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 300, // 5 minutes
-        path: '/auth',
-      });
+        // Store the challenge in session/cookie for verification
+        reply.setCookie('webauthn_challenge', options.challenge, {
+          httpOnly: true,
+          secure: config.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 300, // 5 minutes
+          path: '/auth',
+        });
 
-      return options;
+        return options;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Redis unavailable')) {
+          return reply.status(503).send({ error: 'Authentication service temporarily unavailable' });
+        }
+        throw error;
+      }
     },
   );
 

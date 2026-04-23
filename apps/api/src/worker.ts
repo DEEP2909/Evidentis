@@ -7,7 +7,6 @@
 import crypto from 'node:crypto';
 import axios from 'axios';
 import { type Job, Queue, Worker } from 'bullmq';
-import { Redis } from 'ioredis';
 import { config } from './config.js';
 import { pool } from './database.js';
 import { sendMalwareAlertEmail } from './email.js';
@@ -24,15 +23,8 @@ import {
 } from './repository.js';
 import { downloadFile, moveFile } from './storage.js';
 import { addSpanEvent, traceJob } from './tracing.js';
+import { redis as connection } from './redis.js';
 
-// ============================================================================
-// Redis Connection
-// ============================================================================
-
-const connection = new Redis(config.REDIS_URL, {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-});
 
 // ============================================================================
 // Retry & Job Configuration
@@ -108,6 +100,31 @@ async function moveToDeadLetter(job: Job, error: Error): Promise<void> {
   });
 }
 
+/**
+ * Tenant Isolation Wrapper for Workers
+ * Ensures tenantId is present and provides a scoped logger/context
+ */
+function withTenantIsolation<T extends { tenantId: string }>(
+  processor: (job: Job<T>) => Promise<any>,
+) {
+  return async (job: Job<T>) => {
+    const { tenantId } = job.data;
+
+    if (!tenantId) {
+      logger.error({ jobId: job.id, jobName: job.name }, 'Job missing tenantId');
+      throw new Error('Tenant isolation violation: Missing tenantId');
+    }
+
+    const childLogger = logger.child({ tenantId, jobId: job.id });
+    try {
+      return await processor(job);
+    } catch (error) {
+      childLogger.error({ err: error }, 'Worker processor failed');
+      throw error;
+    }
+  };
+}
+
 // ============================================================================
 // Job Types
 // ============================================================================
@@ -158,7 +175,7 @@ interface MatterRow {
 
 const documentScanWorker = new Worker<DocumentScanJob>(
   'document',
-  async (job: Job<DocumentScanJob>) => {
+  withTenantIsolation(async (job: Job<DocumentScanJob>) => {
     if (job.name !== 'document.scan') return;
 
     const { tenantId, documentId, fileUri } = job.data;
@@ -287,7 +304,7 @@ const documentScanWorker = new Worker<DocumentScanJob>(
           documentId,
           'failed',
           -1,
-          error.message,
+          error instanceof Error ? error.message : 'Unknown error',
         );
         throw error;
       }
@@ -306,7 +323,7 @@ const documentScanWorker = new Worker<DocumentScanJob>(
 
 const documentIngestWorker = new Worker<DocumentIngestJob>(
   'document',
-  async (job: Job<DocumentIngestJob>) => {
+  withTenantIsolation(async (job: Job<DocumentIngestJob>) => {
     if (job.name !== 'document.ingest') return;
 
     const { tenantId, documentId } = job.data;
@@ -452,7 +469,7 @@ const documentIngestWorker = new Worker<DocumentIngestJob>(
 
 const clauseExtractWorker = new Worker<ClauseExtractJob>(
   'clause',
-  async (job: Job<ClauseExtractJob>) => {
+  withTenantIsolation(async (job: Job<ClauseExtractJob>) => {
     if (job.name !== 'clause.extract') return;
 
     const { tenantId, documentId, matterId } = job.data;
@@ -545,7 +562,7 @@ const clauseExtractWorker = new Worker<ClauseExtractJob>(
           documentId,
           'failed',
           -1,
-          error.message,
+          error instanceof Error ? error.message : 'Unknown error',
         );
         throw error;
       }
@@ -560,7 +577,7 @@ const clauseExtractWorker = new Worker<ClauseExtractJob>(
 
 const riskAssessWorker = new Worker<RiskAssessJob>(
   'risk',
-  async (job: Job<RiskAssessJob>) => {
+  withTenantIsolation(async (job: Job<RiskAssessJob>) => {
     if (job.name !== 'risk.assess') return;
 
     const { tenantId, documentId, matterId } = job.data;
@@ -668,7 +685,7 @@ const riskAssessWorker = new Worker<RiskAssessJob>(
           documentId,
           'failed',
           -1,
-          error.message,
+          error instanceof Error ? error.message : 'Unknown error',
         );
         throw error;
       }
@@ -683,7 +700,7 @@ const riskAssessWorker = new Worker<RiskAssessJob>(
 
 const obligationExtractWorker = new Worker<ObligationExtractJob>(
   'obligation',
-  async (job: Job<ObligationExtractJob>) => {
+  withTenantIsolation(async (job: Job<ObligationExtractJob>) => {
     if (job.name !== 'obligation.extract') return;
 
     const { tenantId, documentId, matterId } = job.data;
@@ -768,7 +785,7 @@ const obligationExtractWorker = new Worker<ObligationExtractJob>(
           documentId,
           'failed',
           -1,
-          error.message,
+          error instanceof Error ? error.message : 'Unknown error',
         );
         throw error;
       }

@@ -28,7 +28,6 @@ type Kpi = {
 function isAssignedMatter(
   matter: {
     leadAdvocateId?: string | null;
-    leadAttorneyId?: string | null;
     createdBy?: string | null;
   },
   userId?: string
@@ -36,7 +35,6 @@ function isAssignedMatter(
   if (!userId) return false;
   return (
     matter.leadAdvocateId === userId ||
-    matter.leadAttorneyId === userId ||
     matter.createdBy === userId
   );
 }

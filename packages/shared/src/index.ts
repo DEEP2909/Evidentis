@@ -699,13 +699,9 @@ export interface Matter {
   priority: Priority;
   healthScore: number;
   leadAdvocateId: string | null;
-  /** @deprecated Use leadAdvocateId */
-  leadAttorneyId?: string | null;
   targetCloseDate: Date | null;
   valueInPaise: number | null;
   dealValuePaise?: number | null;
-  /** @deprecated Use dealValuePaise */
-  dealValueCents?: number | null;
   notes: string | null;
   tags: string[];
   courtName: string | null;
@@ -1111,13 +1107,9 @@ export interface MatterCreateRequest {
   governingLawState?: IndianStateCode;
   priority?: Priority;
   leadAdvocateId?: string;
-  /** @deprecated Use leadAdvocateId */
-  leadAttorneyId?: string;
   targetCloseDate?: string;
   valueInPaise?: number;
   dealValuePaise?: number;
-  /** @deprecated Use dealValuePaise */
-  dealValueCents?: number;
   notes?: string;
   tags?: string[];
   courtName?: string;

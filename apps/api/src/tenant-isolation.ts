@@ -4,10 +4,14 @@
  * CRITICAL: Every database query MUST be filtered by tenant_id
  */
 
-import { type FastifyRequest, type FastifyReply, type FastifyPluginCallback } from 'fastify';
+import type {
+  FastifyPluginCallback,
+  FastifyReply,
+  FastifyRequest,
+} from 'fastify';
 import fp from 'fastify-plugin';
-import { logger } from './logger.js';
 import { pool } from './database.js';
+import { logger } from './logger.js';
 
 type SortDirection = 'ASC' | 'DESC';
 
@@ -36,17 +40,34 @@ const TENANT_TABLE_ALIASES: Record<string, string> = {
 const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   attorneys: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'updated_at', 'display_name', 'email', 'status']),
+    sortableColumns: new Set([
+      'created_at',
+      'updated_at',
+      'display_name',
+      'email',
+      'status',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   matters: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'updated_at', 'matter_name', 'matter_code', 'status']),
+    sortableColumns: new Set([
+      'created_at',
+      'updated_at',
+      'matter_name',
+      'matter_code',
+      'status',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   documents: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'updated_at', 'source_name', 'ingestion_status']),
+    sortableColumns: new Set([
+      'created_at',
+      'updated_at',
+      'source_name',
+      'ingestion_status',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   document_chunks: {
@@ -91,7 +112,12 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   },
   workflow_jobs: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'updated_at', 'status', 'job_type']),
+    sortableColumns: new Set([
+      'created_at',
+      'updated_at',
+      'status',
+      'job_type',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   research_history: {
@@ -196,7 +222,11 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   },
   court_cases: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'last_synced_at', 'next_hearing_date']),
+    sortableColumns: new Set([
+      'created_at',
+      'last_synced_at',
+      'next_hearing_date',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   hearing_dates: {
@@ -216,7 +246,12 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   },
   case_citations: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'judgment_date', 'court', 'citation_number']),
+    sortableColumns: new Set([
+      'created_at',
+      'judgment_date',
+      'court',
+      'citation_number',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   saved_judgments: {
@@ -226,7 +261,12 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   },
   legal_notices: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'response_deadline_at', 'sent_at', 'notice_type']),
+    sortableColumns: new Set([
+      'created_at',
+      'response_deadline_at',
+      'sent_at',
+      'notice_type',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   notifications: {
@@ -241,12 +281,22 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
   },
   dpdp_requests: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'resolved_at', 'status', 'request_type']),
+    sortableColumns: new Set([
+      'created_at',
+      'resolved_at',
+      'status',
+      'request_type',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   invoices: {
     supportsSoftDelete: false,
-    sortableColumns: new Set(['created_at', 'issue_date', 'due_date', 'status']),
+    sortableColumns: new Set([
+      'created_at',
+      'issue_date',
+      'due_date',
+      'status',
+    ]),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   invoice_line_items: {
@@ -328,9 +378,15 @@ function getSafeTableName(table: string): string {
   return quoteIdentifier(normalized);
 }
 
-function parseOrderBy(orderBy: string, sortableColumns: Set<string>): { column: string; direction: SortDirection } {
+function parseOrderBy(
+  orderBy: string,
+  sortableColumns: Set<string>,
+): { column: string; direction: SortDirection } {
   const [rawColumn, rawDirection] = orderBy.trim().split(/\s+/, 2);
-  const column = assertSafeIdentifier(rawColumn, 'orderBy column').toLowerCase();
+  const column = assertSafeIdentifier(
+    rawColumn,
+    'orderBy column',
+  ).toLowerCase();
   if (!sortableColumns.has(column)) {
     throw new Error(`Unsupported orderBy column: ${column}`);
   }
@@ -342,12 +398,23 @@ function resolveTenantScope(config: TenantTableConfig): TenantScopeConfig {
   return config.tenantScope ?? { mode: 'column', column: 'tenant_id' };
 }
 
-function getSafeParentScope(scope: Extract<TenantScopeConfig, { mode: 'parent' }>) {
-  const safeParentTable = quoteIdentifier(assertSafeIdentifier(scope.parentTable, 'parent scope table').toLowerCase());
-  const safeLocalColumn = quoteIdentifier(assertSafeIdentifier(scope.localColumn, 'parent scope local column'));
-  const safeParentIdColumn = quoteIdentifier(assertSafeIdentifier(scope.parentIdColumn, 'parent scope parent id column'));
+function getSafeParentScope(
+  scope: Extract<TenantScopeConfig, { mode: 'parent' }>,
+) {
+  const safeParentTable = quoteIdentifier(
+    assertSafeIdentifier(scope.parentTable, 'parent scope table').toLowerCase(),
+  );
+  const safeLocalColumn = quoteIdentifier(
+    assertSafeIdentifier(scope.localColumn, 'parent scope local column'),
+  );
+  const safeParentIdColumn = quoteIdentifier(
+    assertSafeIdentifier(scope.parentIdColumn, 'parent scope parent id column'),
+  );
   const safeParentTenantColumn = quoteIdentifier(
-    assertSafeIdentifier(scope.parentTenantColumn, 'parent scope parent tenant column')
+    assertSafeIdentifier(
+      scope.parentTenantColumn,
+      'parent scope parent tenant column',
+    ),
   );
   return {
     safeParentTable,
@@ -360,14 +427,16 @@ function getSafeParentScope(scope: Extract<TenantScopeConfig, { mode: 'parent' }
 function getTenantScopeSelectParts(
   scope: TenantScopeConfig,
   tenantParamIndex: number,
-  localAlias: string
+  localAlias: string,
 ): { joins: string[]; filters: string[] } {
   if (scope.mode === 'global') {
     return { joins: [], filters: [] };
   }
 
   if (scope.mode === 'column') {
-    const safeTenantColumn = quoteIdentifier(assertSafeIdentifier(scope.column, 'tenant scope column'));
+    const safeTenantColumn = quoteIdentifier(
+      assertSafeIdentifier(scope.column, 'tenant scope column'),
+    );
     return {
       joins: [],
       filters: [`${localAlias}.${safeTenantColumn} = $${tenantParamIndex}`],
@@ -385,10 +454,12 @@ function getTenantScopeSelectParts(
 
 function assertTenantScopedWriteAllowed(
   table: string,
-  scope: TenantScopeConfig
+  scope: TenantScopeConfig,
 ): asserts scope is Exclude<TenantScopeConfig, { mode: 'global' }> {
   if (scope.mode === 'global') {
-    throw new Error(`Writes to global table ${table} are not allowed via tenant-scoped helper`);
+    throw new Error(
+      `Writes to global table ${table} are not allowed via tenant-scoped helper`,
+    );
   }
 }
 
@@ -457,7 +528,9 @@ const TIER_LIMITS: Record<string, TenantLimits> = {
 /**
  * Load tenant context from database
  */
-async function loadTenantContext(tenantId: string): Promise<TenantContext | null> {
+async function loadTenantContext(
+  tenantId: string,
+): Promise<TenantContext | null> {
   try {
     const result = await pool.query<{
       id: string;
@@ -468,7 +541,7 @@ async function loadTenantContext(tenantId: string): Promise<TenantContext | null
       `SELECT id, name, plan, settings
        FROM tenants
        WHERE id = $1`,
-      [tenantId]
+      [tenantId],
     );
 
     if (result.rows.length === 0) {
@@ -483,10 +556,11 @@ async function loadTenantContext(tenantId: string): Promise<TenantContext | null
         ? (tenant.settings as Record<string, unknown>)
         : {};
     const featuresCandidate = tenantSettings.features;
-    const features =
-      Array.isArray(featuresCandidate)
-        ? featuresCandidate.filter((value): value is string => typeof value === 'string')
-        : [];
+    const features = Array.isArray(featuresCandidate)
+      ? featuresCandidate.filter(
+          (value): value is string => typeof value === 'string',
+        )
+      : [];
 
     return {
       tenantId: tenant.id,
@@ -507,7 +581,7 @@ async function loadTenantContext(tenantId: string): Promise<TenantContext | null
 export async function validateTenantOwnership(
   tenantId: string,
   table: string,
-  resourceId: string
+  resourceId: string,
 ): Promise<boolean> {
   try {
     const tableConfig = getTenantTableConfig(table);
@@ -523,11 +597,14 @@ export async function validateTenantOwnership(
     }
     const result = await pool.query(
       `SELECT 1 FROM ${safeTableName} t ${joinClauses.join(' ')} WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
-      [resourceId, tenantId]
+      [resourceId, tenantId],
     );
     return result.rows.length > 0;
   } catch (error) {
-    logger.error({ error, tenantId, table, resourceId }, 'Tenant ownership check failed');
+    logger.error(
+      { error, tenantId, table, resourceId },
+      'Tenant ownership check failed',
+    );
     return false;
   }
 }
@@ -542,11 +619,13 @@ export function createTenantScopedQuery(tenantId: string) {
      */
     async query<T = unknown>(
       sql: string,
-      params: unknown[] = []
+      params: unknown[] = [],
     ): Promise<T[]> {
       // Verify the query includes tenant_id filter
       if (!sql.toLowerCase().includes('tenant_id')) {
-        throw new Error('Query must include tenant_id filter for tenant isolation');
+        throw new Error(
+          'Query must include tenant_id filter for tenant isolation',
+        );
       }
 
       const result = await pool.query(sql, params);
@@ -570,7 +649,7 @@ export function createTenantScopedQuery(tenantId: string) {
       }
       const result = await pool.query(
         `SELECT t.* FROM ${safeTableName} t ${joinClauses.join(' ')} WHERE ${whereClauses.join(' AND ')}`,
-        [id, tenantId]
+        [id, tenantId],
       );
       return result.rows[0] || null;
     },
@@ -581,7 +660,7 @@ export function createTenantScopedQuery(tenantId: string) {
     async findMany<T = unknown>(
       table: string,
       conditions: Record<string, unknown> = {},
-      options: { limit?: number; offset?: number; orderBy?: string } = {}
+      options: { limit?: number; offset?: number; orderBy?: string } = {},
     ): Promise<T[]> {
       const tableConfig = getTenantTableConfig(table);
       const safeTableName = getSafeTableName(table);
@@ -595,7 +674,11 @@ export function createTenantScopedQuery(tenantId: string) {
         const tenantParamIndex = paramIndex;
         params.push(tenantId);
         paramIndex++;
-        const scopeParts = getTenantScopeSelectParts(scope, tenantParamIndex, 't');
+        const scopeParts = getTenantScopeSelectParts(
+          scope,
+          tenantParamIndex,
+          't',
+        );
         joinClauses.push(...scopeParts.joins);
         whereConditions.push(...scopeParts.filters);
       }
@@ -615,9 +698,12 @@ export function createTenantScopedQuery(tenantId: string) {
       if (whereConditions.length > 0) {
         sql += ` WHERE ${whereConditions.join(' AND ')}`;
       }
-      
+
       if (options.orderBy) {
-        const parsedOrder = parseOrderBy(options.orderBy, tableConfig.sortableColumns);
+        const parsedOrder = parseOrderBy(
+          options.orderBy,
+          tableConfig.sortableColumns,
+        );
         sql += ` ORDER BY t.${quoteIdentifier(parsedOrder.column)} ${parsedOrder.direction}`;
       }
       if (typeof options.limit === 'number') {
@@ -637,7 +723,10 @@ export function createTenantScopedQuery(tenantId: string) {
     /**
      * Insert with tenant scope
      */
-    async insert<T = unknown>(table: string, data: Record<string, unknown>): Promise<T> {
+    async insert<T = unknown>(
+      table: string,
+      data: Record<string, unknown>,
+    ): Promise<T> {
       const tableConfig = getTenantTableConfig(table);
       const safeTableName = getSafeTableName(table);
       const scope = resolveTenantScope(tableConfig);
@@ -645,12 +734,17 @@ export function createTenantScopedQuery(tenantId: string) {
 
       let dataWithTenant: Record<string, unknown>;
       if (scope.mode === 'column') {
-        const tenantColumn = assertSafeIdentifier(scope.column, 'tenant scope column');
+        const tenantColumn = assertSafeIdentifier(
+          scope.column,
+          'tenant scope column',
+        );
         dataWithTenant = { ...data, [tenantColumn]: tenantId };
       } else if (scope.mode === 'parent') {
         dataWithTenant = { ...data };
         if (!(scope.localColumn in dataWithTenant)) {
-          throw new Error(`Missing parent scope column '${scope.localColumn}' for ${table} insert`);
+          throw new Error(
+            `Missing parent scope column '${scope.localColumn}' for ${table} insert`,
+          );
         }
       } else {
         throw new Error(`Unsupported tenant scope mode for ${table}`);
@@ -659,11 +753,13 @@ export function createTenantScopedQuery(tenantId: string) {
       const columns = Object.keys(dataWithTenant);
       const values = Object.values(dataWithTenant);
       const placeholders = columns.map((_, i) => `$${i + 1}`);
-      const safeColumns = columns.map((column) => quoteIdentifier(assertSafeIdentifier(column, 'insert column')));
+      const safeColumns = columns.map((column) =>
+        quoteIdentifier(assertSafeIdentifier(column, 'insert column')),
+      );
 
       const result = await pool.query(
         `INSERT INTO ${safeTableName} (${safeColumns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
-        values
+        values,
       );
       return result.rows[0] as T;
     },
@@ -674,7 +770,7 @@ export function createTenantScopedQuery(tenantId: string) {
     async update<T = unknown>(
       table: string,
       id: string,
-      data: Record<string, unknown>
+      data: Record<string, unknown>,
     ): Promise<T | null> {
       if (Object.keys(data).length === 0) {
         return this.findById<T>(table, id);
@@ -685,7 +781,10 @@ export function createTenantScopedQuery(tenantId: string) {
       assertTenantScopedWriteAllowed(table, scope);
       const safeTableName = getSafeTableName(table);
       const updates = Object.entries(data)
-        .map(([key], i) => `${quoteIdentifier(assertSafeIdentifier(key, 'update column'))} = $${i + 3}`)
+        .map(
+          ([key], i) =>
+            `${quoteIdentifier(assertSafeIdentifier(key, 'update column'))} = $${i + 3}`,
+        )
         .join(', ');
       const values = [id, tenantId, ...Object.values(data)];
 
@@ -698,7 +797,7 @@ export function createTenantScopedQuery(tenantId: string) {
              AND t.${quoteIdentifier(assertSafeIdentifier(scope.column, 'tenant scope column'))} = $2
              ${tableConfig.supportsSoftDelete ? 'AND t.deleted_at IS NULL' : ''}
            RETURNING *`,
-          values
+          values,
         );
       } else if (scope.mode === 'parent') {
         result = await pool.query(
@@ -711,7 +810,7 @@ export function createTenantScopedQuery(tenantId: string) {
              AND p.${quoteIdentifier(assertSafeIdentifier(scope.parentTenantColumn, 'parent scope parent tenant column'))} = $2
              ${tableConfig.supportsSoftDelete ? 'AND t.deleted_at IS NULL' : ''}
            RETURNING t.*`,
-          values
+          values,
         );
       } else {
         throw new Error(`Unsupported tenant scope mode for ${table}`);
@@ -729,18 +828,20 @@ export function createTenantScopedQuery(tenantId: string) {
       assertTenantScopedWriteAllowed(table, scope);
       const safeTableName = getSafeTableName(table);
       if (scope.mode === 'column') {
-        const tenantColumn = quoteIdentifier(assertSafeIdentifier(scope.column, 'tenant scope column'));
+        const tenantColumn = quoteIdentifier(
+          assertSafeIdentifier(scope.column, 'tenant scope column'),
+        );
         if (tableConfig.supportsSoftDelete) {
           const result = await pool.query(
             `UPDATE ${safeTableName} SET deleted_at = NOW() WHERE id = $1 AND ${tenantColumn} = $2`,
-            [id, tenantId]
+            [id, tenantId],
           );
           return (result.rowCount || 0) > 0;
         }
 
         const result = await pool.query(
           `DELETE FROM ${safeTableName} WHERE id = $1 AND ${tenantColumn} = $2`,
-          [id, tenantId]
+          [id, tenantId],
         );
         return (result.rowCount || 0) > 0;
       }
@@ -749,11 +850,26 @@ export function createTenantScopedQuery(tenantId: string) {
         throw new Error(`Unsupported tenant scope mode for ${table}`);
       }
 
-      const safeParentTable = quoteIdentifier(assertSafeIdentifier(scope.parentTable, 'parent scope table').toLowerCase());
-      const safeLocalColumn = quoteIdentifier(assertSafeIdentifier(scope.localColumn, 'parent scope local column'));
-      const safeParentIdColumn = quoteIdentifier(assertSafeIdentifier(scope.parentIdColumn, 'parent scope parent id column'));
+      const safeParentTable = quoteIdentifier(
+        assertSafeIdentifier(
+          scope.parentTable,
+          'parent scope table',
+        ).toLowerCase(),
+      );
+      const safeLocalColumn = quoteIdentifier(
+        assertSafeIdentifier(scope.localColumn, 'parent scope local column'),
+      );
+      const safeParentIdColumn = quoteIdentifier(
+        assertSafeIdentifier(
+          scope.parentIdColumn,
+          'parent scope parent id column',
+        ),
+      );
       const safeParentTenantColumn = quoteIdentifier(
-        assertSafeIdentifier(scope.parentTenantColumn, 'parent scope parent tenant column')
+        assertSafeIdentifier(
+          scope.parentTenantColumn,
+          'parent scope parent tenant column',
+        ),
       );
 
       if (tableConfig.supportsSoftDelete) {
@@ -764,7 +880,7 @@ export function createTenantScopedQuery(tenantId: string) {
            WHERE t.id = $1
              AND t.${safeLocalColumn} = p.${safeParentIdColumn}
              AND p.${safeParentTenantColumn} = $2`,
-          [id, tenantId]
+          [id, tenantId],
         );
         return (result.rowCount || 0) > 0;
       }
@@ -775,7 +891,7 @@ export function createTenantScopedQuery(tenantId: string) {
          WHERE t.id = $1
            AND t.${safeLocalColumn} = p.${safeParentIdColumn}
            AND p.${safeParentTenantColumn} = $2`,
-        [id, tenantId]
+        [id, tenantId],
       );
       return (result.rowCount || 0) > 0;
     },
@@ -785,35 +901,47 @@ export function createTenantScopedQuery(tenantId: string) {
 /**
  * Fastify plugin for tenant isolation
  */
-const tenantIsolationPlugin: FastifyPluginCallback = (fastify, opts, done) => {
+const tenantIsolationPlugin: FastifyPluginCallback = (fastify, _opts, done) => {
   // Add hook to inject tenant context
-  fastify.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Skip for public routes
-    const publicPaths = ['/health', '/ready', '/metrics', '/auth/login', '/auth/register'];
-    if (publicPaths.some(p => request.url.startsWith(p))) {
-      return;
-    }
+  fastify.addHook(
+    'preHandler',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      // Skip for public routes
+      const publicPaths = [
+        '/health',
+        '/ready',
+        '/metrics',
+        '/auth/login',
+        '/auth/register',
+      ];
+      if (publicPaths.some((p) => request.url.startsWith(p))) {
+        return;
+      }
 
-    const tenantId = request.tenantId;
-    
-    if (!tenantId) {
-      // tenantId should be set by auth middleware
-      return;
-    }
+      const tenantId = request.tenantId;
 
-    // Load full tenant context
-    const context = await loadTenantContext(tenantId);
-    
-    if (!context) {
-      logger.warn({ tenantId }, 'Tenant not found or deleted');
-      return reply.status(403).send({
-        success: false,
-        error: { code: 'TENANT_NOT_FOUND', message: 'Tenant account not found' },
-      });
-    }
+      if (!tenantId) {
+        // tenantId should be set by auth middleware
+        return;
+      }
 
-    request.tenantContext = context;
-  });
+      // Load full tenant context
+      const context = await loadTenantContext(tenantId);
+
+      if (!context) {
+        logger.warn({ tenantId }, 'Tenant not found or deleted');
+        return reply.status(403).send({
+          success: false,
+          error: {
+            code: 'TENANT_NOT_FOUND',
+            message: 'Tenant account not found',
+          },
+        });
+      }
+
+      request.tenantContext = context;
+    },
+  );
 
   // Add decorator for tenant-scoped queries
   fastify.decorateRequest('getTenantQuery', function (this: FastifyRequest) {
@@ -833,10 +961,10 @@ export const registerTenantIsolation = fp(tenantIsolationPlugin, {
  */
 export async function checkTenantLimits(
   tenantId: string,
-  resourceType: 'documents' | 'matters' | 'users' | 'storage'
+  resourceType: 'documents' | 'matters' | 'users' | 'storage',
 ): Promise<{ allowed: boolean; current: number; limit: number }> {
   const context = await loadTenantContext(tenantId);
-  
+
   if (!context) {
     return { allowed: false, current: 0, limit: 0 };
   }
@@ -849,7 +977,7 @@ export async function checkTenantLimits(
       limit = context.limits.maxDocuments;
       const docResult = await pool.query(
         'SELECT COUNT(*) FROM documents WHERE tenant_id = $1',
-        [tenantId]
+        [tenantId],
       );
       current = Number.parseInt(docResult.rows[0].count, 10);
       break;
@@ -859,7 +987,7 @@ export async function checkTenantLimits(
       limit = context.limits.maxMatters;
       const matterResult = await pool.query(
         'SELECT COUNT(*) FROM matters WHERE tenant_id = $1',
-        [tenantId]
+        [tenantId],
       );
       current = Number.parseInt(matterResult.rows[0].count, 10);
       break;
@@ -869,7 +997,7 @@ export async function checkTenantLimits(
       limit = context.limits.maxUsers;
       const userResult = await pool.query(
         'SELECT COUNT(*) FROM attorneys WHERE tenant_id = $1',
-        [tenantId]
+        [tenantId],
       );
       current = Number.parseInt(userResult.rows[0].count, 10);
       break;
@@ -879,7 +1007,7 @@ export async function checkTenantLimits(
       limit = context.limits.maxStorageBytes;
       const storageResult = await pool.query(
         'SELECT COALESCE(SUM(file_size_bytes), 0) AS total_bytes FROM documents WHERE tenant_id = $1',
-        [tenantId]
+        [tenantId],
       );
       current = Number.parseInt(storageResult.rows[0].total_bytes, 10);
       break;

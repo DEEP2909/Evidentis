@@ -28,7 +28,11 @@ function normalizeKeys(value: unknown): unknown {
 
 function unwrapApiEnvelope(value: unknown): unknown {
   const normalized = normalizeKeys(value);
-  if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
+  if (
+    !normalized ||
+    typeof normalized !== 'object' ||
+    Array.isArray(normalized)
+  ) {
     return normalized;
   }
 
@@ -45,14 +49,23 @@ function unwrapApiEnvelope(value: unknown): unknown {
     return data;
   }
 
-  const result: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  const result: Record<string, unknown> = {
+    ...(data as Record<string, unknown>),
+  };
 
   const attorney = result.attorney;
   if (attorney && typeof attorney === 'object' && !Array.isArray(attorney)) {
     Object.assign(result, attorney as Record<string, unknown>);
   }
 
-  const listKeys = ['matters', 'documents', 'clauses', 'flags', 'obligations', 'resources'];
+  const listKeys = [
+    'matters',
+    'documents',
+    'clauses',
+    'flags',
+    'obligations',
+    'resources',
+  ];
   for (const key of listKeys) {
     const list = result[key];
     if (Array.isArray(list) && !Array.isArray(result.items)) {

@@ -3,8 +3,8 @@
  * Cryptographic utilities for password hashing, encryption, and token generation
  */
 
+import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
-import crypto from 'crypto';
 import { config } from './config.js';
 
 // ============================================================
@@ -29,18 +29,26 @@ export async function hashPassword(password: string): Promise<string> {
 /**
  * Verify a password against a bcrypt hash
  */
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+export async function verifyPassword(
+  password: string,
+  hash: string,
+): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }
 
 /**
  * Validate password against policy
  */
-export function validatePasswordPolicy(password: string): { valid: boolean; errors: string[] } {
+export function validatePasswordPolicy(password: string): {
+  valid: boolean;
+  errors: string[];
+} {
   const errors: string[] = [];
 
   if (password.length < config.PASSWORD_MIN_LENGTH) {
-    errors.push(`Password must be at least ${config.PASSWORD_MIN_LENGTH} characters`);
+    errors.push(
+      `Password must be at least ${config.PASSWORD_MIN_LENGTH} characters`,
+    );
   }
 
   if (config.PASSWORD_REQUIRE_UPPERCASE === 'true' && !/[A-Z]/.test(password)) {
@@ -52,7 +60,10 @@ export function validatePasswordPolicy(password: string): { valid: boolean; erro
   if (config.PASSWORD_REQUIRE_NUMBER === 'true' && !/[0-9]/.test(password)) {
     errors.push('Password must contain at least one number');
   }
-  if (config.PASSWORD_REQUIRE_SPECIAL === 'true' && !/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(password)) {
+  if (
+    config.PASSWORD_REQUIRE_SPECIAL === 'true' &&
+    !/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(password)
+  ) {
     errors.push('Password must contain at least one special character');
   }
 
@@ -110,7 +121,9 @@ export function decrypt(encrypted: string): string {
 
   const iv = Buffer.from(ivBase64, 'base64');
   const authTag = Buffer.from(authTagBase64, 'base64');
-  const decipher = crypto.createDecipheriv(AES_ALGORITHM, key, iv, { authTagLength: 16 });
+  const decipher = crypto.createDecipheriv(AES_ALGORITHM, key, iv, {
+    authTagLength: 16,
+  });
   decipher.setAuthTag(authTag);
 
   let decrypted = decipher.update(ciphertext, 'base64', 'utf8');
@@ -147,7 +160,11 @@ export function hashToken(token: string): string {
  * Generate an API key with prefix
  * Returns: { key: 'lx_abc123...', prefix: 'lx_abc', hash: 'sha256hash' }
  */
-export function generateApiKey(): { key: string; prefix: string; hash: string } {
+export function generateApiKey(): {
+  key: string;
+  prefix: string;
+  hash: string;
+} {
   const token = generateSecureToken(32);
   const key = `lx_${token}`;
   const prefix = `lx_${token.slice(0, 8)}`;
@@ -159,7 +176,11 @@ export function generateApiKey(): { key: string; prefix: string; hash: string } 
 /**
  * Generate SCIM bearer token
  */
-export function generateScimToken(): { token: string; prefix: string; hash: string } {
+export function generateScimToken(): {
+  token: string;
+  prefix: string;
+  hash: string;
+} {
   const token = generateSecureToken(32);
   const bearerToken = `scim_${token}`;
   const prefix = `scim_${token.slice(0, 8)}`;
@@ -177,7 +198,7 @@ export function generateScimToken(): { token: string; prefix: string; hash: stri
  */
 export function generateRecoveryCodes(count = 10): string[] {
   return Array.from({ length: count }, () =>
-    crypto.randomBytes(4).toString('hex').toUpperCase()
+    crypto.randomBytes(4).toString('hex').toUpperCase(),
   );
 }
 
@@ -194,7 +215,7 @@ export async function hashRecoveryCodes(codes: string[]): Promise<string[]> {
  */
 export async function verifyRecoveryCode(
   code: string,
-  hashedCodes: string[]
+  hashedCodes: string[],
 ): Promise<number> {
   for (let i = 0; i < hashedCodes.length; i++) {
     const match = await bcrypt.compare(code.toUpperCase(), hashedCodes[i]);
@@ -217,7 +238,9 @@ export function sha256(data: Buffer | string): string {
 /**
  * Compute SHA-256 hash of a file stream
  */
-export async function sha256Stream(stream: NodeJS.ReadableStream): Promise<string> {
+export async function sha256Stream(
+  stream: NodeJS.ReadableStream,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
     stream.on('data', (chunk) => hash.update(chunk));

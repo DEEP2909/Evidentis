@@ -7,17 +7,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Redis } from 'ioredis';
 import { config } from './config.js';
 import { logger } from './logger.js';
- 
-declare module 'fastify' {
-  interface FastifyRequest {
-    tenantId?: string;
-    advocateId?: string;
-    advocateRole?: string;
-    userId?: string;
-    /** @deprecated Use advocateId */
-    attorneyId?: string;
-  }
-}
+import type { AuthenticatedRequest } from './routes.js';
 
 // Rate limit configurations by endpoint category
 export interface RateLimitConfig {
@@ -153,8 +143,9 @@ export function createRateLimiter(limitType: keyof typeof RATE_LIMITS) {
     reply: FastifyReply,
   ) {
     // Build rate limit key from user/tenant info
-    const userId = request.advocateId || request.userId || request.attorneyId;
-    const tenantId = request.tenantId;
+    const authReq = request as FastifyRequest & Partial<AuthenticatedRequest>;
+    const userId = authReq.advocateId || authReq.attorneyId;
+    const tenantId = authReq.tenantId;
     const ip = request.ip;
 
     // Use user ID if authenticated, otherwise use IP

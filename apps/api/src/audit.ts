@@ -7,7 +7,7 @@ import type { FastifyRequest } from 'fastify';
 import { pool } from './database.js';
 import { logger } from './logger.js';
 
-export type AuditAction = 
+export type AuditAction =
   // Authentication
   | 'auth.login'
   | 'auth.logout'
@@ -92,30 +92,37 @@ interface AuditEntry {
  */
 function getSeverity(action: AuditAction): AuditSeverity {
   // Critical actions
-  if (action.startsWith('security.') || 
-      action === 'auth.login_failed' ||
-      action === 'user.deleted' ||
-      action === 'admin.settings_changed' ||
-      action === 'data.bulk_download') {
+  if (
+    action.startsWith('security.') ||
+    action === 'auth.login_failed' ||
+    action === 'user.deleted' ||
+    action === 'admin.settings_changed' ||
+    action === 'data.bulk_download'
+  ) {
     return 'critical';
   }
-  
+
   // Warning actions
-  if (action === 'auth.mfa_disabled' ||
-      action === 'user.role_changed' ||
-      action === 'document.deleted' ||
-      action === 'matter.deleted' ||
-      action === 'admin.api_key_revoked') {
+  if (
+    action === 'auth.mfa_disabled' ||
+    action === 'user.role_changed' ||
+    action === 'document.deleted' ||
+    action === 'matter.deleted' ||
+    action === 'admin.api_key_revoked'
+  ) {
     return 'warning';
   }
-  
+
   return 'info';
 }
 
 /**
  * Extract resource type and ID from action
  */
-function getResourceInfo(action: AuditAction, context: AuditContext): { type: string | null; id: string | null } {
+function getResourceInfo(
+  action: AuditAction,
+  context: AuditContext,
+): { type: string | null; id: string | null } {
   if (action.startsWith('document.') && context.documentId) {
     return { type: 'document', id: context.documentId };
   }
@@ -133,25 +140,32 @@ function getResourceInfo(action: AuditAction, context: AuditContext): { type: st
  */
 export async function audit(
   action: AuditAction,
-  context: AuditContext
+  context: AuditContext,
 ): Promise<void> {
-  const tenantId = context.tenantId || (context.request as any)?.tenantId;
-  const userId = context.userId || (context.request as any)?.userId;
-  
+  const tenantId =
+    context.tenantId ||
+    (context.request as FastifyRequest & { tenantId?: string })?.tenantId;
+  const userId =
+    context.userId ||
+    (context.request as FastifyRequest & { userId?: string })?.userId;
+
   if (!tenantId) {
     logger.warn({ action }, 'Audit: Missing tenant ID for action');
     return;
   }
-  
+
   const severity = getSeverity(action);
-  const { type: resourceType, id: resourceId } = getResourceInfo(action, context);
-  
-  const ipAddress = context.ipAddress || 
-    context.request?.ip || 
+  const { type: resourceType, id: resourceId } = getResourceInfo(
+    action,
+    context,
+  );
+
+  const ipAddress =
+    context.ipAddress ||
+    context.request?.ip ||
     context.request?.headers['x-forwarded-for']?.toString().split(',')[0];
-  
-  const userAgent = context.userAgent || 
-    context.request?.headers['user-agent'];
+
+  const userAgent = context.userAgent || context.request?.headers['user-agent'];
 
   const entry: AuditEntry = {
     tenant_id: tenantId,
@@ -168,7 +182,7 @@ export async function audit(
     },
     created_at: new Date(),
   };
-  
+
   try {
     await pool.query(
       `INSERT INTO audit_events 
@@ -186,12 +200,15 @@ export async function audit(
         entry.user_agent,
         JSON.stringify(entry.metadata),
         entry.created_at,
-      ]
+      ],
     );
-    
+
     // Log critical events to application logger as well
     if (severity === 'critical') {
-      logger.warn({ action, tenantId, userId, resourceType, resourceId }, 'AUDIT_CRITICAL');
+      logger.warn(
+        { action, tenantId, userId, resourceType, resourceId },
+        'AUDIT_CRITICAL',
+      );
     }
   } catch (err) {
     logger.error({ err }, 'Failed to write audit log');
@@ -214,59 +231,59 @@ export async function queryAuditLogs(
     endDate?: Date;
     limit?: number;
     offset?: number;
-  } = {}
+  } = {},
 ): Promise<{ entries: AuditEntry[]; total: number }> {
   const conditions: string[] = ['tenant_id = $1'];
   const params: unknown[] = [tenantId];
   let paramIndex = 2;
-  
+
   if (options.userId) {
     conditions.push(`user_id = $${paramIndex++}`);
     params.push(options.userId);
   }
-  
+
   if (options.action) {
     conditions.push(`action = $${paramIndex++}`);
     params.push(options.action);
   }
-  
+
   if (options.severity) {
     conditions.push(`severity = $${paramIndex++}`);
     params.push(options.severity);
   }
-  
+
   if (options.resourceType) {
     conditions.push(`resource_type = $${paramIndex++}`);
     params.push(options.resourceType);
   }
-  
+
   if (options.resourceId) {
     conditions.push(`resource_id = $${paramIndex++}`);
     params.push(options.resourceId);
   }
-  
+
   if (options.startDate) {
     conditions.push(`created_at >= $${paramIndex++}`);
     params.push(options.startDate);
   }
-  
+
   if (options.endDate) {
     conditions.push(`created_at <= $${paramIndex++}`);
     params.push(options.endDate);
   }
-  
+
   const whereClause = conditions.join(' AND ');
   const limit = options.limit || 100;
   const offset = options.offset || 0;
-  
+
   try {
     // Get total count
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM audit_events WHERE ${whereClause}`,
-      params
+      params,
     );
     const total = Number.parseInt(countResult.rows[0].count, 10);
-    
+
     // Get entries
     const result = await pool.query(
       `SELECT tenant_id, user_id, action, severity, resource_type, resource_id,
@@ -275,9 +292,9 @@ export async function queryAuditLogs(
        WHERE ${whereClause}
        ORDER BY created_at DESC
        LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
-      [...params, limit, offset]
+      [...params, limit, offset],
     );
-    
+
     return {
       entries: result.rows,
       total,
@@ -291,13 +308,16 @@ export async function queryAuditLogs(
 /**
  * Create audit log preHandler for automatic request logging
  */
-export function createAuditMiddleware(action: AuditAction, getContext?: (req: FastifyRequest) => Partial<AuditContext>) {
+export function createAuditMiddleware(
+  action: AuditAction,
+  getContext?: (req: FastifyRequest) => Partial<AuditContext>,
+) {
   return async function auditMiddleware(request: FastifyRequest) {
     const context: AuditContext = {
       request,
       ...(getContext ? getContext(request) : {}),
     };
-    
+
     // Log after request completes
     request.server.addHook('onResponse', async () => {
       await audit(action, context);
@@ -308,15 +328,17 @@ export function createAuditMiddleware(action: AuditAction, getContext?: (req: Fa
 /**
  * Retention policy - delete old audit logs
  */
-export async function cleanupOldAuditLogs(retentionDays = 365): Promise<number> {
+export async function cleanupOldAuditLogs(
+  retentionDays = 365,
+): Promise<number> {
   try {
     const result = await pool.query(
       `DELETE FROM audit_events 
        WHERE created_at < NOW() - INTERVAL '1 day' * $1
        RETURNING id`,
-      [retentionDays]
+      [retentionDays],
     );
-    
+
     const deleted = result.rowCount || 0;
     logger.info(`Cleaned up ${deleted} old audit log entries`);
     return deleted;

@@ -292,7 +292,7 @@ function AdminDashboard() {
     queryFn: () => dpdp.requests(),
     staleTime: 60_000,
   });
-  const { data: billingData } = useQuery({
+  const { data: billingData, isError: isBillingError } = useQuery({
     queryKey: ["billing"],
     queryFn: () => billing.status(),
   });
@@ -362,18 +362,27 @@ function AdminDashboard() {
           <section className="glass p-6">
             <h2 className="mb-4 text-lg font-semibold">{t("dash_subscription")}</h2>
             <div className="rounded-2xl border border-saffron-500/30 bg-saffron-500/10 p-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-saffron-400">
-                {currentPlan.name} Plan
-              </div>
-              <div className="mt-2 kpi-value text-2xl font-semibold">
-                {currentPlan.price}
-                <span className="ml-1 text-sm font-normal text-white/55">
-                  {currentPlan.billingSuffix}
-                </span>
-              </div>
-              <div className="mt-2 text-sm text-white/70">
-                12 / {currentPlan.seatCap ?? "Custom"} advocates active
-              </div>
+              {isBillingError ? (
+                <div className="flex flex-col items-center justify-center py-2 text-center">
+                  <div className="text-xs uppercase tracking-[0.2em] text-red-400 mb-1">Error</div>
+                  <div className="text-sm font-medium text-white/90">Could not load plan details</div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-xs uppercase tracking-[0.2em] text-saffron-400">
+                    {currentPlan.name} Plan
+                  </div>
+                  <div className="mt-2 kpi-value text-2xl font-semibold">
+                    {currentPlan.price}
+                    <span className="ml-1 text-sm font-normal text-white/55">
+                      {currentPlan.billingSuffix}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-sm text-white/70">
+                    12 / {currentPlan.seatCap ?? "Custom"} advocates active
+                  </div>
+                </>
+              )}
               <div className="mt-3">
                 <HealthBar value={80} delay={0.2} />
               </div>

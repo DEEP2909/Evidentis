@@ -666,7 +666,12 @@ describe('Security Functions', () => {
     });
     
     it('should create valid refresh token', async () => {
-      const refreshToken = await createRefreshToken(TEST_ATTORNEY.id);
+      const refreshToken = await createRefreshToken({
+        sub: TEST_ATTORNEY.id,
+        tenantId: TEST_ATTORNEY.tenantId,
+        email: TEST_ATTORNEY.email,
+        role: TEST_ATTORNEY.role
+      });
       
       expect(refreshToken.length).toBeGreaterThan(20);
     });

@@ -32,7 +32,7 @@ function usagePercent(used: number, cap: number | null) {
 export default function BillingPage() {
   const { t } = useTranslation();
 
-  const { data: billingData } = useQuery({
+  const { data: billingData, isError: isBillingError } = useQuery({
     queryKey: ["billing"],
     queryFn: () => billing.status(),
   });
@@ -42,7 +42,14 @@ export default function BillingPage() {
   return (
     <AppShell title={t("billing")}>
       <div className="space-y-6 page-enter">
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {isBillingError && (
+            <div className="md:col-span-2 lg:col-span-4 glass border-red-500/30 bg-red-500/5 p-4 text-center">
+              <p className="text-sm font-medium text-red-200">
+                {t("bill_errorLoadingPlan", { defaultValue: "Could not load current plan status. Showing plan catalog." })}
+              </p>
+            </div>
+          )}
           {EVIDENTIS_PLANS.map((plan, index) => (
             <motion.article
               key={plan.key}

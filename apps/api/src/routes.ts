@@ -1601,7 +1601,27 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     // Read file buffer
+    const ALLOWED_MIME_TYPES = new Set([
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/msword',      // .doc
+      'text/plain',
+      'text/html',
+      'image/jpeg',
+      'image/png',
+      'image/tiff',
+      'image/gif',
+    ]);
+
     const buffer = await data.toBuffer();
+
+    if (!ALLOWED_MIME_TYPES.has(data.mimetype)) {
+      return reply.status(415).send({
+        success: false,
+        error: { code: 'UNSUPPORTED_FILE_TYPE', message: `File type ${data.mimetype} is not supported. Upload PDF, DOCX, DOC, or TXT files.` },
+      });
+    }
+
     const sha256Hash = (await import('./security.js')).sha256(buffer);
 
     // Check for duplicate

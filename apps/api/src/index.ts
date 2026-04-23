@@ -236,7 +236,7 @@ async function createApp(): Promise<{ app: FastifyInstance; redis: Redis | null 
   // This custom parser keeps raw buffer for Razorpay webhook while parsing JSON for others
   app.addContentTypeParser(
     'application/json',
-    { parseAs: 'buffer', bodyLimit: 1048576 },
+    { parseAs: 'buffer', bodyLimit: config.MAX_FILE_SIZE_BYTES },
     (req, body, done) => {
       // For Razorpay webhook endpoint, keep raw buffer for signature verification
       if (req.url === '/webhooks/razorpay') {

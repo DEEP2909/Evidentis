@@ -164,29 +164,20 @@ export async function createAccessToken(payload: {
 }
 
 export async function createRefreshToken(
-  payloadOrSub:
-    | string
-    | {
-        sub: string;
-        tenantId: string;
-        email: string;
-        role: string;
-        tokenId?: string;
-      }
-): Promise<string> {
-  if (typeof payloadOrSub === 'string') {
-    return generateRefreshToken({
-      sub: payloadOrSub,
-      tenantId: 'legacy-tenant',
-      email: 'legacy@example.com',
-      role: 'advocate',
-      tokenId: crypto.randomUUID(),
-    });
+  payload: {
+    sub: string;
+    tenantId: string;
+    email: string;
+    role: string;
+    tokenId?: string;
   }
-
+): Promise<string> {
   return generateRefreshToken({
-    ...payloadOrSub,
-    tokenId: payloadOrSub.tokenId ?? crypto.randomUUID(),
+    sub: payload.sub,
+    tenantId: payload.tenantId,
+    email: payload.email,
+    role: payload.role,
+    tokenId: payload.tokenId ?? crypto.randomUUID(),
   });
 }
 

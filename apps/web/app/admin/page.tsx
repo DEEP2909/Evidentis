@@ -233,7 +233,7 @@ function TeamTab() {
     staleTime: 60_000,
   });
 
-  const { data: billingData } = useQuery({
+  const { data: billingData, isError: isBillingError } = useQuery({
     queryKey: ["billing"],
     queryFn: () => billing.status(),
   });
@@ -523,7 +523,7 @@ function SecurityTab() {
 function BillingTab() {
   const { t } = useTranslation();
 
-  const { data: billingData } = useQuery({
+  const { data: billingData, isError: isBillingError } = useQuery({
     queryKey: ["billing"],
     queryFn: () => billing.status(),
   });
@@ -532,6 +532,13 @@ function BillingTab() {
 
   return (
     <div className="space-y-4">
+      {isBillingError && (
+        <div className="glass border-red-500/30 bg-red-500/5 p-4 text-center">
+          <p className="text-sm font-medium text-red-200">
+            {t("bill_errorLoadingPlan", { defaultValue: "Could not load current plan status. Features may be restricted." })}
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">{t("bill_title")}</h2>
@@ -1174,7 +1181,7 @@ function AdminContent() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<AdminTab>("team");
 
-  const { data: billingData } = useQuery({
+  const { data: billingData, isError: isBillingError } = useQuery({
     queryKey: ["billing"],
     queryFn: () => billing.status(),
   });

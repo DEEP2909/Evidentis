@@ -1632,3 +1632,8 @@ export const onboarding = {
   },
 };
 
+export const billing = {
+  async status(): Promise<{ plan?: string }> {
+    return apiRequest<{ plan?: string }>("GET", "/api/billing/status");
+  },
+};

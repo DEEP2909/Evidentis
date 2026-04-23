@@ -5,18 +5,18 @@
  * EVERY query MUST include tenant_id filter.
  */
 
-import { pool, withTransaction } from './database.js';
 import type {
   Attorney,
-  Matter,
-  Document,
+  AuditEvent,
   Clause,
+  Document,
   Flag,
+  Matter,
   Obligation,
   Playbook,
-  AuditEvent,
   RiskLevel,
 } from '@evidentis/shared';
+import { pool, withTransaction } from './database.js';
 
 // ============================================================================
 // Column Constants - NEVER use SELECT *
@@ -32,7 +32,7 @@ const ATTORNEY_COLS = `id, tenant_id, email, display_name, role, practice_group,
   last_login_at, preferred_language, status, created_at`;
 
 const MATTER_COLS = `id, tenant_id, matter_code, matter_name, matter_type, client_name, 
-  counterparty_name, governing_law_state, status, priority, health_score, lead_advocate_id, lead_attorney_id, 
+  counterparty_name, governing_law_state, status, priority, health_score, lead_advocate_id, 
   target_close_date, deal_value_paise, deal_value_cents, notes, tags, created_by, created_at, updated_at`;
 
 const DOCUMENT_COLS = `id, tenant_id, matter_id, source_name, mime_type, doc_type, 
@@ -66,7 +66,7 @@ export const tenantRepo = {
   async findById(id: string) {
     const result = await pool.query(
       `SELECT ${TENANT_COLS} FROM tenants WHERE id = $1`,
-      [id]
+      [id],
     );
     return result.rows[0] || null;
   },
@@ -74,7 +74,7 @@ export const tenantRepo = {
   async findBySlug(slug: string) {
     const result = await pool.query(
       `SELECT ${TENANT_COLS} FROM tenants WHERE slug = $1`,
-      [slug]
+      [slug],
     );
     return result.rows[0] || null;
   },
@@ -89,20 +89,28 @@ export const tenantRepo = {
       `INSERT INTO tenants (name, slug, plan, bar_state, trial_ends_at)
        VALUES ($1, $2, $3, $4, now() + INTERVAL '14 days')
        RETURNING ${TENANT_COLS}`,
-      [data.name, data.slug, data.plan || 'starter', data.barState]
+      [data.name, data.slug, data.plan || 'starter', data.barState],
     );
     return result.rows[0];
   },
 
-  async updateBillingIds(tenantId: string, customerId: string, subscriptionId: string) {
+  async updateBillingIds(
+    tenantId: string,
+    customerId: string,
+    subscriptionId: string,
+  ) {
     await pool.query(
       `UPDATE tenants SET razorpay_customer_id = $2, razorpay_subscription_id = $3
        WHERE id = $1`,
-      [tenantId, customerId, subscriptionId]
+      [tenantId, customerId, subscriptionId],
     );
   },
 
-  async updatePaddleIds(tenantId: string, customerId: string, subscriptionId: string) {
+  async updatePaddleIds(
+    tenantId: string,
+    customerId: string,
+    subscriptionId: string,
+  ) {
     await this.updateBillingIds(tenantId, customerId, subscriptionId);
   },
 };
@@ -116,7 +124,7 @@ export const attorneyRepo = {
     const result = await pool.query(
       `SELECT ${ATTORNEY_COLS} FROM attorneys 
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id]
+      [tenantId, id],
     );
     return result.rows[0] || null;
   },
@@ -126,7 +134,7 @@ export const attorneyRepo = {
       `SELECT ${ATTORNEY_COLS}, password_hash, mfa_secret, mfa_recovery_codes
        FROM attorneys 
        WHERE tenant_id = $1 AND email = $2`,
-      [tenantId, email.toLowerCase()]
+      [tenantId, email.toLowerCase()],
     );
     return result.rows[0] || null;
   },
@@ -137,22 +145,26 @@ export const attorneyRepo = {
        FROM attorneys a
        JOIN tenants t ON a.tenant_id = t.id
        WHERE a.email = $1`,
-      [email.toLowerCase()]
+      [email.toLowerCase()],
     );
     return result.rows;
   },
 
-  async create(tenantId: string, data: {
-    email: string;
-    displayName: string;
-    passwordHash: string;
-    role?: string;
-    barNumber?: string;
-    barState?: string;
-    barCouncilEnrollmentNumber?: string;
-    barCouncilState?: string;
-  }) {
-    const barCouncilEnrollmentNumber = data.barCouncilEnrollmentNumber ?? data.barNumber;
+  async create(
+    tenantId: string,
+    data: {
+      email: string;
+      displayName: string;
+      passwordHash: string;
+      role?: string;
+      barNumber?: string;
+      barState?: string;
+      barCouncilEnrollmentNumber?: string;
+      barCouncilState?: string;
+    },
+  ) {
+    const barCouncilEnrollmentNumber =
+      data.barCouncilEnrollmentNumber ?? data.barNumber;
     const barCouncilState = data.barCouncilState ?? data.barState;
     const result = await pool.query(
       `INSERT INTO attorneys (
@@ -161,17 +173,30 @@ export const attorneyRepo = {
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${ATTORNEY_COLS}`,
-      [tenantId, data.email.toLowerCase(), data.displayName, data.passwordHash, 
-       data.role || 'advocate', data.barNumber, data.barState, barCouncilEnrollmentNumber, barCouncilState]
+      [
+        tenantId,
+        data.email.toLowerCase(),
+        data.displayName,
+        data.passwordHash,
+        data.role || 'advocate',
+        data.barNumber,
+        data.barState,
+        barCouncilEnrollmentNumber,
+        barCouncilState,
+      ],
     );
     return result.rows[0];
   },
 
-  async updatePassword(tenantId: string, attorneyId: string, passwordHash: string) {
+  async updatePassword(
+    tenantId: string,
+    attorneyId: string,
+    passwordHash: string,
+  ) {
     await pool.query(
       `UPDATE attorneys SET password_hash = $3, failed_login_attempts = 0, locked_until = NULL
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, attorneyId, passwordHash]
+      [tenantId, attorneyId, passwordHash],
     );
   },
 
@@ -181,7 +206,7 @@ export const attorneyRepo = {
        SET failed_login_attempts = failed_login_attempts + 1,
            locked_until = CASE WHEN failed_login_attempts >= 4 THEN now() + INTERVAL '15 minutes' ELSE locked_until END
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, attorneyId]
+      [tenantId, attorneyId],
     );
   },
 
@@ -189,15 +214,20 @@ export const attorneyRepo = {
     await pool.query(
       `UPDATE attorneys SET failed_login_attempts = 0, locked_until = NULL, last_login_at = now()
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, attorneyId]
+      [tenantId, attorneyId],
     );
   },
 
-  async setupMfa(tenantId: string, attorneyId: string, secret: string, recoveryCodes: string[]) {
+  async setupMfa(
+    tenantId: string,
+    attorneyId: string,
+    secret: string,
+    recoveryCodes: string[],
+  ) {
     await pool.query(
       `UPDATE attorneys SET mfa_enabled = TRUE, mfa_secret = $3, mfa_recovery_codes = $4
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, attorneyId, secret, recoveryCodes]
+      [tenantId, attorneyId, secret, recoveryCodes],
     );
   },
 
@@ -205,18 +235,21 @@ export const attorneyRepo = {
     await pool.query(
       `UPDATE attorneys SET mfa_enabled = FALSE, mfa_secret = NULL, mfa_recovery_codes = NULL
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, attorneyId]
+      [tenantId, attorneyId],
     );
   },
 
-  async list(tenantId: string, options: { limit?: number; offset?: number } = {}) {
+  async list(
+    tenantId: string,
+    options: { limit?: number; offset?: number } = {},
+  ) {
     const { limit = 50, offset = 0 } = options;
     const result = await pool.query(
       `SELECT ${ATTORNEY_COLS} FROM attorneys 
        WHERE tenant_id = $1 
        ORDER BY created_at DESC
        LIMIT $2 OFFSET $3`,
-      [tenantId, limit, offset]
+      [tenantId, limit, offset],
     );
     return result.rows;
   },
@@ -231,17 +264,20 @@ export const matterRepo = {
     const result = await pool.query(
       `SELECT ${MATTER_COLS} FROM matters 
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id]
+      [tenantId, id],
     );
     return result.rows[0] || null;
   },
 
-  async list(tenantId: string, options: {
-    status?: string;
-    search?: string;
-    limit?: number;
-    offset?: number;
-  } = {}) {
+  async list(
+    tenantId: string,
+    options: {
+      status?: string;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) {
     const { status, search, limit = 50, offset = 0 } = options;
     const params: any[] = [tenantId];
     let whereClause = 'WHERE tenant_id = $1';
@@ -263,7 +299,7 @@ export const matterRepo = {
 
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM matters ${whereClause}`,
-      params.slice(0, -2)
+      params.slice(0, -2),
     );
 
     const result = await pool.query(
@@ -271,7 +307,7 @@ export const matterRepo = {
        ${whereClause}
        ORDER BY updated_at DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      params
+      params,
     );
 
     return {
@@ -280,36 +316,51 @@ export const matterRepo = {
     };
   },
 
-  async create(tenantId: string, data: {
-    matterCode: string;
-    matterName: string;
-    matterType: string;
-    clientName: string;
-    counterpartyName?: string;
-    governingLawState?: string;
-    leadAdvocateId?: string;
-    leadAttorneyId?: string;
-    createdBy: string;
-  }) {
-    const leadAdvocateId = data.leadAdvocateId ?? data.leadAttorneyId ?? null;
+  async create(
+    tenantId: string,
+    data: {
+      matterCode: string;
+      matterName: string;
+      matterType: string;
+      clientName: string;
+      counterpartyName?: string;
+      governingLawState?: string;
+      leadAdvocateId?: string;
+      createdBy: string;
+    },
+  ) {
+    const leadAdvocateId = data.leadAdvocateId ?? null;
     const result = await pool.query(
       `INSERT INTO matters (tenant_id, matter_code, matter_name, matter_type, client_name, 
-        counterparty_name, governing_law_state, lead_advocate_id, lead_attorney_id, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9)
+        counterparty_name, governing_law_state, lead_advocate_id, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${MATTER_COLS}`,
-      [tenantId, data.matterCode, data.matterName, data.matterType, data.clientName,
-       data.counterpartyName, data.governingLawState, leadAdvocateId, data.createdBy]
+      [
+        tenantId,
+        data.matterCode,
+        data.matterName,
+        data.matterType,
+        data.clientName,
+        data.counterpartyName,
+        data.governingLawState,
+        leadAdvocateId,
+        data.createdBy,
+      ],
     );
     return result.rows[0];
   },
 
-  async update(tenantId: string, id: string, data: Partial<{
-    matterName: string;
-    status: string;
-    priority: string;
-    healthScore: number;
-    notes: string;
-  }>) {
+  async update(
+    tenantId: string,
+    id: string,
+    data: Partial<{
+      matterName: string;
+      status: string;
+      priority: string;
+      healthScore: number;
+      notes: string;
+    }>,
+  ) {
     const updates: string[] = [];
     const params: any[] = [tenantId, id];
     let paramIndex = 3;
@@ -341,7 +392,7 @@ export const matterRepo = {
       `UPDATE matters SET ${updates.join(', ')}
        WHERE tenant_id = $1 AND id = $2
        RETURNING ${MATTER_COLS}`,
-      params
+      params,
     );
     return result.rows[0];
   },
@@ -349,7 +400,7 @@ export const matterRepo = {
   async delete(tenantId: string, id: string) {
     await pool.query(
       `UPDATE matters SET status = 'archived' WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id]
+      [tenantId, id],
     );
   },
 
@@ -361,18 +412,26 @@ export const matterRepo = {
          WHERE c.tenant_id = $1 AND d.matter_id = $2) as total_clauses,
         (SELECT COUNT(*) FROM documents WHERE tenant_id = $1 AND matter_id = $2 
          AND ingestion_status IN ('uploaded', 'scanning', 'processing')) as processing_queue`,
-      [tenantId, matterId]
+      [tenantId, matterId],
     );
 
     const flagsResult = await pool.query(
       `SELECT severity, COUNT(*) as count FROM flags 
        WHERE tenant_id = $1 AND matter_id = $2 AND status = 'open'
        GROUP BY severity`,
-      [tenantId, matterId]
+      [tenantId, matterId],
     );
 
-    const flagsByRisk: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0 };
-    for (const row of flagsResult.rows as Array<{ severity: string; count: string }>) {
+    const flagsByRisk: Record<string, number> = {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+    for (const row of flagsResult.rows as Array<{
+      severity: string;
+      count: string;
+    }>) {
       flagsByRisk[row.severity] = Number.parseInt(row.count);
     }
 
@@ -394,7 +453,7 @@ export const documentRepo = {
     const result = await pool.query(
       `SELECT ${DOCUMENT_COLS} FROM documents 
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id]
+      [tenantId, id],
     );
     return result.rows[0] || null;
   },
@@ -403,16 +462,20 @@ export const documentRepo = {
     const result = await pool.query(
       `SELECT ${DOCUMENT_COLS} FROM documents 
        WHERE tenant_id = $1 AND sha256 = $2`,
-      [tenantId, sha256]
+      [tenantId, sha256],
     );
     return result.rows[0] || null;
   },
 
-  async list(tenantId: string, matterId: string, options: {
-    status?: string;
-    limit?: number;
-    offset?: number;
-  } = {}) {
+  async list(
+    tenantId: string,
+    matterId: string,
+    options: {
+      status?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) {
     const { status, limit = 50, offset = 0 } = options;
     const params: any[] = [tenantId, matterId];
     let whereClause = 'WHERE tenant_id = $1 AND matter_id = $2';
@@ -426,7 +489,7 @@ export const documentRepo = {
 
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM documents ${whereClause}`,
-      params.slice(0, -2)
+      params.slice(0, -2),
     );
 
     const result = await pool.query(
@@ -434,7 +497,7 @@ export const documentRepo = {
        ${whereClause}
        ORDER BY created_at DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params
+      params,
     );
 
     return {
@@ -443,54 +506,81 @@ export const documentRepo = {
     };
   },
 
-  async create(tenantId: string, data: {
-    matterId: string;
-    sourceName: string;
-    mimeType: string;
-    docType: string;
-    sha256: string;
-    fileUri: string;
-    createdBy: string;
-  }) {
+  async create(
+    tenantId: string,
+    data: {
+      matterId: string;
+      sourceName: string;
+      mimeType: string;
+      docType: string;
+      sha256: string;
+      fileUri: string;
+      createdBy: string;
+    },
+  ) {
     const result = await pool.query(
       `INSERT INTO documents (tenant_id, matter_id, source_name, mime_type, doc_type, sha256, file_uri, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING ${DOCUMENT_COLS}`,
-      [tenantId, data.matterId, data.sourceName, data.mimeType, data.docType, 
-       data.sha256, data.fileUri, data.createdBy]
+      [
+        tenantId,
+        data.matterId,
+        data.sourceName,
+        data.mimeType,
+        data.docType,
+        data.sha256,
+        data.fileUri,
+        data.createdBy,
+      ],
     );
     return result.rows[0];
   },
 
-  async updateStatus(tenantId: string, id: string, status: string, securityStatus?: string) {
+  async updateStatus(
+    tenantId: string,
+    id: string,
+    status: string,
+    securityStatus?: string,
+  ) {
     const updates = ['ingestion_status = $3', 'updated_at = now()'];
     const params = [tenantId, id, status];
 
     if (securityStatus) {
-      updates.push(`security_status = $4`);
+      updates.push('security_status = $4');
       params.push(securityStatus);
     }
 
     await pool.query(
       `UPDATE documents SET ${updates.join(', ')} WHERE tenant_id = $1 AND id = $2`,
-      params
+      params,
     );
   },
 
-  async updateAfterOcr(tenantId: string, id: string, data: {
-    normalizedText: string;
-    pageCount: number;
-    wordCount: number;
-    ocrEngine: string;
-    ocrConfidence: number;
-  }) {
+  async updateAfterOcr(
+    tenantId: string,
+    id: string,
+    data: {
+      normalizedText: string;
+      pageCount: number;
+      wordCount: number;
+      ocrEngine: string;
+      ocrConfidence: number;
+    },
+  ) {
     await pool.query(
       `UPDATE documents SET 
         normalized_text = $3, page_count = $4, word_count = $5,
         ocr_engine = $6, ocr_confidence = $7, ingestion_status = 'normalized', updated_at = now()
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id, data.normalizedText, data.pageCount, data.wordCount, 
-       data.ocrEngine, data.ocrConfidence]
+      [
+        tenantId,
+        id,
+        data.normalizedText,
+        data.pageCount,
+        data.wordCount,
+        data.ocrEngine,
+        data.ocrConfidence,
+      ],
     );
   },
 };
@@ -504,7 +594,7 @@ export const clauseRepo = {
     const result = await pool.query(
       `SELECT ${CLAUSE_COLS} FROM clauses 
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id]
+      [tenantId, id],
     );
     return result.rows[0] || null;
   },
@@ -514,17 +604,21 @@ export const clauseRepo = {
       `SELECT ${CLAUSE_COLS} FROM clauses 
        WHERE tenant_id = $1 AND document_id = $2
        ORDER BY page_from, created_at`,
-      [tenantId, documentId]
+      [tenantId, documentId],
     );
     return result.rows;
   },
 
-  async listByMatter(tenantId: string, matterId: string, options: {
-    clauseType?: string;
-    riskLevel?: string;
-    limit?: number;
-    offset?: number;
-  } = {}) {
+  async listByMatter(
+    tenantId: string,
+    matterId: string,
+    options: {
+      clauseType?: string;
+      riskLevel?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) {
     const { clauseType, riskLevel, limit = 100, offset = 0 } = options;
     const params: any[] = [tenantId, matterId];
     let whereClause = 'WHERE c.tenant_id = $1 AND d.matter_id = $2';
@@ -542,28 +636,34 @@ export const clauseRepo = {
     params.push(limit, offset);
 
     const result = await pool.query(
-      `SELECT ${CLAUSE_COLS.split(',').map(c => `c.${c.trim()}`).join(', ')}, d.source_name as document_name
+      `SELECT ${CLAUSE_COLS.split(',')
+        .map((c) => `c.${c.trim()}`)
+        .join(', ')}, d.source_name as document_name
        FROM clauses c
        JOIN documents d ON c.document_id = d.id
        ${whereClause}
        ORDER BY c.created_at DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      params
+      params,
     );
     return result.rows;
   },
 
-  async bulkCreate(tenantId: string, documentId: string, clauses: Array<{
-    clauseType: string;
-    heading?: string;
-    textExcerpt: string;
-    pageFrom?: number;
-    pageTo?: number;
-    riskLevel: RiskLevel;
-    confidence: number;
-    riskFactors: any[];
-    extractionModel: string;
-  }>) {
+  async bulkCreate(
+    tenantId: string,
+    documentId: string,
+    clauses: Array<{
+      clauseType: string;
+      heading?: string;
+      textExcerpt: string;
+      pageFrom?: number;
+      pageTo?: number;
+      riskLevel: RiskLevel;
+      confidence: number;
+      riskFactors: any[];
+      extractionModel: string;
+    }>,
+  ) {
     const values: any[] = [];
     const placeholders: string[] = [];
     let paramIndex = 1;
@@ -573,9 +673,17 @@ export const clauseRepo = {
         $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, 
         $${paramIndex++}, $${paramIndex++})`);
       values.push(
-        tenantId, documentId, clause.clauseType, clause.heading, clause.textExcerpt,
-        clause.pageFrom, clause.pageTo, clause.riskLevel, clause.confidence,
-        JSON.stringify(clause.riskFactors), clause.extractionModel
+        tenantId,
+        documentId,
+        clause.clauseType,
+        clause.heading,
+        clause.textExcerpt,
+        clause.pageFrom,
+        clause.pageTo,
+        clause.riskLevel,
+        clause.confidence,
+        JSON.stringify(clause.riskFactors),
+        clause.extractionModel,
       );
     }
 
@@ -586,16 +694,22 @@ export const clauseRepo = {
         page_from, page_to, risk_level, confidence, risk_factors, extraction_model)
        VALUES ${placeholders.join(', ')}
        RETURNING ${CLAUSE_COLS}`,
-      values
+      values,
     );
     return result.rows;
   },
 
-  async updateReviewStatus(tenantId: string, id: string, status: string, reviewerId: string, note?: string) {
+  async updateReviewStatus(
+    tenantId: string,
+    id: string,
+    status: string,
+    reviewerId: string,
+    note?: string,
+  ) {
     await pool.query(
       `UPDATE clauses SET reviewer_status = $3, reviewer_id = $4, reviewed_at = now(), reviewer_note = $5
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id, status, reviewerId, note]
+      [tenantId, id, status, reviewerId, note],
     );
   },
 };
@@ -609,18 +723,22 @@ export const flagRepo = {
     const result = await pool.query(
       `SELECT ${FLAG_COLS} FROM flags 
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id]
+      [tenantId, id],
     );
     return result.rows[0] || null;
   },
 
-  async listByMatter(tenantId: string, matterId: string, options: {
-    documentId?: string;
-    severity?: string;
-    status?: string;
-    limit?: number;
-    offset?: number;
-  } = {}) {
+  async listByMatter(
+    tenantId: string,
+    matterId: string,
+    options: {
+      documentId?: string;
+      severity?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) {
     const { documentId, severity, status, limit = 100, offset = 0 } = options;
     const params: any[] = [tenantId, matterId];
     let whereClause = 'WHERE tenant_id = $1 AND matter_id = $2';
@@ -643,7 +761,7 @@ export const flagRepo = {
 
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM flags ${whereClause}`,
-      params.slice(0, -2)
+      params.slice(0, -2),
     );
 
     const result = await pool.query(
@@ -651,7 +769,7 @@ export const flagRepo = {
        ${whereClause}
        ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'warn' THEN 2 ELSE 3 END, created_at DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      params
+      params,
     );
 
     return {
@@ -660,33 +778,52 @@ export const flagRepo = {
     };
   },
 
-  async create(tenantId: string, data: {
-    matterId: string;
-    documentId?: string;
-    clauseId?: string;
-    flagType: string;
-    severity: string;
-    reason: string;
-    playbookRule?: string;
-    recommendedFix?: string;
-    assessmentModel?: string;
-  }) {
+  async create(
+    tenantId: string,
+    data: {
+      matterId: string;
+      documentId?: string;
+      clauseId?: string;
+      flagType: string;
+      severity: string;
+      reason: string;
+      playbookRule?: string;
+      recommendedFix?: string;
+      assessmentModel?: string;
+    },
+  ) {
     const result = await pool.query(
       `INSERT INTO flags (tenant_id, matter_id, document_id, clause_id, flag_type, severity, 
         reason, playbook_rule, recommended_fix, assessment_model)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING ${FLAG_COLS}`,
-      [tenantId, data.matterId, data.documentId, data.clauseId, data.flagType, data.severity,
-       data.reason, data.playbookRule, data.recommendedFix, data.assessmentModel]
+      [
+        tenantId,
+        data.matterId,
+        data.documentId,
+        data.clauseId,
+        data.flagType,
+        data.severity,
+        data.reason,
+        data.playbookRule,
+        data.recommendedFix,
+        data.assessmentModel,
+      ],
     );
     return result.rows[0];
   },
 
-  async updateStatus(tenantId: string, id: string, status: string, resolvedBy?: string, note?: string) {
+  async updateStatus(
+    tenantId: string,
+    id: string,
+    status: string,
+    resolvedBy?: string,
+    note?: string,
+  ) {
     await pool.query(
       `UPDATE flags SET status = $3, resolved_by = $4, resolved_at = now(), resolution_note = $5
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id, status, resolvedBy, note]
+      [tenantId, id, status, resolvedBy, note],
     );
   },
 };
@@ -700,17 +837,21 @@ export const obligationRepo = {
     const result = await pool.query(
       `SELECT ${OBLIGATION_COLS} FROM obligations 
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id]
+      [tenantId, id],
     );
     return result.rows[0] || null;
   },
 
-  async listByMatter(tenantId: string, matterId: string, options: {
-    party?: string;
-    status?: string;
-    limit?: number;
-    offset?: number;
-  } = {}) {
+  async listByMatter(
+    tenantId: string,
+    matterId: string,
+    options: {
+      party?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) {
     const { party, status, limit = 100, offset = 0 } = options;
     const params: any[] = [tenantId, matterId];
     let whereClause = 'WHERE tenant_id = $1 AND matter_id = $2';
@@ -732,23 +873,26 @@ export const obligationRepo = {
        ${whereClause}
        ORDER BY deadline_date ASC NULLS LAST, created_at DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      params
+      params,
     );
     return result.rows;
   },
 
-  async bulkCreate(tenantId: string, obligations: Array<{
-    matterId: string;
-    documentId?: string;
-    clauseId?: string;
-    obligationType: string;
-    party?: string;
-    description: string;
-    deadlineDate?: Date;
-    deadlineText?: string;
-    noticeDays?: number;
-    recurrenceRule?: string;
-  }>) {
+  async bulkCreate(
+    tenantId: string,
+    obligations: Array<{
+      matterId: string;
+      documentId?: string;
+      clauseId?: string;
+      obligationType: string;
+      party?: string;
+      description: string;
+      deadlineDate?: Date;
+      deadlineText?: string;
+      noticeDays?: number;
+      recurrenceRule?: string;
+    }>,
+  ) {
     const values: any[] = [];
     const placeholders: string[] = [];
     let paramIndex = 1;
@@ -758,8 +902,16 @@ export const obligationRepo = {
         $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, 
         $${paramIndex++})`);
       values.push(
-        tenantId, obl.matterId, obl.documentId, obl.clauseId, obl.obligationType,
-        obl.party, obl.description, obl.deadlineDate, obl.deadlineText, obl.noticeDays
+        tenantId,
+        obl.matterId,
+        obl.documentId,
+        obl.clauseId,
+        obl.obligationType,
+        obl.party,
+        obl.description,
+        obl.deadlineDate,
+        obl.deadlineText,
+        obl.noticeDays,
       );
     }
 
@@ -770,15 +922,15 @@ export const obligationRepo = {
         party, description, deadline_date, deadline_text, notice_days)
        VALUES ${placeholders.join(', ')}
        RETURNING ${OBLIGATION_COLS}`,
-      values
+      values,
     );
     return result.rows;
   },
 
   async updateStatus(tenantId: string, id: string, status: string) {
     await pool.query(
-      `UPDATE obligations SET status = $3 WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id, status]
+      'UPDATE obligations SET status = $3 WHERE tenant_id = $1 AND id = $2',
+      [tenantId, id, status],
     );
   },
 };
@@ -792,7 +944,7 @@ export const playbookRepo = {
     const result = await pool.query(
       `SELECT ${PLAYBOOK_COLS} FROM playbooks 
        WHERE tenant_id = $1 AND id = $2`,
-      [tenantId, id]
+      [tenantId, id],
     );
     return result.rows[0] || null;
   },
@@ -808,7 +960,7 @@ export const playbookRepo = {
 
     const result = await pool.query(
       `SELECT ${PLAYBOOK_COLS} FROM playbooks ${whereClause}`,
-      params
+      params,
     );
     return result.rows;
   },
@@ -818,35 +970,48 @@ export const playbookRepo = {
       `SELECT ${PLAYBOOK_COLS} FROM playbooks 
        WHERE tenant_id = $1
        ORDER BY is_active DESC, created_at DESC`,
-      [tenantId]
+      [tenantId],
     );
     return result.rows;
   },
 
-  async create(tenantId: string, data: {
-    name: string;
-    description?: string;
-    practiceArea?: string;
-    rules: any[];
-    createdBy: string;
-  }) {
+  async create(
+    tenantId: string,
+    data: {
+      name: string;
+      description?: string;
+      practiceArea?: string;
+      rules: any[];
+      createdBy: string;
+    },
+  ) {
     const result = await pool.query(
       `INSERT INTO playbooks (tenant_id, name, description, practice_area, rules, created_by)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING ${PLAYBOOK_COLS}`,
-      [tenantId, data.name, data.description, data.practiceArea, 
-       JSON.stringify(data.rules), data.createdBy]
+      [
+        tenantId,
+        data.name,
+        data.description,
+        data.practiceArea,
+        JSON.stringify(data.rules),
+        data.createdBy,
+      ],
     );
     return result.rows[0];
   },
 
-  async update(tenantId: string, id: string, data: Partial<{
-    name: string;
-    description: string;
-    practiceArea: string;
-    rules: any[];
-    isActive: boolean;
-  }>) {
+  async update(
+    tenantId: string,
+    id: string,
+    data: Partial<{
+      name: string;
+      description: string;
+      practiceArea: string;
+      rules: any[];
+      isActive: boolean;
+    }>,
+  ) {
     const updates: string[] = [];
     const params: any[] = [tenantId, id];
     let paramIndex = 3;
@@ -878,7 +1043,7 @@ export const playbookRepo = {
       `UPDATE playbooks SET ${updates.join(', ')}
        WHERE tenant_id = $1 AND id = $2
        RETURNING ${PLAYBOOK_COLS}`,
-      params
+      params,
     );
     return result.rows[0];
   },
@@ -906,18 +1071,29 @@ export const auditRepo = {
       `INSERT INTO audit_events (tenant_id, actor_advocate_id, actor_api_key_id, event_type, 
         object_type, object_id, ip_address, user_agent, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [data.tenantId, data.actorAdvocateId ?? data.actorAttorneyId, data.actorApiKeyId, data.eventType,
-       data.objectType, data.objectId, data.ipAddress, data.userAgent, 
-       JSON.stringify(data.metadata || {})]
+      [
+        data.tenantId,
+        data.actorAdvocateId ?? data.actorAttorneyId,
+        data.actorApiKeyId,
+        data.eventType,
+        data.objectType,
+        data.objectId,
+        data.ipAddress,
+        data.userAgent,
+        JSON.stringify(data.metadata || {}),
+      ],
     );
   },
 
-  async list(tenantId: string, options: {
-    eventType?: string;
-    actorId?: string;
-    limit?: number;
-    offset?: number;
-  } = {}) {
+  async list(
+    tenantId: string,
+    options: {
+      eventType?: string;
+      actorId?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) {
     const { eventType, actorId, limit = 100, offset = 0 } = options;
     const params: any[] = [tenantId];
     let whereClause = 'WHERE tenant_id = $1';
@@ -939,7 +1115,7 @@ export const auditRepo = {
        ${whereClause}
        ORDER BY created_at DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      params
+      params,
     );
     return result.rows;
   },
@@ -950,12 +1126,12 @@ export const auditRepo = {
 // ============================================================================
 
 export const refreshTokenRepo = {
-  async create(tenantId: string, attorneyId: string, tokenHash: string) {
+  async create(tenantId: string, advocateId: string, tokenHash: string) {
     const result = await pool.query(
-      `INSERT INTO refresh_tokens (tenant_id, attorney_id, token_hash)
+      `INSERT INTO refresh_tokens (tenant_id, advocate_id, token_hash)
        VALUES ($1, $2, $3)
        RETURNING id`,
-      [tenantId, attorneyId, tokenHash]
+      [tenantId, advocateId, tokenHash],
     );
     return result.rows[0].id;
   },
@@ -964,25 +1140,25 @@ export const refreshTokenRepo = {
     const result = await pool.query(
       `SELECT rt.*, a.email, a.role, a.status
        FROM refresh_tokens rt
-       JOIN attorneys a ON rt.attorney_id = a.id
+       JOIN attorneys a ON rt.advocate_id = a.id
        WHERE rt.token_hash = $1 AND rt.revoked_at IS NULL AND rt.expires_at > now()`,
-      [tokenHash]
+      [tokenHash],
     );
     return result.rows[0] || null;
   },
 
   async revoke(id: string) {
     await pool.query(
-      `UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1`,
-      [id]
+      'UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1',
+      [id],
     );
   },
 
-  async revokeAllForAttorney(tenantId: string, attorneyId: string) {
+  async revokeAllForAdvocate(tenantId: string, advocateId: string) {
     await pool.query(
       `UPDATE refresh_tokens SET revoked_at = now() 
-       WHERE tenant_id = $1 AND attorney_id = $2 AND revoked_at IS NULL`,
-      [tenantId, attorneyId]
+       WHERE tenant_id = $1 AND advocate_id = $2 AND revoked_at IS NULL`,
+      [tenantId, advocateId],
     );
   },
 
@@ -990,18 +1166,18 @@ export const refreshTokenRepo = {
     const result = await pool.query(
       `UPDATE refresh_tokens SET revoked_at = now(), rotated_to = gen_random_uuid()
        WHERE id = $1
-       RETURNING tenant_id, attorney_id, rotated_to`,
-      [oldId]
+       RETURNING tenant_id, advocate_id, rotated_to`,
+      [oldId],
     );
 
     if (!result.rows[0]) return null;
 
-    const { tenant_id, attorney_id, rotated_to } = result.rows[0];
+    const { tenant_id, advocate_id, rotated_to } = result.rows[0];
 
     await pool.query(
-      `INSERT INTO refresh_tokens (id, tenant_id, attorney_id, token_hash)
+      `INSERT INTO refresh_tokens (id, tenant_id, advocate_id, token_hash)
        VALUES ($1, $2, $3, $4)`,
-      [rotated_to, tenant_id, attorney_id, newTokenHash]
+      [rotated_to, tenant_id, advocate_id, newTokenHash],
     );
 
     return rotated_to;
@@ -1013,11 +1189,15 @@ export const refreshTokenRepo = {
 // ============================================================================
 
 export const vectorRepo = {
-  async searchChunks(tenantId: string, embedding: number[], options: {
-    matterId?: string;
-    documentIds?: string[];
-    limit?: number;
-  } = {}) {
+  async searchChunks(
+    tenantId: string,
+    embedding: number[],
+    options: {
+      matterId?: string;
+      documentIds?: string[];
+      limit?: number;
+    } = {},
+  ) {
     const { matterId, documentIds, limit = 10 } = options;
     const params: any[] = [tenantId, `[${embedding.join(',')}]`];
     let whereClause = 'WHERE dc.tenant_id = $1';
@@ -1045,19 +1225,23 @@ export const vectorRepo = {
        ${whereClause}
        ORDER BY dc.embedding <=> $2::vector
        LIMIT $${paramIndex}`,
-      params
+      params,
     );
 
     return result.rows;
   },
 
-  async insertChunks(tenantId: string, documentId: string, chunks: Array<{
-    chunkIndex: number;
-    textContent: string;
-    pageFrom?: number;
-    pageTo?: number;
-    embedding: number[];
-  }>) {
+  async insertChunks(
+    tenantId: string,
+    documentId: string,
+    chunks: Array<{
+      chunkIndex: number;
+      textContent: string;
+      pageFrom?: number;
+      pageTo?: number;
+      embedding: number[];
+    }>,
+  ) {
     const values: any[] = [];
     const placeholders: string[] = [];
     let paramIndex = 1;
@@ -1066,8 +1250,13 @@ export const vectorRepo = {
       placeholders.push(`($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, 
         $${paramIndex++}, $${paramIndex++}, $${paramIndex++}::vector)`);
       values.push(
-        tenantId, documentId, chunk.chunkIndex, chunk.textContent,
-        chunk.pageFrom, chunk.pageTo, `[${chunk.embedding.join(',')}]`
+        tenantId,
+        documentId,
+        chunk.chunkIndex,
+        chunk.textContent,
+        chunk.pageFrom,
+        chunk.pageTo,
+        `[${chunk.embedding.join(',')}]`,
       );
     }
 
@@ -1077,7 +1266,7 @@ export const vectorRepo = {
       `INSERT INTO document_chunks (tenant_id, document_id, chunk_index, text_content, 
         page_from, page_to, embedding)
        VALUES ${placeholders.join(', ')}`,
-      values
+      values,
     );
   },
 };

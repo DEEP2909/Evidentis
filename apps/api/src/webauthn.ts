@@ -1,26 +1,22 @@
-/**
- * EvidentIS WebAuthn/Passkey Implementation
- * FIDO2/WebAuthn support for passwordless authentication
- */
-
+import { createHash, randomBytes } from 'node:crypto';
 import {
-  generateRegistrationOptions,
-  verifyRegistrationResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse,
-  type VerifiedRegistrationResponse,
   type VerifiedAuthenticationResponse,
+  type VerifiedRegistrationResponse,
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
 } from '@simplewebauthn/server';
 import type {
+  AuthenticationResponseJSON,
+  AuthenticatorTransportFuture,
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
-  AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
 } from '@simplewebauthn/types';
-import { createHash, randomBytes } from 'crypto';
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Redis } from 'ioredis';
+import type pg from 'pg';
 import { config } from './config.js';
 import { authenticateRequest } from './routes.js';
 
@@ -45,14 +41,14 @@ interface WebAuthnCredential {
 
 interface StoredChallenge {
   challenge: string;
-  attorneyId: string;
+  advocateId: string;
   type: 'registration' | 'authentication';
   expiresAt: Date;
 }
 
 interface RequestUser {
   tenantId: string;
-  attorneyId: string;
+  advocateId: string;
   email?: string;
   displayName?: string;
   role?: string;
@@ -85,7 +81,10 @@ const CHALLENGE_EXPIRY_MS = 5 * 60 * 1000;
 const challengeStore = new Map<string, StoredChallenge>();
 let challengeRedis: Redis | null | undefined;
 
-function getChallengeStoreKey(identifier: string, type: 'registration' | 'authentication'): string {
+function getChallengeStoreKey(
+  identifier: string,
+  type: 'registration' | 'authentication',
+): string {
   return `webauthn:challenge:${type}:${Buffer.from(identifier, 'utf8').toString('base64url')}`;
 }
 
@@ -119,12 +118,12 @@ async function getChallengeRedis(): Promise<Redis | null> {
 async function storeChallenge(
   identifier: string,
   challenge: string,
-  type: 'registration' | 'authentication'
+  type: 'registration' | 'authentication',
 ): Promise<void> {
   const key = getChallengeStoreKey(identifier, type);
   const record: StoredChallenge = {
     challenge,
-    attorneyId: identifier,
+    advocateId: identifier,
     type,
     expiresAt: new Date(Date.now() + CHALLENGE_EXPIRY_MS),
   };
@@ -145,7 +144,7 @@ async function storeChallenge(
 
 async function getChallenge(
   identifier: string,
-  type: 'registration' | 'authentication'
+  type: 'registration' | 'authentication',
 ): Promise<string | null> {
   const key = getChallengeStoreKey(identifier, type);
   const redis = await getChallengeRedis();
@@ -172,7 +171,7 @@ async function getChallenge(
 
 async function consumeChallenge(
   identifier: string,
-  type: 'registration' | 'authentication'
+  type: 'registration' | 'authentication',
 ): Promise<string | null> {
   const key = getChallengeStoreKey(identifier, type);
   const challenge = await getChallenge(identifier, type);
@@ -195,9 +194,9 @@ async function consumeChallenge(
 // ============================================================================
 
 async function getCredentialsForUser(
-  db: any,
+  db: pg.Pool | pg.PoolClient,
   tenantId: string,
-  attorneyId: string
+  advocateId: string,
 ): Promise<WebAuthnCredential[]> {
   const result = await db.query(
     `SELECT 
@@ -205,11 +204,24 @@ async function getCredentialsForUser(
       credential_device_type, credential_backed_up, transports,
       aaguid, attestation_object, created_at, last_used_at, friendly_name
     FROM webauthn_credentials
-    WHERE tenant_id = $1 AND attorney_id = $2`,
-    [tenantId, attorneyId]
+    WHERE tenant_id = $1 AND advocate_id = $2`,
+    [tenantId, advocateId],
   );
 
-  return result.rows.map((row: any) => ({
+  return result.rows.map((row: {
+    id: string;
+    credential_id: Buffer;
+    credential_public_key: Buffer;
+    counter: number;
+    credential_device_type: string;
+    credential_backed_up: boolean;
+    transports: AuthenticatorTransportFuture[];
+    aaguid: string;
+    attestation_object: Buffer;
+    created_at: Date;
+    last_used_at: Date;
+    friendly_name: string;
+  }) => ({
     id: row.id,
     credentialId: row.credential_id,
     credentialPublicKey: row.credential_public_key,
@@ -226,7 +238,7 @@ async function getCredentialsForUser(
 }
 
 async function saveCredential(
-  db: any,
+  db: pg.Pool | pg.PoolClient,
   tenantId: string,
   attorneyId: string,
   credential: {
@@ -239,13 +251,13 @@ async function saveCredential(
     aaguid: string;
     attestationObject?: Uint8Array;
   },
-  friendlyName?: string
+  friendlyName?: string,
 ): Promise<string> {
   const id = randomBytes(16).toString('hex');
-  
+
   await db.query(
     `INSERT INTO webauthn_credentials (
-      id, tenant_id, attorney_id, credential_id, credential_public_key,
+      id, tenant_id, advocate_id, credential_id, credential_public_key,
       counter, credential_device_type, credential_backed_up, transports,
       aaguid, attestation_object, friendly_name, created_at
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
@@ -262,54 +274,56 @@ async function saveCredential(
       credential.credentialBackedUp,
       credential.transports || [],
       credential.aaguid,
-      credential.attestationObject ? Buffer.from(credential.attestationObject) : null,
+      credential.attestationObject
+        ? Buffer.from(credential.attestationObject)
+        : null,
       friendlyName || 'Security Key',
-    ]
+    ],
   );
 
   return id;
 }
 
 async function updateCredentialCounter(
-  db: any,
+  db: pg.Pool | pg.PoolClient,
   credentialId: Buffer,
-  newCounter: number
+  newCounter: number,
 ): Promise<void> {
   await db.query(
     `UPDATE webauthn_credentials 
     SET counter = $1, last_used_at = NOW() 
     WHERE credential_id = $2`,
-    [newCounter, credentialId]
+    [newCounter, credentialId],
   );
 }
 
 async function deleteCredential(
-  db: any,
+  db: pg.Pool | pg.PoolClient,
   tenantId: string,
   attorneyId: string,
-  credentialDbId: string
+  credentialDbId: string,
 ): Promise<boolean> {
   const result = await db.query(
     `DELETE FROM webauthn_credentials 
-    WHERE id = $1 AND tenant_id = $2 AND attorney_id = $3`,
-    [credentialDbId, tenantId, attorneyId]
+    WHERE id = $1 AND tenant_id = $2 AND advocate_id = $3`,
+    [credentialDbId, tenantId, attorneyId],
   );
   return result.rowCount > 0;
 }
 
 async function getCredentialById(
-  db: any,
-  credentialId: Uint8Array
+  db: pg.Pool | pg.PoolClient,
+  credentialId: Uint8Array,
 ): Promise<WebAuthnCredential | null> {
   const result = await db.query(
     `SELECT 
       wc.id, wc.credential_id, wc.credential_public_key, wc.counter,
       wc.credential_device_type, wc.credential_backed_up, wc.transports,
       wc.aaguid, wc.attestation_object, wc.created_at, wc.last_used_at,
-      wc.friendly_name, wc.tenant_id, wc.attorney_id
+      wc.friendly_name, wc.tenant_id, wc.advocate_id
     FROM webauthn_credentials wc
     WHERE wc.credential_id = $1`,
-    [Buffer.from(credentialId)]
+    [Buffer.from(credentialId)],
   );
 
   if (result.rows.length === 0) return null;
@@ -336,15 +350,19 @@ async function getCredentialById(
 // ============================================================================
 
 export async function generatePasskeyRegistrationOptions(
-  db: any,
+  db: pg.Pool | pg.PoolClient,
   tenantId: string,
-  attorneyId: string,
+  advocateId: string,
   userEmail: string,
-  userName: string
+  userName: string,
 ): Promise<PublicKeyCredentialCreationOptionsJSON> {
   // Get existing credentials to exclude
-  const existingCredentials = await getCredentialsForUser(db, tenantId, attorneyId);
-  
+  const existingCredentials = await getCredentialsForUser(
+    db,
+    tenantId,
+    advocateId,
+  );
+
   const excludeCredentials = existingCredentials.map((cred) => ({
     id: cred.credentialId.toString('base64url'),
     type: 'public-key' as const,
@@ -353,7 +371,7 @@ export async function generatePasskeyRegistrationOptions(
 
   // Generate user ID from attorney ID (deterministic, privacy-preserving)
   const userIdHash = createHash('sha256')
-    .update(`${tenantId}:${attorneyId}`)
+    .update(`${tenantId}:${advocateId}`)
     .digest();
 
   const options = await generateRegistrationOptions({
@@ -375,51 +393,52 @@ export async function generatePasskeyRegistrationOptions(
     },
     timeout: CEREMONY_TIMEOUT,
     supportedAlgorithmIDs: [
-      -7,   // ES256 (most common)
+      -7, // ES256 (most common)
       -257, // RS256 (Windows Hello)
-      -8,   // EdDSA
+      -8, // EdDSA
     ],
   });
 
   // Store challenge for verification
-  await storeChallenge(attorneyId, options.challenge, 'registration');
+  await storeChallenge(advocateId, options.challenge, 'registration');
 
   return options;
 }
 
 export async function verifyPasskeyRegistration(
-  db: any,
+  db: pg.Pool | pg.PoolClient,
   tenantId: string,
-  attorneyId: string,
+  advocateId: string,
   response: RegistrationResponseJSON,
-  friendlyName?: string
+  friendlyName?: string,
 ): Promise<{ success: boolean; credentialId?: string; error?: string }> {
-  const expectedChallenge = await consumeChallenge(attorneyId, 'registration');
-  
+  const expectedChallenge = await consumeChallenge(advocateId, 'registration');
+
   if (!expectedChallenge) {
     return { success: false, error: 'Challenge expired or not found' };
   }
 
   try {
-    const verification: VerifiedRegistrationResponse = await verifyRegistrationResponse({
-      response,
-      expectedChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
-      requireUserVerification: true,
-    });
+    const verification: VerifiedRegistrationResponse =
+      await verifyRegistrationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: origin,
+        expectedRPID: rpID,
+        requireUserVerification: true,
+      });
 
     if (!verification.verified || !verification.registrationInfo) {
       return { success: false, error: 'Registration verification failed' };
     }
 
     const { registrationInfo } = verification;
-    
+
     // Save the credential to database
     const credentialId = await saveCredential(
       db,
       tenantId,
-      attorneyId,
+      advocateId,
       {
         credentialId: registrationInfo.credentialID,
         credentialPublicKey: registrationInfo.credentialPublicKey,
@@ -430,15 +449,15 @@ export async function verifyPasskeyRegistration(
         aaguid: registrationInfo.aaguid,
         attestationObject: registrationInfo.attestationObject,
       },
-      friendlyName
+      friendlyName,
     );
 
     return { success: true, credentialId };
   } catch (error) {
     console.error('WebAuthn registration error:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Registration failed' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Registration failed',
     };
   }
 }
@@ -448,15 +467,23 @@ export async function verifyPasskeyRegistration(
 // ============================================================================
 
 export async function generatePasskeyAuthenticationOptions(
-  db: any,
+  db: pg.Pool | pg.PoolClient,
   tenantId?: string,
-  attorneyId?: string
+  advocateId?: string,
 ): Promise<PublicKeyCredentialRequestOptionsJSON> {
-  let allowCredentials: { id: string; type: 'public-key'; transports?: AuthenticatorTransportFuture[] }[] = [];
+  let allowCredentials: {
+    id: string;
+    type: 'public-key';
+    transports?: AuthenticatorTransportFuture[];
+  }[] = [];
 
   // If we know the user, limit to their credentials
-  if (tenantId && attorneyId) {
-    const existingCredentials = await getCredentialsForUser(db, tenantId, attorneyId);
+  if (tenantId && advocateId) {
+    const existingCredentials = await getCredentialsForUser(
+      db,
+      tenantId,
+      advocateId,
+    );
     allowCredentials = existingCredentials.map((cred) => ({
       id: cred.credentialId.toString('base64url'),
       type: 'public-key' as const,
@@ -469,39 +496,40 @@ export async function generatePasskeyAuthenticationOptions(
     userVerification: 'preferred',
     timeout: CEREMONY_TIMEOUT,
     // If empty, allows discoverable credentials (true passkey login)
-    allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
+    allowCredentials:
+      allowCredentials.length > 0 ? allowCredentials : undefined,
   });
 
   // Store challenge - use session ID if no attorney ID (for discoverable credential flow)
-  const challengeKey = attorneyId || options.challenge;
+  const challengeKey = advocateId || options.challenge;
   await storeChallenge(challengeKey, options.challenge, 'authentication');
 
   return options;
 }
 
 export async function verifyPasskeyAuthentication(
-  db: any,
+  db: pg.Pool | pg.PoolClient,
   response: AuthenticationResponseJSON,
   expectedChallenge?: string,
-  attorneyId?: string
-): Promise<{ 
-  success: boolean; 
+  advocateId?: string,
+): Promise<{
+  success: boolean;
   tenantId?: string;
-  attorneyId?: string; 
-  error?: string 
+  attorneyId?: string;
+  error?: string;
 }> {
   // Get the credential to find the user
   const credentialIdBuffer = Buffer.from(response.id, 'base64url');
-  
+
   // Look up the credential
   const credentialResult = await db.query(
     `SELECT 
       wc.id, wc.credential_id, wc.credential_public_key, wc.counter,
-      wc.tenant_id, wc.attorney_id, a.email, a.display_name, a.status
+      wc.tenant_id, wc.advocate_id, a.email, a.display_name, a.status
     FROM webauthn_credentials wc
-    JOIN attorneys a ON wc.attorney_id = a.id AND wc.tenant_id = a.tenant_id
+    JOIN attorneys a ON wc.advocate_id = a.id AND wc.tenant_id = a.tenant_id
     WHERE wc.credential_id = $1`,
-    [credentialIdBuffer]
+    [credentialIdBuffer],
   );
 
   if (credentialResult.rows.length === 0) {
@@ -509,15 +537,19 @@ export async function verifyPasskeyAuthentication(
   }
 
   const credentialRow = credentialResult.rows[0];
-  
+
   // Check attorney status
   if (credentialRow.status !== 'active') {
     return { success: false, error: 'Account is not active' };
   }
 
   // Get or consume challenge
-  const challengeKey = attorneyId || expectedChallenge || response.response.clientDataJSON;
-  const storedChallenge = await consumeChallenge(challengeKey, 'authentication');
+  const challengeKey =
+    advocateId || expectedChallenge || response.response.clientDataJSON;
+  const storedChallenge = await consumeChallenge(
+    challengeKey,
+    'authentication',
+  );
 
   if (!storedChallenge) {
     return { success: false, error: 'Challenge expired or not found' };
@@ -534,14 +566,15 @@ export async function verifyPasskeyAuthentication(
       counter: credentialRow.counter,
     };
 
-    const verification: VerifiedAuthenticationResponse = await verifyAuthenticationResponse({
-      response,
-      expectedChallenge: storedChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
-      authenticator,
-      requireUserVerification: true,
-    });
+    const verification: VerifiedAuthenticationResponse =
+      await verifyAuthenticationResponse({
+        response,
+        expectedChallenge: storedChallenge,
+        expectedOrigin: origin,
+        expectedRPID: rpID,
+        authenticator,
+        requireUserVerification: true,
+      });
 
     if (!verification.verified) {
       return { success: false, error: 'Authentication verification failed' };
@@ -549,18 +582,22 @@ export async function verifyPasskeyAuthentication(
 
     // Update counter to prevent replay attacks
     const { authenticationInfo } = verification;
-    await updateCredentialCounter(db, credentialRow.credential_id, authenticationInfo.newCounter);
+    await updateCredentialCounter(
+      db,
+      credentialRow.credential_id,
+      authenticationInfo.newCounter,
+    );
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       tenantId: credentialRow.tenant_id,
-      attorneyId: credentialRow.attorney_id 
+      advocateId: credentialRow.advocate_id,
     };
   } catch (error) {
     console.error('WebAuthn authentication error:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Authentication failed' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Authentication failed',
     };
   }
 }
@@ -569,60 +606,75 @@ export async function verifyPasskeyAuthentication(
 // FASTIFY ROUTES
 // ============================================================================
 
-export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
+export function registerWebAuthnRoutes(app: FastifyInstance, db: pg.Pool | pg.PoolClient): void {
   // Get registered passkeys for current user
-  app.get('/auth/passkeys', { preHandler: authenticateRequest }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { tenantId, attorneyId } = request.user as RequestUser;
-    
-    const credentials = await getCredentialsForUser(db, tenantId, attorneyId);
-    
-    return credentials.map((cred) => ({
-      id: cred.id,
-      friendlyName: cred.friendlyName,
-      deviceType: cred.credentialDeviceType,
-      backedUp: cred.credentialBackedUp,
-      createdAt: cred.createdAt,
-      lastUsedAt: cred.lastUsedAt,
-    }));
-  });
+  app.get(
+    '/auth/passkeys',
+    { preHandler: authenticateRequest },
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      const { tenantId, advocateId } = request.user as RequestUser;
+
+      const credentials = await getCredentialsForUser(db, tenantId, advocateId);
+
+      return credentials.map((cred) => ({
+        id: cred.id,
+        friendlyName: cred.friendlyName,
+        deviceType: cred.credentialDeviceType,
+        backedUp: cred.credentialBackedUp,
+        createdAt: cred.createdAt,
+        lastUsedAt: cred.lastUsedAt,
+      }));
+    },
+  );
 
   // Start passkey registration
-  app.post('/auth/passkeys/register/options', { preHandler: authenticateRequest }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { tenantId, attorneyId, email = '', displayName = '' } = request.user as RequestUser;
-    
-    const options = await generatePasskeyRegistrationOptions(
-      db,
-      tenantId,
-      attorneyId,
-      email,
-      displayName
-    );
-    
-    return options;
-  });
+  app.post(
+    '/auth/passkeys/register/options',
+    { preHandler: authenticateRequest },
+    async (request: FastifyRequest, _reply: FastifyReply) => {
+      const {
+        tenantId,
+        advocateId,
+        email = '',
+        displayName = '',
+      } = request.user as RequestUser;
+
+      const options = await generatePasskeyRegistrationOptions(
+        db,
+        tenantId,
+        advocateId,
+        email,
+        displayName,
+      );
+
+      return options;
+    },
+  );
 
   // Complete passkey registration
-  app.post<{ Body: { response: RegistrationResponseJSON; friendlyName?: string } }>(
+  app.post<{
+    Body: { response: RegistrationResponseJSON; friendlyName?: string };
+  }>(
     '/auth/passkeys/register/verify',
     { preHandler: authenticateRequest },
     async (request, reply) => {
-    const { tenantId, attorneyId } = request.user as RequestUser;
-    const { response, friendlyName } = request.body;
-    
-    const result = await verifyPasskeyRegistration(
-      db,
-      tenantId,
-      attorneyId,
-      response,
-      friendlyName
-    );
-    
-    if (!result.success) {
-      return reply.status(400).send({ error: result.error });
-    }
-    
-    return { success: true, credentialId: result.credentialId };
-    }
+      const { tenantId, advocateId } = request.user as RequestUser;
+      const { response, friendlyName } = request.body;
+
+      const result = await verifyPasskeyRegistration(
+        db,
+        tenantId,
+        advocateId,
+        response,
+        friendlyName,
+      );
+
+      if (!result.success) {
+        return reply.status(400).send({ error: result.error });
+      }
+
+      return { success: true, credentialId: result.credentialId };
+    },
   );
 
   // Delete a passkey
@@ -630,164 +682,196 @@ export function registerWebAuthnRoutes(app: FastifyInstance, db: any): void {
     '/auth/passkeys/:credentialId',
     { preHandler: authenticateRequest },
     async (request, reply) => {
-    const { tenantId, attorneyId } = request.user as RequestUser;
-    const { credentialId } = request.params;
-    
-    // Ensure user has at least one other auth method before deleting
-    const credentials = await getCredentialsForUser(db, tenantId, attorneyId);
-    
-    if (credentials.length <= 1) {
-      // Check if user has password or other auth method
-      const attorney = await db.query(
-        'SELECT password_hash, mfa_enabled FROM attorneys WHERE tenant_id = $1 AND id = $2',
-        [tenantId, attorneyId]
-      );
-      
-      if (!attorney.rows[0]?.password_hash && credentials.length === 1) {
-        return reply.status(400).send({ 
-          error: 'Cannot delete last authentication method' 
-        });
+      const { tenantId, advocateId } = request.user as RequestUser;
+      const { credentialId } = request.params;
+
+      // Ensure user has at least one other auth method before deleting
+      const credentials = await getCredentialsForUser(db, tenantId, advocateId);
+
+      if (credentials.length <= 1) {
+        // Check if user has password or other auth method
+        const attorney = await db.query(
+          'SELECT password_hash, mfa_enabled FROM attorneys WHERE tenant_id = $1 AND id = $2',
+          [tenantId, attorneyId],
+        );
+
+        if (!attorney.rows[0]?.password_hash && credentials.length === 1) {
+          return reply.status(400).send({
+            error: 'Cannot delete last authentication method',
+          });
+        }
       }
-    }
-    
-    const deleted = await deleteCredential(db, tenantId, attorneyId, credentialId);
-    
-    if (!deleted) {
-      return reply.status(404).send({ error: 'Passkey not found' });
-    }
-    
-    return { success: true };
-    }
+
+      const deleted = await deleteCredential(
+        db,
+        tenantId,
+        advocateId,
+        credentialId,
+      );
+
+      if (!deleted) {
+        return reply.status(404).send({ error: 'Passkey not found' });
+      }
+
+      return { success: true };
+    },
   );
 
   // Rename a passkey
-  app.patch<{ Params: { credentialId: string }; Body: { friendlyName: string } }>(
+  app.patch<{
+    Params: { credentialId: string };
+    Body: { friendlyName: string };
+  }>(
     '/auth/passkeys/:credentialId',
     { preHandler: authenticateRequest },
-    async (request, reply) => {
-    const { tenantId, attorneyId } = request.user as RequestUser;
-    const { credentialId } = request.params;
-    const { friendlyName } = request.body;
-    
-    await db.query(
-      `UPDATE webauthn_credentials 
+    async (request, _reply) => {
+      const { tenantId, advocateId } = request.user as RequestUser;
+      const { credentialId } = request.params;
+      const { friendlyName } = request.body;
+
+      await db.query(
+        `UPDATE webauthn_credentials 
       SET friendly_name = $1 
-      WHERE id = $2 AND tenant_id = $3 AND attorney_id = $4`,
-      [friendlyName, credentialId, tenantId, attorneyId]
-    );
-    
-    return { success: true };
-    }
+      WHERE id = $2 AND tenant_id = $3 AND advocate_id = $4`,
+        [friendlyName, credentialId, tenantId, advocateId],
+      );
+
+      return { success: true };
+    },
   );
 
   // Start passwordless authentication (for login page)
-  app.post('/auth/passkeys/authenticate/options', async (request: FastifyRequest<{
-    Body: { email?: string };
-  }>, reply: FastifyReply) => {
-    const { email } = request.body || {};
-    
-    let tenantId: string | undefined;
-    let attorneyId: string | undefined;
-    
-    // If email provided, look up user's credentials
-    if (email) {
-      const userResult = await db.query(
-        `SELECT tenant_id, id FROM attorneys WHERE email = $1 AND status = 'active'`,
-        [email.toLowerCase()]
-      );
-      
-      if (userResult.rows.length > 0) {
-        tenantId = userResult.rows[0].tenant_id;
-        attorneyId = userResult.rows[0].id;
+  app.post(
+    '/auth/passkeys/authenticate/options',
+    async (
+      request: FastifyRequest<{
+        Body: { email?: string };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const { email } = request.body || {};
+
+      let tenantId: string | undefined;
+      let advocateId: string | undefined;
+
+      // If email provided, look up user's credentials
+      if (email) {
+        const userResult = await db.query(
+          `SELECT tenant_id, id FROM attorneys WHERE email = $1 AND status = 'active'`,
+          [email.toLowerCase()],
+        );
+
+        if (userResult.rows.length > 0) {
+          tenantId = userResult.rows[0].tenant_id;
+          advocateId = userResult.rows[0].id;
+        }
       }
-    }
-    
-    const options = await generatePasskeyAuthenticationOptions(db, tenantId, attorneyId);
-    
-    // Store the challenge in session/cookie for verification
-    reply.setCookie('webauthn_challenge', options.challenge, {
-      httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 300, // 5 minutes
-      path: '/auth',
-    });
-    
-    return options;
-  });
+
+      const options = await generatePasskeyAuthenticationOptions(
+        db,
+        tenantId,
+        advocateId,
+      );
+
+      // Store the challenge in session/cookie for verification
+      reply.setCookie('webauthn_challenge', options.challenge, {
+        httpOnly: true,
+        secure: config.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 300, // 5 minutes
+        path: '/auth',
+      });
+
+      return options;
+    },
+  );
 
   // Complete passwordless authentication
-  app.post('/auth/passkeys/authenticate/verify', async (request: FastifyRequest<{
-    Body: { response: AuthenticationResponseJSON };
-  }>, reply: FastifyReply) => {
-    const { response } = request.body;
-    const expectedChallenge = request.cookies.webauthn_challenge;
-    
-    if (!expectedChallenge) {
-      return reply.status(400).send({ error: 'Authentication session expired' });
-    }
-    
-    const result = await verifyPasskeyAuthentication(db, response, expectedChallenge);
-    
-    // Clear the challenge cookie
-    reply.clearCookie('webauthn_challenge', { path: '/auth' });
-    
-    if (!result.success) {
-      return reply.status(401).send({ error: result.error });
-    }
-    
-    // Generate JWT tokens for the authenticated user
-    const attorneyResult = await db.query(
-      `SELECT a.id, a.tenant_id, a.email, a.display_name, a.role, t.slug as tenant_slug
+  app.post(
+    '/auth/passkeys/authenticate/verify',
+    async (
+      request: FastifyRequest<{
+        Body: { response: AuthenticationResponseJSON };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const { response } = request.body;
+      const expectedChallenge = request.cookies.webauthn_challenge;
+
+      if (!expectedChallenge) {
+        return reply
+          .status(400)
+          .send({ error: 'Authentication session expired' });
+      }
+
+      const result = await verifyPasskeyAuthentication(
+        db,
+        response,
+        expectedChallenge,
+      );
+
+      // Clear the challenge cookie
+      reply.clearCookie('webauthn_challenge', { path: '/auth' });
+
+      if (!result.success) {
+        return reply.status(401).send({ error: result.error });
+      }
+
+      // Generate JWT tokens for the authenticated user
+      const attorneyResult = await db.query(
+        `SELECT a.id, a.tenant_id, a.email, a.display_name, a.role, t.slug as tenant_slug
       FROM attorneys a
       JOIN tenants t ON a.tenant_id = t.id
       WHERE a.id = $1 AND a.tenant_id = $2`,
-      [result.attorneyId, result.tenantId]
-    );
-    
-    if (attorneyResult.rows.length === 0) {
-      return reply.status(401).send({ error: 'User not found' });
-    }
-    
-    const attorney = attorneyResult.rows[0];
-    
-    // Update last login
-    await db.query(
-      'UPDATE attorneys SET last_login_at = NOW() WHERE id = $1',
-      [attorney.id]
-    );
-    
-    // Generate tokens (assuming jwt utilities are available)
-    const { generateAccessToken, generateRefreshToken } = await import('./auth.js');
-    
-    const accessToken = await generateAccessToken({
-      sub: attorney.id,
-      tenantId: attorney.tenant_id,
-      email: attorney.email,
-      role: attorney.role,
-    });
-    
-    const refreshToken = await generateRefreshToken({
-      sub: attorney.id,
-      tenantId: attorney.tenant_id,
-      email: attorney.email,
-      role: attorney.role,
-      tokenId: randomBytes(16).toString('hex'),
-    });
-    
-    return {
-      success: true,
-      accessToken,
-      refreshToken,
-      user: {
-        id: attorney.id,
+        [result.attorneyId, result.tenantId],
+      );
+
+      if (attorneyResult.rows.length === 0) {
+        return reply.status(401).send({ error: 'User not found' });
+      }
+
+      const attorney = attorneyResult.rows[0];
+
+      // Update last login
+      await db.query(
+        'UPDATE attorneys SET last_login_at = NOW() WHERE id = $1',
+        [attorney.id],
+      );
+
+      // Generate tokens (assuming jwt utilities are available)
+      const { generateAccessToken, generateRefreshToken } = await import(
+        './auth.js'
+      );
+
+      const accessToken = await generateAccessToken({
+        sub: attorney.id,
+        tenantId: attorney.tenant_id,
         email: attorney.email,
-        displayName: attorney.display_name,
         role: attorney.role,
-        tenantSlug: attorney.tenant_slug,
-      },
-    };
-  });
+      });
+
+      const refreshToken = await generateRefreshToken({
+        sub: attorney.id,
+        tenantId: attorney.tenant_id,
+        email: attorney.email,
+        role: attorney.role,
+        tokenId: randomBytes(16).toString('hex'),
+      });
+
+      return {
+        success: true,
+        accessToken,
+        refreshToken,
+        user: {
+          id: attorney.id,
+          email: attorney.email,
+          displayName: attorney.display_name,
+          role: attorney.role,
+          tenantSlug: attorney.tenant_slug,
+        },
+      };
+    },
+  );
 }
 
 // ============================================================================

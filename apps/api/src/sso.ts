@@ -1,7 +1,7 @@
+import { createHash, randomBytes } from 'node:crypto';
 // EvidentIS - OIDC/OAuth2 PKCE SSO Implementation
-import { type FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { type FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
-import { randomBytes, createHash } from 'crypto';
 import { config } from './config.js';
 import { pool } from './database.js';
 import { logger } from './logger.js';
@@ -43,21 +43,23 @@ function generateSecureRandom(): string {
 }
 
 // Get OIDC configuration for a tenant
-async function getOIDCConfig(tenantId: string): Promise<OIDCProviderConfig | null> {
+async function getOIDCConfig(
+  tenantId: string,
+): Promise<OIDCProviderConfig | null> {
   const result = await pool.query(
     `SELECT provider_type, issuer_url, client_id, client_secret_encrypted, scopes
      FROM sso_configurations
      WHERE tenant_id = $1 AND enabled = true AND provider_type = 'oidc'`,
-    [tenantId]
+    [tenantId],
   );
 
   if (result.rows.length === 0) return null;
 
   const row = result.rows[0];
-  
+
   // Fetch well-known configuration
   const wellKnownUrl = `${row.issuer_url}/.well-known/openid-configuration`;
-  const wellKnown = await fetch(wellKnownUrl).then(r => r.json());
+  const wellKnown = await fetch(wellKnownUrl).then((r) => r.json());
 
   return {
     issuer: row.issuer_url,
@@ -74,7 +76,7 @@ async function getOIDCConfig(tenantId: string): Promise<OIDCProviderConfig | nul
 // Initiate OIDC login
 export async function initiateOIDCLogin(
   tenantId: string,
-  redirectUri: string
+  redirectUri: string,
 ): Promise<{ authUrl: string; state: string }> {
   const oidcConfig = await getOIDCConfig(tenantId);
   if (!oidcConfig) {
@@ -124,7 +126,7 @@ export async function initiateOIDCLogin(
 // Handle OIDC callback
 export async function handleOIDCCallback(
   code: string,
-  state: string
+  state: string,
 ): Promise<{
   email: string;
   name: string;
@@ -193,12 +195,15 @@ export async function handleOIDCCallback(
 
   logger.info(
     { tenantId: storedState.tenantId, sub: payload.sub },
-    'OIDC authentication successful'
+    'OIDC authentication successful',
   );
 
   return {
     email: (userInfo.email as string) || '',
-    name: (userInfo.name as string) || (userInfo.preferred_username as string) || '',
+    name:
+      (userInfo.name as string) ||
+      (userInfo.preferred_username as string) ||
+      '',
     sub: payload.sub as string,
     tenantId: storedState.tenantId,
   };
@@ -206,35 +211,36 @@ export async function handleOIDCCallback(
 
 // Link SSO identity to existing user
 export async function linkSSOIdentity(
-  attorneyId: string,
+  advocateId: string,
   provider: string,
   providerUserId: string,
-  tenantId: string
+  tenantId: string,
+  email: string,
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO attorney_sso_links (attorney_id, provider, provider_user_id, tenant_id, linked_at)
-     VALUES ($1, $2, $3, $4, NOW())
-     ON CONFLICT (attorney_id, provider) DO UPDATE SET
-       provider_user_id = EXCLUDED.provider_user_id,
-       linked_at = NOW()`,
-    [attorneyId, provider, providerUserId, tenantId]
+    `INSERT INTO identity_links (advocate_id, provider, external_id, tenant_id, created_at, email)
+     VALUES ($1, $2, $3, $4, NOW(), $5)
+     ON CONFLICT (tenant_id, provider, external_id) DO UPDATE SET
+       last_login_at = NOW(),
+       email = EXCLUDED.email`,
+    [advocateId, provider, providerUserId, tenantId, email],
   );
 
-  logger.info({ attorneyId, provider }, 'SSO identity linked');
+  logger.info({ advocateId, provider }, 'SSO identity linked');
 }
 
 // Find user by SSO identity
 export async function findUserBySSOIdentity(
   provider: string,
   providerUserId: string,
-  tenantId: string
+  tenantId: string,
 ): Promise<{ id: string; email: string; role: string } | null> {
   const result = await pool.query(
     `SELECT a.id, a.email, a.role
      FROM attorneys a
-     JOIN attorney_sso_links l ON a.id = l.attorney_id
-     WHERE l.provider = $1 AND l.provider_user_id = $2 AND a.tenant_id = $3`,
-    [provider, providerUserId, tenantId]
+     JOIN identity_links l ON a.id = l.advocate_id
+     WHERE l.provider = $1 AND l.external_id = $2 AND a.tenant_id = $3`,
+    [provider, providerUserId, tenantId],
   );
 
   return result.rows[0] || null;
@@ -271,7 +277,7 @@ export async function initiateOAuth2Login(
   provider: string,
   clientId: string,
   redirectUri: string,
-  tenantId: string
+  tenantId: string,
 ): Promise<{ authUrl: string; state: string }> {
   const providerConfig = OAUTH2_PROVIDERS[provider];
   if (!providerConfig) {
@@ -321,7 +327,7 @@ export async function configureSSOProvider(
     metadataUrl?: string;
     certificate?: string;
     scopes?: string[];
-  }
+  },
 ): Promise<{ id: string }> {
   const result = await pool.query(
     `INSERT INTO sso_configurations (
@@ -347,7 +353,7 @@ export async function configureSSOProvider(
       config.metadataUrl,
       config.certificate,
       config.scopes || ['openid', 'email', 'profile'],
-    ]
+    ],
   );
 
   logger.info({ tenantId, providerType }, 'SSO provider configured');
@@ -356,39 +362,46 @@ export async function configureSSOProvider(
 }
 
 // Get SSO configuration for tenant
-export async function getSSOConfiguration(
-  tenantId: string
-): Promise<Array<{
-  id: string;
-  providerType: string;
-  issuerUrl: string;
-  enabled: boolean;
-}>> {
+export async function getSSOConfiguration(tenantId: string): Promise<
+  Array<{
+    id: string;
+    providerType: string;
+    issuerUrl: string;
+    enabled: boolean;
+  }>
+> {
   const result = await pool.query(
     `SELECT id, provider_type, issuer_url, enabled
      FROM sso_configurations
      WHERE tenant_id = $1`,
-    [tenantId]
+    [tenantId],
   );
 
-  return result.rows.map((row: { id: string; provider_type: string; issuer_url: string; enabled: boolean }) => ({
-    id: row.id,
-    providerType: row.provider_type,
-    issuerUrl: row.issuer_url,
-    enabled: row.enabled,
-  }));
+  return result.rows.map(
+    (row: {
+      id: string;
+      provider_type: string;
+      issuer_url: string;
+      enabled: boolean;
+    }) => ({
+      id: row.id,
+      providerType: row.provider_type,
+      issuerUrl: row.issuer_url,
+      enabled: row.enabled,
+    }),
+  );
 }
 
 // Disable SSO provider
 export async function disableSSOProvider(
   tenantId: string,
-  providerId: string
+  providerId: string,
 ): Promise<void> {
   await pool.query(
     `UPDATE sso_configurations
      SET enabled = false, updated_at = NOW()
      WHERE id = $1 AND tenant_id = $2`,
-    [providerId, tenantId]
+    [providerId, tenantId],
   );
 
   logger.info({ tenantId, providerId }, 'SSO provider disabled');
@@ -397,7 +410,7 @@ export async function disableSSOProvider(
 // SSO domain verification
 export async function verifyDomain(
   tenantId: string,
-  domain: string
+  domain: string,
 ): Promise<{ verified: boolean; verificationRecord: string }> {
   const verificationToken = randomBytes(16).toString('hex');
   const verificationRecord = `evidentis-verify=${verificationToken}`;
@@ -408,7 +421,7 @@ export async function verifyDomain(
      ON CONFLICT (tenant_id, domain) DO UPDATE SET
        verification_token = EXCLUDED.verification_token,
        verified = false`,
-    [tenantId, domain, verificationToken]
+    [tenantId, domain, verificationToken],
   );
 
   return { verified: false, verificationRecord };
@@ -417,12 +430,12 @@ export async function verifyDomain(
 // Check domain verification via DNS TXT record
 export async function checkDomainVerification(
   tenantId: string,
-  domain: string
+  domain: string,
 ): Promise<boolean> {
   const result = await pool.query(
     `SELECT verification_token FROM sso_domains
      WHERE tenant_id = $1 AND domain = $2`,
-    [tenantId, domain]
+    [tenantId, domain],
   );
 
   if (result.rows.length === 0) return false;
@@ -435,7 +448,7 @@ export async function checkDomainVerification(
     await pool.query(
       `UPDATE sso_domains SET verified = true, verified_at = NOW()
        WHERE tenant_id = $1 AND domain = $2`,
-      [tenantId, domain]
+      [tenantId, domain],
     );
   }
 
@@ -448,27 +461,33 @@ export async function jitProvisionUser(
   email: string,
   name: string,
   providerUserId: string,
-  provider: string
+  provider: string,
 ): Promise<{ id: string; created: boolean }> {
   const normalizedEmail = email.toLowerCase();
   const displayName = name.trim() || normalizedEmail.split('@')[0];
 
   // Check if user exists
   const existing = await pool.query(
-    `SELECT id FROM attorneys WHERE email = $1 AND tenant_id = $2`,
-    [normalizedEmail, tenantId]
+    'SELECT id FROM attorneys WHERE email = $1 AND tenant_id = $2',
+    [normalizedEmail, tenantId],
   );
 
   if (existing.rows.length > 0) {
     // Link SSO identity to existing user
-    await linkSSOIdentity(existing.rows[0].id, provider, providerUserId, tenantId);
+    await linkSSOIdentity(
+      existing.rows[0].id,
+      provider,
+      providerUserId,
+      tenantId,
+      normalizedEmail,
+    );
     return { id: existing.rows[0].id, created: false };
   }
 
   // Check if JIT provisioning is enabled
   const tenant = await pool.query(
-    `SELECT jit_provisioning_enabled, default_role FROM tenants WHERE id = $1`,
-    [tenantId]
+    'SELECT jit_provisioning_enabled, default_role FROM tenants WHERE id = $1',
+    [tenantId],
   );
 
   if (!tenant.rows[0]?.jit_provisioning_enabled) {
@@ -483,23 +502,42 @@ export async function jitProvisionUser(
      )
      VALUES ($1, $2, $3, $4, 'active', NOW(), 'SSO_USER')
      RETURNING id`,
-    [tenantId, normalizedEmail, displayName, tenant.rows[0].default_role || 'advocate']
+    [
+      tenantId,
+      normalizedEmail,
+      displayName,
+      tenant.rows[0].default_role || 'advocate',
+    ],
   );
 
   // Link SSO identity
-  await linkSSOIdentity(result.rows[0].id, provider, providerUserId, tenantId);
+  await linkSSOIdentity(
+    result.rows[0].id,
+    provider,
+    providerUserId,
+    tenantId,
+    normalizedEmail,
+  );
 
-  logger.info({ tenantId, email: normalizedEmail, provider }, 'User JIT provisioned via SSO');
+  logger.info(
+    { tenantId, email: normalizedEmail, provider },
+    'User JIT provisioned via SSO',
+  );
 
   return { id: result.rows[0].id, created: true };
 }
 
 export async function registerSsoRoutes(app: FastifyInstance): Promise<void> {
   app.get('/auth/sso/start', async (request, reply) => {
-    const { tenantId, redirectUri } = request.query as { tenantId?: string; redirectUri?: string };
+    const { tenantId, redirectUri } = request.query as {
+      tenantId?: string;
+      redirectUri?: string;
+    };
 
     if (!tenantId) {
-      return reply.status(400).send({ success: false, error: { message: 'tenantId is required' } });
+      return reply
+        .status(400)
+        .send({ success: false, error: { message: 'tenantId is required' } });
     }
 
     const callbackUrl = redirectUri || `${config.FRONTEND_URL}/auth/callback`;
@@ -511,7 +549,9 @@ export async function registerSsoRoutes(app: FastifyInstance): Promise<void> {
     const { code, state } = request.query as { code?: string; state?: string };
 
     if (!code || !state) {
-      return reply.status(400).send({ success: false, error: { message: 'Missing code or state' } });
+      return reply
+        .status(400)
+        .send({ success: false, error: { message: 'Missing code or state' } });
     }
 
     const profile = await handleOIDCCallback(code, state);

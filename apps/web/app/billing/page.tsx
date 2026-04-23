@@ -7,8 +7,9 @@ import { AppShell } from "@/components/india/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { CURRENT_PLAN, EVIDENTIS_PLANS } from "@/lib/pricing";
+import { EVIDENTIS_PLANS } from "@/lib/pricing";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 
 const invoices = [
   { id: "INV-2026-0012", date: "15 Apr 2026", amount: "₹17,698", status: "Paid" },
@@ -30,6 +31,13 @@ function usagePercent(used: number, cap: number | null) {
 export default function BillingPage() {
   const { t } = useTranslation();
 
+  const { data: billing } = useQuery({
+    queryKey: ["billing"],
+    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+  });
+
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+
   return (
     <AppShell title={t("billing")}>
       <div className="space-y-6 page-enter">
@@ -41,14 +49,14 @@ export default function BillingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
               className={`glass p-6 transition ${
-                plan.key === CURRENT_PLAN.key
+                plan.key === currentPlan.key
                   ? "border-saffron-500/40 shadow-lg shadow-orange-500/15"
                   : "hover:border-saffron-500/30"
               }`}
             >
               <div className="flex items-center justify-between">
                 <p className="text-xs uppercase tracking-[0.24em] text-saffron-300">{plan.name}</p>
-                {plan.key === CURRENT_PLAN.key ? (
+                {plan.key === currentPlan.key ? (
                   <Badge className="animate-pulse bg-saffron-500 text-slate-900">
                     {t("bill_currentPlan")}
                   </Badge>
@@ -89,10 +97,10 @@ export default function BillingPage() {
               </p>
               <p className="mt-1 text-sm text-white/80">
                 {CURRENT_USAGE.documents.toLocaleString("en-IN")} /{" "}
-                {(CURRENT_PLAN.documentCap ?? 0).toLocaleString("en-IN")}
+                {(currentPlan.documentCap ?? 0).toLocaleString("en-IN")}
               </p>
               <Progress
-                value={usagePercent(CURRENT_USAGE.documents, CURRENT_PLAN.documentCap)}
+                value={usagePercent(CURRENT_USAGE.documents, currentPlan.documentCap)}
                 className="mt-2 h-2 bg-white/15 [&>div]:bg-saffron-400"
               />
             </div>
@@ -102,10 +110,10 @@ export default function BillingPage() {
               </p>
               <p className="mt-1 text-sm text-white/80">
                 {CURRENT_USAGE.research.toLocaleString("en-IN")} /{" "}
-                {(CURRENT_PLAN.researchCap ?? 0).toLocaleString("en-IN")}
+                {(currentPlan.researchCap ?? 0).toLocaleString("en-IN")}
               </p>
               <Progress
-                value={usagePercent(CURRENT_USAGE.research, CURRENT_PLAN.researchCap)}
+                value={usagePercent(CURRENT_USAGE.research, currentPlan.researchCap)}
                 className="mt-2 h-2 bg-white/15 [&>div]:bg-blue-400"
               />
             </div>
@@ -114,10 +122,10 @@ export default function BillingPage() {
                 {t("bill_teamSeats", { defaultValue: "Team seats" })}
               </p>
               <p className="mt-1 text-sm text-white/80">
-                {CURRENT_USAGE.seats} / {CURRENT_PLAN.seatCap ?? "Custom"}
+                {CURRENT_USAGE.seats} / {currentPlan.seatCap ?? "Custom"}
               </p>
               <Progress
-                value={usagePercent(CURRENT_USAGE.seats, CURRENT_PLAN.seatCap)}
+                value={usagePercent(CURRENT_USAGE.seats, currentPlan.seatCap)}
                 className="mt-2 h-2 bg-white/15 [&>div]:bg-green-400"
               />
             </div>

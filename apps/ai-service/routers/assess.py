@@ -370,7 +370,7 @@ Return ONLY a JSON array of rule assessments. No other text."""
             user_prompt=user_prompt,
             settings=settings,
             temperature=RISK_ASSESSMENT.temperature,
-            max_tokens=3072,
+            max_tokens=2000,
             json_mode=True,
         )
         response_text = clean_json(response_text)

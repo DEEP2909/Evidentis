@@ -1,5 +1,5 @@
 export type EvidentisPlan = {
-  key: "starter" | "professional" | "enterprise";
+  key: "starter" | "growth" | "professional" | "enterprise";
   name: string;
   price: string;
   billingSuffix: string;
@@ -23,11 +23,11 @@ export const EVIDENTIS_PLANS: EvidentisPlan[] = [
     description: "Solo advocate or early-stage chamber",
     notes: "18% GST extra · up to 3 users",
     seatCap: 3,
-    documentCap: 250,
-    researchCap: 300,
+    documentCap: 100,
+    researchCap: 200,
     seatLimit: "Up to 3 advocates",
-    documentLimit: "250 documents/month",
-    researchLimit: "300 research queries/month",
+    documentLimit: "100 documents/month",
+    researchLimit: "200 research queries/month",
     highlights: [
       "Matter and document workspace",
       "Core AI review workflows",
@@ -36,8 +36,8 @@ export const EVIDENTIS_PLANS: EvidentisPlan[] = [
     ],
   },
   {
-    key: "professional",
-    name: "Professional",
+    key: "growth",
+    name: "Growth",
     price: "₹14,999",
     billingSuffix: "/month + GST",
     description: "Growing litigation or advisory team",
@@ -53,6 +53,26 @@ export const EVIDENTIS_PLANS: EvidentisPlan[] = [
       "Billing and admin controls",
       "SSO / SCIM readiness",
       "Priority onboarding support",
+    ],
+  },
+  {
+    key: "professional",
+    name: "Professional",
+    price: "₹24,999",
+    billingSuffix: "/month + GST",
+    description: "Established firm with full AI workflows",
+    notes: "18% GST extra · up to 30 users",
+    seatCap: 30,
+    documentCap: 2000,
+    researchCap: 5000,
+    seatLimit: "30 advocates included",
+    documentLimit: "2,000 documents/month",
+    researchLimit: "5,000 research queries/month",
+    highlights: [
+      "All Growth features",
+      "Premium AI tier",
+      "All Indian languages",
+      "Dedicated onboarding support",
     ],
   },
   {
@@ -77,7 +97,6 @@ export const EVIDENTIS_PLANS: EvidentisPlan[] = [
   },
 ];
 
-export const CURRENT_PLAN_KEY: EvidentisPlan["key"] = "professional";
-
-export const CURRENT_PLAN =
-  EVIDENTIS_PLANS.find((plan) => plan.key === CURRENT_PLAN_KEY) ?? EVIDENTIS_PLANS[1];
+export function getPlanByKey(key: string): EvidentisPlan | undefined {
+  return EVIDENTIS_PLANS.find((p) => p.key === key);
+}

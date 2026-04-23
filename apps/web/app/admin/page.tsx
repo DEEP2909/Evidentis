@@ -52,7 +52,7 @@ import {
   type AdminSsoConfiguration,
   type TeamMember,
 } from "@/lib/api";
-import { CURRENT_PLAN, EVIDENTIS_PLANS } from "@/lib/pricing";
+import { EVIDENTIS_PLANS } from "@/lib/pricing";
 import { useTranslation } from "react-i18next";
 
 type AdminTab = "team" | "security" | "billing" | "sso" | "playbooks" | "webhooks";
@@ -232,6 +232,13 @@ function TeamTab() {
     staleTime: 60_000,
   });
 
+  const { data: billing } = useQuery({
+    queryKey: ["billing"],
+    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+  });
+
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+
   const inviteMutation = useMutation({
     mutationFn: () => adminApi.inviteMember({ email: email.trim(), role }),
     onSuccess: () => {
@@ -262,7 +269,7 @@ function TeamTab() {
           </p>
         </div>
         <Badge className="border-saffron-500/30 bg-saffron-500/10 text-saffron-300">
-          {activeMembers} / {CURRENT_PLAN.seatCap ?? "Custom"}{" "}
+          {activeMembers} / {currentPlan.seatCap ?? "Custom"}{" "}
           {t("admin_activeSeats", { defaultValue: "active seats" })}
         </Badge>
       </div>
@@ -515,6 +522,13 @@ function SecurityTab() {
 function BillingTab() {
   const { t } = useTranslation();
 
+  const { data: billing } = useQuery({
+    queryKey: ["billing"],
+    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+  });
+
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -538,15 +552,15 @@ function BillingTab() {
       <Card className="glass border-saffron-500/35">
         <CardContent className="p-6">
           <Badge className="mb-3 bg-saffron-500 text-slate-900">{t("bill_currentPlan")}</Badge>
-          <h3 className="text-2xl font-semibold">{CURRENT_PLAN.name}</h3>
+          <h3 className="text-2xl font-semibold">{currentPlan.name}</h3>
           <p className="mt-1 text-white/65">
-            {CURRENT_PLAN.price}
-            {CURRENT_PLAN.billingSuffix}
+            {currentPlan.price}
+            {currentPlan.billingSuffix}
           </p>
           <div className="mt-4 grid gap-3 text-sm text-white/75 sm:grid-cols-3">
-            <p>{CURRENT_PLAN.seatLimit}</p>
-            <p>{CURRENT_PLAN.documentLimit}</p>
-            <p>{CURRENT_PLAN.researchLimit}</p>
+            <p>{currentPlan.seatLimit}</p>
+            <p>{currentPlan.documentLimit}</p>
+            <p>{currentPlan.researchLimit}</p>
           </div>
         </CardContent>
       </Card>
@@ -558,11 +572,11 @@ function BillingTab() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            className={`glass p-6 ${plan.key === CURRENT_PLAN.key ? "border-saffron-500/35" : ""}`}
+            className={`glass p-6 ${plan.key === currentPlan.key ? "border-saffron-500/35" : ""}`}
           >
             <div className="flex items-center justify-between">
               <p className="text-xs uppercase tracking-[0.24em] text-saffron-300">{plan.name}</p>
-              {plan.key === CURRENT_PLAN.key ? (
+              {plan.key === currentPlan.key ? (
                 <Badge className="bg-saffron-500 text-slate-900">{t("bill_currentPlan")}</Badge>
               ) : null}
             </div>

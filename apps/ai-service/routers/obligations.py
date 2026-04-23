@@ -375,7 +375,7 @@ No additional prose."""
             user_prompt=user_prompt,
             settings=settings,
             temperature=OBLIGATION_EXTRACTION.temperature,
-            max_tokens=3072,
+            max_tokens=2000,
             json_mode=True,
         )
         response_text = clean_json(response_text)

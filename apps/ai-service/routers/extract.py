@@ -385,7 +385,7 @@ async def extract_clauses_llm(
                 user_prompt=user_prompt,
                 settings=settings,
                 temperature=CLAUSE_EXTRACTION.temperature,
-                max_tokens=4096,
+                max_tokens=1500,
                 json_mode=True,
             )
             response_text = clean_json(response_text)

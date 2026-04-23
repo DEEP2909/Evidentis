@@ -15,7 +15,7 @@ import { AppShell } from "@/components/india/AppShell";
 import { useAuthStore } from "@/lib/auth";
 import { analytics, documents, dpdp, matters, obligations, research } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { CURRENT_PLAN } from "@/lib/pricing";
+import { EVIDENTIS_PLANS } from "@/lib/pricing";
 import { useTranslation } from "react-i18next";
 
 type Kpi = {
@@ -292,6 +292,12 @@ function AdminDashboard() {
     queryFn: () => dpdp.requests(),
     staleTime: 60_000,
   });
+  const { data: billing } = useQuery({
+    queryKey: ["billing"],
+    queryFn: () => fetch("/api/billing/status").then(r => r.json()),
+  });
+
+  const currentPlan = EVIDENTIS_PLANS.find(p => p.key === billing?.plan) ?? EVIDENTIS_PLANS[0];
 
   const kpis: readonly Kpi[] = overview
     ? [
@@ -357,16 +363,16 @@ function AdminDashboard() {
             <h2 className="mb-4 text-lg font-semibold">{t("dash_subscription")}</h2>
             <div className="rounded-2xl border border-saffron-500/30 bg-saffron-500/10 p-4">
               <div className="text-xs uppercase tracking-[0.2em] text-saffron-400">
-                {CURRENT_PLAN.name} Plan
+                {currentPlan.name} Plan
               </div>
               <div className="mt-2 kpi-value text-2xl font-semibold">
-                {CURRENT_PLAN.price}
+                {currentPlan.price}
                 <span className="ml-1 text-sm font-normal text-white/55">
-                  {CURRENT_PLAN.billingSuffix}
+                  {currentPlan.billingSuffix}
                 </span>
               </div>
               <div className="mt-2 text-sm text-white/70">
-                12 / {CURRENT_PLAN.seatCap ?? "Custom"} advocates active
+                12 / {currentPlan.seatCap ?? "Custom"} advocates active
               </div>
               <div className="mt-3">
                 <HealthBar value={80} delay={0.2} />
@@ -382,9 +388,9 @@ function AdminDashboard() {
                 <span className="text-white/90">
                   {overview
                     ? `${String(overview.totalDocuments).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} / ${
-                        CURRENT_PLAN.documentCap?.toLocaleString("en-IN") ?? "Custom"
+                        currentPlan.documentCap?.toLocaleString("en-IN") ?? "Custom"
                       }`
-                    : `— / ${CURRENT_PLAN.documentCap?.toLocaleString("en-IN") ?? "Custom"}`}
+                    : `— / ${currentPlan.documentCap?.toLocaleString("en-IN") ?? "Custom"}`}
                 </span>
               </div>
             </div>

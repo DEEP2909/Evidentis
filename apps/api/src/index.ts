@@ -264,12 +264,18 @@ async function createApp(): Promise<{
     { parseAs: 'buffer', bodyLimit: config.MAX_FILE_SIZE_BYTES },
     (req, body, done) => {
       // For Razorpay webhook endpoint, keep raw buffer for signature verification
-      if (req.url === '/webhooks/razorpay') {
+      // Use includes or startsWith to be safe against query strings
+      if (req.url && (req.url === '/webhooks/razorpay' || req.url.startsWith('/webhooks/razorpay?'))) {
         done(null, body);
       } else {
         // For all other endpoints, parse as JSON
         try {
-          const json = JSON.parse(body.toString());
+          const content = body.toString();
+          if (!content || content.trim() === '') {
+            done(null, null);
+            return;
+          }
+          const json = JSON.parse(content);
           done(null, json);
         } catch (err) {
           done(err as Error, undefined);

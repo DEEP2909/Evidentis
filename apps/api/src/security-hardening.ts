@@ -83,7 +83,10 @@ function applySecurityHeaders(
           };
 
     const cspString = Object.entries(csp as Record<string, string[]>)
-      .map(([key, values]) => `${key} ${values.join(' ')}`)
+      .map(([key, values]) => {
+        const valArray = Array.isArray(values) ? values : [String(values)];
+        return `${key} ${valArray.join(' ')}`;
+      })
       .join('; ');
 
     setHeaderIfMissing(reply, 'Content-Security-Policy', cspString);
@@ -310,7 +313,7 @@ function findThreatInPayload(
     return null;
   }
 
-  if (typeof payload === 'object') {
+  if (typeof payload === 'object' && payload !== null) {
     for (const [key, value] of Object.entries(payload)) {
       const nestedPath = fieldPath ? `${fieldPath}.${key}` : key;
       const nestedThreat = findThreatInPayload(value, nestedPath);

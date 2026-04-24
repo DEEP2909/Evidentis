@@ -179,8 +179,12 @@ function loadConfig() {
 
   if (!result.success) {
     console.error('Invalid environment configuration:');
-    for (const error of result.error.errors) {
-      console.error(`  - ${error.path.join('.')}: ${error.message}`);
+    if (result.error && Array.isArray(result.error.errors)) {
+      for (const error of result.error.errors) {
+        console.error(`  - ${error.path.join('.')}: ${error.message}`);
+      }
+    } else {
+      console.error(result.error);
     }
     process.exit(1);
   }

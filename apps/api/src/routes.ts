@@ -3747,21 +3747,16 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     '/api/research/:id/feedback',
     {
       preHandler: authenticateRequest,
-      schema: {
-        params: z.object({ id: z.string().uuid() }),
-        body: z.object({
-          rating: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
-          correction: z.string().max(2000).optional(),
-        }),
-      },
     },
     async (request, reply) => {
       const authReq = request as AuthenticatedRequest;
-      const { id } = request.params as { id: string };
-      const { rating, correction } = request.body as {
-        rating: -1 | 0 | 1;
-        correction?: string;
-      };
+      const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+      const { rating, correction } = z
+        .object({
+          rating: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+          correction: z.string().max(2000).optional(),
+        })
+        .parse(request.body);
 
       await query(
         `UPDATE research_history

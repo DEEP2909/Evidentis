@@ -439,7 +439,6 @@ function mapMatter(raw: Record<string, unknown>): Matter {
     targetCloseDate: parseDateOrNull(raw.target_close_date ?? raw.targetCloseDate),
     valueInPaise: (raw.value_in_paise as number | null) ?? null,
     dealValuePaise: normalizedDealValuePaise,
-    dealValueCents: normalizedDealValuePaise,
     notes: (raw.notes as string | null) ?? null,
     tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
     courtName: (raw.court_name as string | null) ?? null,

@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { pool } from './database.js';
 import { logger } from './logger.js';
 import { attorneyRepo, auditRepo } from './repository.js';
-import { enforceAdvocateLimit } from './billing-enforcement.js';
+import { getBillingStatus } from './billing.js';
 import { generateSecureToken, hashPassword } from './security.js';
 
 const VALID_ROLES = ['admin', 'partner', 'advocate', 'paralegal', 'client'];
@@ -439,11 +439,12 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
     const email = data.userName.toLowerCase();
 
     // Check billing limit before provisioning
-    const limitCheck = await enforceAdvocateLimit(tenantId);
-    if (!limitCheck.allowed) {
+    const billingStatus = await getBillingStatus(tenantId);
+    const { advocatesActive, advocatesLimit } = billingStatus.usage;
+    if (advocatesLimit !== null && advocatesActive >= advocatesLimit) {
       return reply.code(403).send({
         schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'],
-        detail: `Advocate limit reached for your plan (${limitCheck.current}/${limitCheck.max}). Upgrade to provision more users.`,
+        detail: `Advocate limit reached for your plan (${advocatesActive}/${advocatesLimit}). Upgrade to provision more users.`,
         status: '403',
       });
     }

@@ -3,6 +3,7 @@
  * RS256 JWT token issuance and validation
  */
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { type JWTPayload, SignJWT, jwtVerify } from 'jose';
 import { config, isProduction } from './config.js';
@@ -198,8 +199,7 @@ export function generateFingerprint(userAgent: string, ip: string): string {
     ipRange = ip.split(':').slice(0, 3).join(':');
   }
 
-  return crypto
-    .createHash('sha256')
+  return createHash('sha256')
     .update(`${userAgent}|${ipRange}`)
     .digest('hex');
 }

@@ -43,7 +43,7 @@ import {
 import { logger } from './logger.js';
 import { getPipelineStatus, startDocumentPipeline } from './orchestrator.js';
 import { createDualRateLimiter } from './rate-limit.js';
-import { playbookRepo } from './repository.js';
+import { attorneyRepo, playbookRepo, tenantRepo } from './repository.js';
 import {
   generateApiKey,
   generateRecoveryCodes,
@@ -3763,11 +3763,11 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         correction?: string;
       };
 
-      await authReq.getTenantQuery()(
+      await query(
         `UPDATE research_history
          SET user_rating = $1, user_correction = $2, feedback_given_at = NOW()
-         WHERE id = $3`,
-        [rating, correction ?? null, id]
+         WHERE id = $3 AND tenant_id = $4`,
+        [rating, correction ?? null, id, authReq.tenantId]
       );
 
       return reply.send({ success: true });

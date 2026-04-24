@@ -433,14 +433,18 @@ spec:
       ports:
         - port: 5000
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: evidentis
           podSelector:
             matchLabels:
               app: postgres
       ports:
         - port: 5432
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: evidentis
           podSelector:
             matchLabels:
               app: redis
@@ -743,7 +747,9 @@ spec:
       ports:
         - port: 5000
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: evidentis
           podSelector:
             matchLabels:
               app: redis
@@ -786,14 +792,18 @@ spec:
       ports:
         - port: 5000
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: evidentis
           podSelector:
             matchLabels:
               app: postgres
       ports:
         - port: 5432
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: evidentis
           podSelector:
             matchLabels:
               app: redis

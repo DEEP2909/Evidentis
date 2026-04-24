@@ -121,7 +121,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: api
-          image: evidentis/api:latest
+          image: evidentis/api:v1.2.4
           imagePullPolicy: Always
           ports:
             - containerPort: 4000
@@ -236,7 +236,7 @@ spec:
         runAsUser: 1000
       containers:
         - name: ai-service
-          image: evidentis/ai-service:latest
+          image: evidentis/ai-service:v1.2.4
           ports:
             - containerPort: 5000
           env:
@@ -309,7 +309,7 @@ spec:
         runAsUser: 1000
       containers:
         - name: web
-          image: evidentis/web:latest
+          image: evidentis/web:v1.2.4
           ports:
             - containerPort: 3000
           env:
@@ -435,7 +435,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: evidentis
+              kubernetes.io/metadata.name: evidentis
           podSelector:
             matchLabels:
               app: postgres
@@ -444,7 +444,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: evidentis
+              kubernetes.io/metadata.name: evidentis
           podSelector:
             matchLabels:
               app: redis
@@ -488,7 +488,7 @@ spec:
         runAsUser: 1001
       containers:
         - name: worker
-          image: evidentis/api:latest
+          image: evidentis/api:v1.2.4
           command: ["node", "dist/worker-main.js"]
           ports:
             - containerPort: 9101
@@ -563,7 +563,7 @@ spec:
         runAsUser: 1001
       containers:
         - name: celery-worker
-          image: evidentis/ai-worker:latest
+          image: evidentis/ai-worker:v1.2.4
           imagePullPolicy: Always
           command:
             - celery
@@ -649,7 +649,7 @@ spec:
         runAsUser: 1001
       containers:
         - name: celery-beat
-          image: evidentis/ai-worker:latest
+          image: evidentis/ai-worker:v1.2.4
           imagePullPolicy: Always
           command:
             - celery
@@ -749,7 +749,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: evidentis
+              kubernetes.io/metadata.name: evidentis
           podSelector:
             matchLabels:
               app: redis
@@ -794,7 +794,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: evidentis
+              kubernetes.io/metadata.name: evidentis
           podSelector:
             matchLabels:
               app: postgres
@@ -803,7 +803,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: evidentis
+              kubernetes.io/metadata.name: evidentis
           podSelector:
             matchLabels:
               app: redis
@@ -815,3 +815,67 @@ spec:
               app: clamav
       ports:
         - port: 3310
+
+---
+# NetworkPolicy for AI Service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-service-network-policy
+  namespace: evidentis
+spec:
+  podSelector:
+    matchLabels:
+      app: evidentis-ai-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: evidentis-api
+        - podSelector:
+            matchLabels:
+              app: evidentis-worker
+        - podSelector:
+            matchLabels:
+              app: evidentis-celery-worker
+      ports:
+        - port: 5000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ollama
+      ports:
+        - port: 11434
+
+---
+# NetworkPolicy for Web Frontend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-network-policy
+  namespace: evidentis
+spec:
+  podSelector:
+    matchLabels:
+      app: evidentis-web
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: evidentis-api
+      ports:
+        - port: 4000

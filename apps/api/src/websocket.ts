@@ -103,9 +103,12 @@ export async function initializeWebSocket(
     const publicKeyPem = fs.readFileSync(jwtPublicKeyPath, 'utf8');
     publicKey = await importSPKI(publicKeyPem, 'RS256');
     console.log('WebSocket: JWT public key loaded');
-  } else if (process.env.NODE_ENV !== 'production') {
+  } else if (
+    process.env.NODE_ENV === 'development' &&
+    process.env.ALLOW_UNAUTHED_WS === 'true'
+  ) {
     console.warn(
-      '⚠️  JWT public key not found — WebSocket auth disabled in dev mode',
+      '⚠️  JWT public key not found — WebSocket auth disabled in dev mode (ALLOW_UNAUTHED_WS=true)',
     );
     devModeNoAuth = true;
   } else {

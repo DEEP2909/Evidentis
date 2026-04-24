@@ -273,10 +273,32 @@ const OAUTH2_PROVIDERS: Record<string, OAuth2Provider> = {
   },
 };
 
+// Get OAuth2 configuration for a tenant
+async function getOAuth2Config(
+  tenantId: string,
+  provider: string,
+): Promise<{ clientId: string; clientSecret?: string } | null> {
+  const result = await pool.query(
+    `SELECT client_id, client_secret_encrypted
+     FROM sso_configurations
+     WHERE tenant_id = $1 AND enabled = true AND provider_type = $2`,
+    [tenantId, provider],
+  );
+
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0];
+  return {
+    clientId: row.client_id,
+    clientSecret: row.client_secret_encrypted
+      ? decrypt(row.client_secret_encrypted)
+      : undefined,
+  };
+}
+
 // Initiate OAuth2 login
 export async function initiateOAuth2Login(
   provider: string,
-  clientId: string,
   redirectUri: string,
   tenantId: string,
 ): Promise<{ authUrl: string; state: string }> {
@@ -303,9 +325,15 @@ export async function initiateOAuth2Login(
     SSO_STATE_TTL,
   );
 
+  // Get credentials from DB
+  const credentials = await getOAuth2Config(tenantId, provider);
+  if (!credentials) {
+    throw new Error(`${provider} SSO not configured for tenant`);
+  }
+
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: clientId,
+    client_id: credentials.clientId,
     redirect_uri: redirectUri,
     scope: providerConfig.scopes.join(' '),
     state,

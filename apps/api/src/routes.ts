@@ -2159,7 +2159,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
         'application/msword', // .doc
         'text/plain',
-        'text/html',
         'image/jpeg',
         'image/png',
         'image/tiff',
@@ -2170,12 +2169,17 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       const detected = await fileTypeFromBuffer(buffer);
 
       let mimeType = detected?.mime;
-      if (
-        !mimeType &&
-        (data.mimetype === 'text/plain' || data.mimetype === 'text/html')
-      ) {
+      if (!mimeType && data.mimetype === 'text/plain') {
         // file-type cannot detect plain text reliably, allow if client claims it's text
-        mimeType = data.mimetype;
+        // and it looks like valid UTF-8
+        try {
+          // Check if buffer is valid UTF-8
+          const decoder = new TextDecoder('utf-8', { fatal: true });
+          decoder.decode(buffer);
+          mimeType = 'text/plain';
+        } catch {
+          mimeType = 'application/octet-stream';
+        }
       } else if (!mimeType) {
         // Do not trust the client mimetype for binary files. If file-type can't detect it, reject it.
         mimeType = 'application/octet-stream';
@@ -3003,6 +3007,16 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
           updates.push('mfa_secret = NULL');
           updates.push('mfa_recovery_codes = NULL');
+
+          // Notify user
+          const user = await queryOne<{ email: string; display_name: string }>(
+            'SELECT email, display_name FROM attorneys WHERE id = $1 AND tenant_id = $2',
+            [id, authReq.tenantId],
+          );
+          if (user) {
+            const { sendMfaDisabledEmail } = await import('./email.js');
+            await sendMfaDisabledEmail(user.email, user.display_name, 'an Admin');
+          }
         }
         updates.push(`mfa_enabled = $${paramIndex++}`);
         params.push(body.mfaEnabled);

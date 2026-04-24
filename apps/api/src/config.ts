@@ -65,7 +65,9 @@ const configSchema = z
 
     AI_SERVICE_URL: z.string().url().default('http://localhost:5000'),
     AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(180000),
-    AI_SERVICE_INTERNAL_KEY: z.string().optional(),
+    AI_SERVICE_INTERNAL_KEY: isProductionEnv
+      ? z.string().min(32, 'AI_SERVICE_INTERNAL_KEY must be at least 32 characters in production')
+      : z.string().optional(),
 
     MALWARE_SCANNER: z.enum(['clamav', 'none']).default('clamav'),
     CLAMAV_HOST: z.string().default('localhost'),

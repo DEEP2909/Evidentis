@@ -198,6 +198,31 @@ export async function sendMFAEnabledEmail(
   });
 }
 
+export async function sendMfaDisabledEmail(
+  email: string,
+  advocateName: string,
+  disabledBy: string,
+): Promise<void> {
+  const html = wrapTemplate(`
+    <h2>Two-Factor Authentication Disabled</h2>
+    <p>Hi ${advocateName},</p>
+    <p>Two-factor authentication has been disabled for your EvidentIS account by <strong>${disabledBy}</strong>.</p>
+    <p>Your account security has been downgraded. We strongly recommend re-enabling MFA to protect your legal data.</p>
+    <p style="text-align: center;">
+      <a href="${config.FRONTEND_URL}/settings/security" class="button">Go to Security Settings</a>
+    </p>
+    <div class="warning">
+      <strong>Important:</strong> If you did not authorize this change, please contact your firm administrator or EvidentIS support immediately.
+    </div>
+  `);
+
+  await sendEmail({
+    to: email,
+    subject: 'Two-Factor Authentication Disabled on EvidentIS',
+    html,
+  });
+}
+
 export async function sendObligationReminderEmail(
   email: string,
   advocateName: string,

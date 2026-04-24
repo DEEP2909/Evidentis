@@ -72,6 +72,11 @@ export const obligationQueue = new Queue('obligation', {
   defaultJobOptions: DEFAULT_JOB_OPTIONS,
 });
 
+export const erasureQueue = new Queue('erasure', {
+  connection,
+  defaultJobOptions: DEFAULT_JOB_OPTIONS,
+});
+
 // ============================================================================
 // Dead-Letter Handler
 // ============================================================================
@@ -156,6 +161,13 @@ interface ObligationExtractJob {
   tenantId: string;
   documentId: string;
   matterId: string;
+}
+
+interface ErasureJob {
+  tenantId: string;
+  advocateId: string;
+  requestId?: string;
+  reason?: string;
 }
 
 interface DocumentRow {
@@ -795,6 +807,55 @@ const obligationExtractWorker = new Worker<ObligationExtractJob>(
 );
 
 // ============================================================================
+// Worker: dpdp.erasure
+// ============================================================================
+
+const erasureWorker = new Worker<ErasureJob>(
+  'erasure',
+  withTenantIsolation(async (job: Job<ErasureJob>) => {
+    if (job.name !== 'dpdp.erasure') return;
+
+    const { tenantId, advocateId, requestId, reason } = job.data;
+
+    logger.info({ tenantId, advocateId, requestId }, 'Executing DPDP erasure job');
+
+    // Call the internal erasure endpoint on the API itself
+    // In k8s, we can use the service name or localhost if sidecar
+    const apiUrl =
+      process.env.INTERNAL_API_URL || `http://localhost:${config.PORT}`;
+
+    try {
+      const response = await axios.post(
+        `${apiUrl}/internal/dpdp/erasure`,
+        { tenantId, advocateId, requestId, reason },
+        {
+          headers: {
+            'x-internal-key': config.AI_SERVICE_INTERNAL_KEY || '',
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000,
+        },
+      );
+
+      if (!response.data.success) {
+        throw new Error(response.data.error?.message || 'Erasure failed');
+      }
+
+      return response.data;
+    } catch (error: any) {
+      const message =
+        error.response?.data?.error?.message || error.message || 'Unknown error';
+      logger.error(
+        { err: message, tenantId, advocateId, requestId },
+        'Erasure job failed',
+      );
+      throw new Error(message);
+    }
+  }),
+  { connection, concurrency: 1 },
+);
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 
@@ -931,6 +992,7 @@ export async function gracefulShutdown(): Promise<void> {
     clauseExtractWorker.close(),
     riskAssessWorker.close(),
     obligationExtractWorker.close(),
+    erasureWorker.close(),
   ]);
 
   await connection.quit();
@@ -965,6 +1027,7 @@ export function startWorkers(): void {
     clauseExtractWorker,
     riskAssessWorker,
     obligationExtractWorker,
+    erasureWorker,
   ];
   for (const worker of workers) {
     worker.on('completed', (job) => {
@@ -989,7 +1052,7 @@ export function startWorkers(): void {
 
   logger.info(
     {
-      queues: ['document', 'clause', 'risk', 'obligation'],
+      queues: ['document', 'clause', 'risk', 'obligation', 'erasure'],
       retryConfig: DEFAULT_JOB_OPTIONS,
     },
     'Workers started with retry policies',
@@ -1046,6 +1109,7 @@ export async function getJobStatus(
     clause: clauseQueue,
     risk: riskQueue,
     obligation: obligationQueue,
+    erasure: erasureQueue,
   };
 
   const queue = queues[queueName];

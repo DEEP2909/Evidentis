@@ -12,6 +12,7 @@ import { config } from './config.js';
 import { pool, withTransaction } from './database.js';
 import { logger } from './logger.js';
 import { type AuthenticatedRequest, authenticateRequest } from './routes.js';
+import { erasureQueue } from './worker.js';
 
 const withdrawConsentSchema = z.object({
   reason: z.string().trim().max(1000).optional(),
@@ -38,7 +39,7 @@ function parseDetails(details: string | null): Record<string, unknown> | null {
 
 function isInternalRequestAuthorized(request: FastifyRequest): boolean {
   if (!config.AI_SERVICE_INTERNAL_KEY) {
-    return true;
+    return false; // Fail closed
   }
 
   return request.headers['x-internal-key'] === config.AI_SERVICE_INTERNAL_KEY;
@@ -74,25 +75,17 @@ export async function dpdpRoutes(fastify: FastifyInstance): Promise<void> {
         const [erasureRequest] = result.rows;
 
         try {
-          if (config.REDIS_URL) {
-            const redis = new Redis(config.REDIS_URL);
-            await redis.lpush(
-              'erasure_jobs',
-              JSON.stringify({
-                type: 'dpdp_erasure',
-                requestId: erasureRequest.id,
-                tenantId: authReq.tenantId,
-                advocateId: authReq.advocateId,
-                reason: body.reason ?? null,
-                requestedAt: erasureRequest.created_at,
-              }),
-            );
-            await redis.quit();
-          }
-        } catch (redisErr) {
+          await erasureQueue.add('dpdp.erasure', {
+            requestId: erasureRequest.id,
+            tenantId: authReq.tenantId,
+            advocateId: authReq.advocateId,
+            reason: body.reason ?? null,
+            requestedAt: erasureRequest.created_at,
+          });
+        } catch (queueErr) {
           logger.warn(
             {
-              err: redisErr,
+              err: queueErr,
               tenantId: authReq.tenantId,
               advocateId: authReq.advocateId,
             },

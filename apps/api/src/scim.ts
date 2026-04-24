@@ -17,6 +17,8 @@ import { attorneyRepo, auditRepo } from './repository.js';
 import { enforceAdvocateLimit } from './billing-enforcement.js';
 import { generateSecureToken, hashPassword } from './security.js';
 
+const VALID_ROLES = ['admin', 'partner', 'advocate', 'paralegal', 'client'];
+
 // ============================================================================
 // SCIM Schemas
 // ============================================================================
@@ -664,9 +666,7 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
     const _query = request.query as { startIndex?: string; count?: string };
 
     // EvidentIS uses roles, not explicit groups, but we expose them as SCIM groups
-    const roles = ['admin', 'partner', 'advocate', 'paralegal', 'client'];
-
-    const resources = roles.map((role, _index) => ({
+    const resources = VALID_ROLES.map((role, _index) => ({
       schemas: ['urn:ietf:params:scim:schemas:core:2.0:Group'],
       id: role,
       displayName:
@@ -722,6 +722,14 @@ export async function scimRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({
         schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'],
         detail: parsed.error.message,
+        status: '400',
+      });
+    }
+
+    if (!VALID_ROLES.includes(role)) {
+      return reply.code(400).send({
+        schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'],
+        detail: `Invalid role: ${role}. Must be one of: ${VALID_ROLES.join(', ')}`,
         status: '400',
       });
     }

@@ -5,6 +5,7 @@ import * as jose from 'jose';
 import { config } from './config.js';
 import { pool } from './database.js';
 import { logger } from './logger.js';
+import { encrypt, decrypt } from './encryption.js';
 
 // OIDC Provider Configuration
 interface OIDCProviderConfig {
@@ -60,7 +61,9 @@ async function getOIDCConfig(
     userinfoEndpoint: wellKnown.userinfo_endpoint,
     jwksUri: wellKnown.jwks_uri,
     clientId: row.client_id,
-    clientSecret: row.client_secret_encrypted, // Decrypt in production
+    clientSecret: row.client_secret_encrypted
+      ? decrypt(row.client_secret_encrypted)
+      : undefined,
     scopes: row.scopes || ['openid', 'email', 'profile'],
   };
 }
@@ -352,7 +355,7 @@ export async function configureSSOProvider(
       providerType,
       config.issuerUrl,
       config.clientId,
-      config.clientSecret, // Encrypt in production
+      config.clientSecret ? encrypt(config.clientSecret) : null,
       config.metadataUrl,
       config.certificate,
       config.scopes || ['openid', 'email', 'profile'],

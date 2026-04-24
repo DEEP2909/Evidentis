@@ -612,6 +612,7 @@ const adminMemberUpdateSchema = z.object({
     .optional(),
   status: z.enum(ATTORNEY_STATUSES).optional(),
   mfaEnabled: z.boolean().optional(),
+  confirmPassword: z.string().optional(),
 });
 
 const adminSecuritySettingsSchema = z.object({
@@ -2028,7 +2029,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       if (body.leadAdvocateId !== undefined || body.leadAttorneyId !== undefined) {
         const resolvedLead = body.leadAdvocateId ?? body.leadAttorneyId ?? null;
         normalizedBody.leadAdvocateId = resolvedLead;
-        delete normalizedBody.leadAttorneyId;
+        normalizedBody.leadAttorneyId = undefined;
       }
       if (
         body.dealValuePaise !== undefined ||
@@ -2273,7 +2274,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         filename,
         'quarantine',
       );
-      await storage.uploadFile(fileKey, buffer, { contentType: data.mimetype });
+      await storage.uploadFile(fileKey, buffer, { contentType: mimeType });
 
       // Update document with file URI
       await query('UPDATE documents SET file_uri = $1 WHERE id = $2', [
@@ -2976,12 +2977,35 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         params.push(body.status);
       }
       if (body.mfaEnabled !== undefined) {
-        updates.push(`mfa_enabled = $${paramIndex++}`);
-        params.push(body.mfaEnabled);
-        if (!body.mfaEnabled) {
+        if (body.mfaEnabled === false) {
+          // STEP-UP: Require admin password to disable MFA for someone else
+          if (!body.confirmPassword) {
+            return reply.status(400).send({
+              success: false,
+              error: {
+                code: 'PASSWORD_REQUIRED',
+                message: 'Admin password is required to disable MFA for team members.',
+              },
+            });
+          }
+
+          const admin = await queryOne<{ password_hash: string }>(
+            'SELECT password_hash FROM attorneys WHERE id = $1 AND tenant_id = $2',
+            [authReq.advocateId, authReq.tenantId],
+          );
+
+          if (!admin || !(await (await import('./security.js')).verifyPassword(body.confirmPassword, admin.password_hash))) {
+            return reply.status(401).send({
+              success: false,
+              error: { code: 'INVALID_PASSWORD', message: 'Invalid admin password' },
+            });
+          }
+
           updates.push('mfa_secret = NULL');
           updates.push('mfa_recovery_codes = NULL');
         }
+        updates.push(`mfa_enabled = $${paramIndex++}`);
+        params.push(body.mfaEnabled);
       }
 
       if (updates.length === 0) {

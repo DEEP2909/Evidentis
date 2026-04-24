@@ -309,7 +309,7 @@ const documentScanWorker = new Worker<DocumentScanJob>(
         throw error;
       }
     });
-  },
+  }),
   {
     connection,
     concurrency: 3,
@@ -459,7 +459,7 @@ const documentIngestWorker = new Worker<DocumentIngestJob>(
         throw error;
       }
     });
-  },
+  }),
   { connection, concurrency: 2 },
 );
 
@@ -567,7 +567,7 @@ const clauseExtractWorker = new Worker<ClauseExtractJob>(
         throw error;
       }
     });
-  },
+  }),
   { connection, concurrency: 3 },
 );
 
@@ -690,7 +690,7 @@ const riskAssessWorker = new Worker<RiskAssessJob>(
         throw error;
       }
     });
-  },
+  }),
   { connection, concurrency: 3 },
 );
 
@@ -790,7 +790,7 @@ const obligationExtractWorker = new Worker<ObligationExtractJob>(
         throw error;
       }
     });
-  },
+  }),
   { connection, concurrency: 3 },
 );
 

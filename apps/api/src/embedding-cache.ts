@@ -69,10 +69,12 @@ export function assertEmbeddingDimension(
 export async function getCachedEmbedding(
   text: string,
   model: string,
+  tenantId?: string,
 ): Promise<number[] | null> {
   try {
     const client = getRedis();
-    const key = `${EMBEDDING_PREFIX}:${model}:${hashText(text)}`;
+    const tenantPrefix = tenantId ? `tenant:${tenantId}:` : '';
+    const key = `${EMBEDDING_PREFIX}:${tenantPrefix}${model}:${hashText(text)}`;
 
     const cached = await client.get(key);
     if (!cached) return null;
@@ -103,11 +105,13 @@ export async function cacheEmbedding(
   text: string,
   model: string,
   vector: number[],
+  tenantId?: string,
 ): Promise<void> {
   assertEmbeddingDimension(vector, `cache write for model ${model}`);
   try {
     const client = getRedis();
-    const key = `${EMBEDDING_PREFIX}:${model}:${hashText(text)}`;
+    const tenantPrefix = tenantId ? `tenant:${tenantId}:` : '';
+    const key = `${EMBEDDING_PREFIX}:${tenantPrefix}${model}:${hashText(text)}`;
 
     const data: CachedEmbedding = {
       vector,

@@ -1,11 +1,13 @@
 """
 EvidentIS AI Service
-FastAPI application for AI/ML capabilities including OCR, embeddings, 
+FastAPI application for AI/ML capabilities including OCR, embeddings,
 clause extraction, risk assessment, and semantic research.
 """
 
+import json
 import logging
 import time
+from base64 import urlsafe_b64decode
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
@@ -70,11 +72,43 @@ def get_degraded_mode_count(bucket_key: str) -> int:
     return next_count
 
 
+def _decode_tenant_jwt(token: str) -> str | None:
+    """
+    Decode an unsigned JWT from the API server to extract tenant context.
+    The JWT is unsigned (alg: none) because it's internal network traffic;
+    the X-Internal-Key provides the actual authentication.
+    """
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return None
+        payload_b64 = parts[1]
+        # Add padding if needed
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+        payload = json.loads(urlsafe_b64decode(payload_b64))
+
+        # Validate expiry
+        exp = payload.get("exp", 0)
+        if exp <= time.time():
+            logger.warning("Expired tenant JWT received (exp=%s)", exp)
+            return None
+
+        tenant_id = payload.get("tenantId")
+        if tenant_id:
+            logger.debug("Tenant JWT validated: tenant_id=%s", tenant_id)
+        return tenant_id
+    except Exception as e:
+        logger.warning("Failed to decode tenant JWT: %s", e)
+        return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle management - load models on startup."""
     global model_registry
-    
+
     logger.info("Starting EvidentIS AI Service...")
     logger.info(f"Embedding model: {settings.embedding_model}")
     logger.info(f"OCR engines: {settings.ocr_engine_list}")
@@ -84,20 +118,20 @@ async def lifespan(app: FastAPI):
         settings.groq_research_model,
         settings.ollama_model_fallback,
     )
-    
+
     # Initialize model registry and load models
     model_registry = ModelRegistry(settings)
     await model_registry.load_all()
-    
+
     # Store in app state for access in routes
     app.state.models = model_registry
     app.state.settings = settings
     app.state.rate_limit_redis = redis.from_url(settings.redis_url)
-    
+
     logger.info("AI Service ready")
-    
+
     yield
-    
+
     # Cleanup on shutdown
     logger.info("Shutting down AI Service...")
     if model_registry:
@@ -123,11 +157,26 @@ async def enforce_internal_access(request: Request, call_next):
     if request.url.path in INTERNAL_BYPASS_PATHS:
         return await call_next(request)
 
+    # 1. Validate static internal key (required for authentication)
     if runtime_settings.ai_service_internal_key:
         request_key = request.headers.get("X-Internal-Key", "")
         if request_key != runtime_settings.ai_service_internal_key:
             return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
+    # 2. Extract tenant context from JWT or header (per-tenant traceability)
+    tenant_id = None
+    tenant_jwt = request.headers.get("X-Tenant-JWT", "")
+    if tenant_jwt:
+        tenant_id = _decode_tenant_jwt(tenant_jwt)
+
+    # Fallback to explicit header
+    if not tenant_id:
+        tenant_id = request.headers.get("X-Tenant-ID", None)
+
+    # Store tenant context on request state for route handlers
+    request.state.tenant_id = tenant_id
+
+    # 3. Rate limiting
     rate_limit_redis = getattr(request.app.state, "rate_limit_redis", None)
     if rate_limit_redis is None:
         logger.warning("Rate limiter unavailable: Redis client missing on app state; using degraded local limiter")
@@ -182,7 +231,7 @@ if settings.environment == "development":
         allow_origins=["http://localhost:4000"],  # API server only
         allow_credentials=False,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "Authorization", "X-Tenant-ID"],
+        allow_headers=["Content-Type", "Authorization", "X-Tenant-ID", "X-Tenant-JWT"],
     )
 else:
     # Production: No CORS needed (internal service)
@@ -194,7 +243,7 @@ else:
             allow_origins=allowed_origins,
             allow_credentials=False,
             allow_methods=["GET", "POST"],
-            allow_headers=["Content-Type", "Authorization", "X-Tenant-ID"],
+            allow_headers=["Content-Type", "Authorization", "X-Tenant-ID", "X-Tenant-JWT"],
         )
 
 # Register routers
@@ -232,7 +281,7 @@ async def list_models() -> Dict[str, Any]:
     """List loaded models and their status."""
     if not model_registry:
         raise HTTPException(status_code=503, detail="Models not loaded")
-    
+
     return {
         "models": model_registry.get_status(),
         "gpu_enabled": settings.gpu_enabled,
@@ -246,22 +295,22 @@ async def run_eval(dataset: str = "default") -> Dict[str, Any]:
     Used for benchmarking clause extraction and risk assessment accuracy.
     """
     from evaluation.datasets import load_golden_dataset
-    
+
     try:
         load_golden_dataset(dataset)
-        
+
         # Define a mock inference function for testing
         async def inference_fn(input_data: Dict[str, Any]) -> Dict[str, Any]:
             # In production, this would call the actual AI endpoints
             return {"clauses": [], "risk_level": "medium"}
-        
+
         result = await run_evaluation(
             model_version=settings.azure_openai_deployment,
             dataset_path=dataset,
             inference_fn=inference_fn,
         )
         metrics = compute_metrics([result]) if result else {}
-        
+
         return {
             "status": "completed",
             "dataset": dataset,

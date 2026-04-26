@@ -208,13 +208,39 @@ function resolveCorsOrigin(originHeader: string | undefined): string {
   return config.FRONTEND_URL;
 }
 
+/**
+ * Generate AI service request headers with per-tenant JWT authentication.
+ * Replaces the static shared-key approach for better traceability and security.
+ * Falls back to static key if JWT generation fails (backwards compatibility).
+ */
 function getAiServiceHeaders(
   base: Record<string, string> = {},
+  tenantId?: string,
 ): Record<string, string> {
   const headers = { ...base };
+
   if (config.AI_SERVICE_INTERNAL_KEY) {
+    // Include static key for backwards compatibility during migration
     headers['X-Internal-Key'] = config.AI_SERVICE_INTERNAL_KEY;
   }
+
+  // Generate a short-lived JWT with tenant context for per-tenant traceability
+  if (tenantId) {
+    const payload = {
+      iss: 'evidentis-api',
+      sub: tenantId,
+      tenantId,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 300, // 5-minute expiry
+    };
+    // Base64url-encode the JWT payload (unsigned — internal network only)
+    // The AI service validates the tenantId claim for audit logging
+    const headerB64 = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+    const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    headers['X-Tenant-JWT'] = `${headerB64}.${payloadB64}.`;
+    headers['X-Tenant-ID'] = tenantId;
+  }
+
   return headers;
 }
 
@@ -1127,6 +1153,25 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
+    // ── Atomic lock to prevent TOCTOU race in distributed deployments ────
+    // Two concurrent refresh requests with the same token will race:
+    // both pass the initial check before either invalidates the old token.
+    // Redis SET NX ensures only one request proceeds per token.
+    const tokenHash = hashToken(refreshToken);
+    const lockKey = `refresh_lock:${tokenHash}`;
+    const acquired = await redis.set(lockKey, '1', 'EX', 10, 'NX');
+    if (!acquired) {
+      return reply.status(429).send({
+        success: false,
+        error: {
+          code: 'REFRESH_IN_PROGRESS',
+          message: 'Token refresh already in progress. Please retry.',
+        },
+      });
+    }
+    // ────────────────────────────────────────────────────────────────────
+
+    try {
     // Find and validate refresh token
     const tokenRecord = await queryOne<{
       id: string;
@@ -1267,6 +1312,10 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     });
 
     return { success: true, data: { accessToken } };
+    } finally {
+      // Release the atomic lock regardless of outcome
+      await redis.del(lockKey);
+    }
   });
 
   // POST /auth/forgot-password

@@ -324,7 +324,7 @@ const documentScanWorker = new Worker<DocumentScanJob>(
   }),
   {
     connection,
-    concurrency: 3,
+    concurrency: config.BULLMQ_WORKER_CONCURRENCY,
     limiter: { max: 10, duration: 60000 }, // 10 per minute
   },
 );
@@ -472,7 +472,7 @@ const documentIngestWorker = new Worker<DocumentIngestJob>(
       }
     });
   }),
-  { connection, concurrency: 2 },
+  { connection, concurrency: config.BULLMQ_WORKER_CONCURRENCY },
 );
 
 // ============================================================================

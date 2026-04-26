@@ -1,6 +1,8 @@
 /**
  * EvidentIS Database Connection
- * PostgreSQL connection pool with proper connection management
+ * PostgreSQL connection pool with proper connection management.
+ * Supports RLS via per-connection `app.tenant_id` setting.
+ * Optional read-replica pool for SELECT-heavy workloads.
  */
 
 import fs from 'node:fs';
@@ -46,6 +48,14 @@ function attachPoolEventHandlers(dbPool: pg.Pool): void {
 export let pool: pg.Pool = createPool();
 attachPoolEventHandlers(pool);
 
+// Read-replica pool for SELECT queries (optional)
+export let replicaPool: pg.Pool | null = null;
+if (config.DATABASE_REPLICA_URL) {
+  replicaPool = createPool(config.DATABASE_REPLICA_URL);
+  attachPoolEventHandlers(replicaPool);
+  logger.info('Read-replica database pool initialized');
+}
+
 export async function reinitializePool(
   connectionString?: string,
 ): Promise<void> {
@@ -56,6 +66,33 @@ export async function reinitializePool(
     setTimeout(resolve, POOL_REINITIALIZE_DRAIN_MS),
   );
   await previousPool.end();
+}
+
+// ============================================================
+// RLS: Per-Request Tenant Scoping
+// ============================================================
+
+/**
+ * Set the app.tenant_id session variable for RLS enforcement.
+ * MUST be called at the start of every authenticated request.
+ *
+ * This works in conjunction with the PostgreSQL RLS policies
+ * defined in migration 021_row_level_security.sql.
+ */
+export async function setTenantContext(tenantId: string): Promise<void> {
+  await pool.query(`SET LOCAL app.tenant_id = $1`, [tenantId]);
+}
+
+/**
+ * Acquire a client with tenant context already set.
+ * Use for transactions that need RLS scoping.
+ */
+export async function acquireTenantClient(
+  tenantId: string,
+): Promise<pg.PoolClient> {
+  const client = await pool.connect();
+  await client.query(`SET app.tenant_id = $1`, [tenantId]);
+  return client;
 }
 
 // ============================================================
@@ -82,6 +119,30 @@ export async function query<T = unknown>(
   logger.debug(
     { query: text, duration, rows: result.rowCount },
     'Query executed',
+  );
+
+  return {
+    rows: result.rows as T[],
+    rowCount: result.rowCount || 0,
+  };
+}
+
+/**
+ * Execute a read-only query on the replica pool (falls back to primary if no replica).
+ * Use for expensive SELECT operations like vector similarity search.
+ */
+export async function queryRead<T = unknown>(
+  text: string,
+  values?: unknown[],
+): Promise<QueryResult<T>> {
+  const targetPool = replicaPool || pool;
+  const start = Date.now();
+  const result = await targetPool.query(text, values);
+  const duration = Date.now() - start;
+
+  logger.debug(
+    { query: text, duration, rows: result.rowCount, replica: !!replicaPool },
+    'Read query executed',
   );
 
   return {
@@ -176,14 +237,19 @@ export async function beginTransaction(): Promise<Transaction> {
 }
 
 /**
- * Execute a function within a transaction
- * Automatically commits on success, rolls back on error
+ * Execute a function within a transaction.
+ * Optionally sets tenant context for RLS enforcement.
+ * Automatically commits on success, rolls back on error.
  */
 export async function withTransaction<T>(
   fn: (tx: Transaction) => Promise<T>,
+  tenantId?: string,
 ): Promise<T> {
   const tx = await beginTransaction();
   try {
+    if (tenantId) {
+      await tx.query(`SET LOCAL app.tenant_id = $1`, [tenantId]);
+    }
     const result = await fn(tx);
     await tx.commit();
     return result;
@@ -213,5 +279,9 @@ export async function checkDatabaseHealth(): Promise<boolean> {
 export async function closeDatabasePool(): Promise<void> {
   logger.info('Closing database pool...');
   await pool.end();
+  if (replicaPool) {
+    await replicaPool.end();
+    logger.info('Replica database pool closed');
+  }
   logger.info('Database pool closed');
 }

@@ -110,6 +110,7 @@ metadata:
     app: evidentis-api
 spec:
   replicas: 3
+  minReadySeconds: 45  # Wait for ClamAV initialization before routing traffic
   selector:
     matchLabels:
       app: evidentis-api
@@ -304,6 +305,7 @@ metadata:
   namespace: evidentis
 spec:
   replicas: 3
+  minReadySeconds: 45  # Wait for ClamAV initialization before routing traffic
   selector:
     matchLabels:
       app: evidentis-web
@@ -478,6 +480,7 @@ metadata:
     app: evidentis-worker
 spec:
   replicas: 3
+  minReadySeconds: 45  # Wait for ClamAV initialization before routing traffic
   selector:
     matchLabels:
       app: evidentis-worker

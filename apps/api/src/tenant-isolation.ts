@@ -50,7 +50,7 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   matters: {
-    supportsSoftDelete: false,
+    supportsSoftDelete: true,
     sortableColumns: new Set([
       'created_at',
       'updated_at',
@@ -61,7 +61,7 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   documents: {
-    supportsSoftDelete: false,
+    supportsSoftDelete: true,
     sortableColumns: new Set([
       'created_at',
       'updated_at',
@@ -76,7 +76,7 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   clauses: {
-    supportsSoftDelete: false,
+    supportsSoftDelete: true,
     sortableColumns: new Set(['created_at', 'clause_type', 'confidence']),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
@@ -91,7 +91,7 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   obligations: {
-    supportsSoftDelete: false,
+    supportsSoftDelete: true,
     sortableColumns: new Set(['created_at', 'deadline', 'status', 'priority']),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
@@ -106,7 +106,7 @@ const TENANT_TABLE_CONFIG: Record<string, TenantTableConfig> = {
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },
   audit_events: {
-    supportsSoftDelete: false,
+    supportsSoftDelete: true,
     sortableColumns: new Set(['created_at', 'event_type', 'object_type']),
     tenantScope: { mode: 'column', column: 'tenant_id' },
   },

@@ -44,6 +44,7 @@ const configSchema = z
     APP_ENCRYPTION_KEY_FILE: z.string().optional(),
 
     DATABASE_URL: z.string().url(),
+    DATABASE_REPLICA_URL: z.string().url().optional(),
     DB_POOL_MAX: z.coerce.number().default(10),
     DB_IDLE_TIMEOUT_MS: z.coerce.number().default(30000),
     DB_CONNECT_TIMEOUT_MS: z.coerce.number().default(5000),
@@ -68,10 +69,12 @@ const configSchema = z
     AI_SERVICE_INTERNAL_KEY: isProductionEnv
       ? z.string().min(32, 'AI_SERVICE_INTERNAL_KEY must be at least 32 characters in production')
       : z.string().optional(),
+    AI_FALLBACK_PROVIDER: z.enum(['groq', 'ollama', 'none']).default('groq'),
 
     MALWARE_SCANNER: z.enum(['clamav', 'none']).default('clamav'),
     CLAMAV_HOST: z.string().default('localhost'),
     CLAMAV_PORT: z.coerce.number().default(3310),
+    CLAMAV_FAIL_OPEN: z.enum(['true', 'false']).default(isProductionEnv ? 'false' : 'true'),
 
     EMAIL_DELIVERY_MODE: z.enum(['log', 'smtp']).default('log'),
     MAIL_FROM: z.string().email().default('noreply@evidentis.tech'),
@@ -157,6 +160,9 @@ const configSchema = z
     EXPOSE_OTP_PREVIEW: z
       .enum(['true', 'false'])
       .default('false'),
+
+    SEED_DEMO_DATA: z.enum(['true', 'false']).default('false'),
+    BULLMQ_WORKER_CONCURRENCY: z.coerce.number().default(5),
   })
   .refine(
     (data) => {
@@ -227,6 +233,12 @@ function loadConfig() {
 
   if (isProductionEnv && parsedConfig.DB_SSL !== 'true') {
     console.error('DB_SSL must be set to true in production.');
+    process.exit(1);
+  }
+
+  // Seed data must not be enabled in production
+  if (isProductionEnv && parsedConfig.SEED_DEMO_DATA === 'true') {
+    console.error('SEED_DEMO_DATA=true is not allowed in production. Rotate all demo credentials.');
     process.exit(1);
   }
 

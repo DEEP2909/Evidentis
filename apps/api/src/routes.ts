@@ -42,6 +42,14 @@ import {
 } from './embedding-cache.js';
 import { logger } from './logger.js';
 import { getPipelineStatus, startDocumentPipeline } from './orchestrator.js';
+import { redis } from './redis.js';
+import {
+  executePromptPipeline,
+  getInteractionHistory,
+  getInteractionById,
+  generateUserReport,
+  generateMatterReport,
+} from './context-agent.js';
 import { createDualRateLimiter } from './rate-limit.js';
 import { attorneyRepo, playbookRepo, tenantRepo } from './repository.js';
 import {
@@ -1410,6 +1418,34 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
+    // ── Per-phone Redis brute-force counter ──────────────────────────────
+    // Prevents distributed attackers from enumerating 6-digit OTPs by
+    // rate-limiting at the phone+purpose level regardless of IP.
+    const bruteForceKey = `otp_bf:${normalizedPhone}:${body.purpose}`;
+    const MAX_OTP_VERIFY_ATTEMPTS = 5;
+    const OTP_LOCKOUT_SECONDS = config.OTP_EXPIRY_MINUTES * 60;
+
+    const attempts = await redis.incr(bruteForceKey);
+    if (attempts === 1) {
+      // Set TTL on first attempt (matches OTP expiry window)
+      await redis.expire(bruteForceKey, OTP_LOCKOUT_SECONDS);
+    }
+
+    if (attempts > MAX_OTP_VERIFY_ATTEMPTS) {
+      logger.warn(
+        { phone: normalizedPhone, purpose: body.purpose, attempts },
+        'OTP brute-force threshold exceeded',
+      );
+      return reply.status(429).send({
+        success: false,
+        error: {
+          code: 'TOO_MANY_ATTEMPTS',
+          message: 'Too many verification attempts for this number. Please request a new OTP.',
+        },
+      });
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     const params: unknown[] = [normalizedPhone, body.purpose];
     let tenantFilter = '';
     if (body.tenantSlug) {
@@ -1535,6 +1571,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
          WHERE id = $1`,
         [otpRecord.advocate_id],
       );
+      // Clear Redis brute-force counter on successful verification
+      await redis.del(`otp_bf:${normalizedPhone}:${body.purpose}`);
       await tx.query(
         `INSERT INTO audit_events (tenant_id, actor_advocate_id, event_type, ip_address, user_agent)
          VALUES ($1, $2, 'auth.login.otp', $3, $4)`,
@@ -6375,6 +6413,197 @@ END:VCALENDAR`;
       );
 
       return { success: true };
+    },
+  );
+
+  // ============================================================================
+  // CONTEXT AGENT ROUTES — Prompt Intelligence
+  // ============================================================================
+
+  /**
+   * POST /api/ai/prompt — Submit a prompt through the Context Agent pipeline.
+   * Enhances the prompt with historical context, calls AI, analyzes the
+   * response, and stores the full interaction for future reference.
+   */
+  fastify.post(
+    '/api/ai/prompt',
+    { preHandler: authenticateRequest },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const body = z
+        .object({
+          prompt: z.string().min(1).max(10000),
+          matterId: z.string().uuid().optional(),
+          tags: z.array(z.string().max(50)).max(10).optional(),
+        })
+        .parse(request.body);
+
+      try {
+        const result = await executePromptPipeline({
+          tenantId: authReq.tenantId,
+          advocateId: authReq.advocateId,
+          prompt: body.prompt,
+          matterId: body.matterId,
+          tags: body.tags,
+        });
+
+        return {
+          success: true,
+          data: {
+            interactionId: result.interaction.id,
+            answer: result.aiResponse,
+            category: result.category,
+            qualityScore: result.interaction.responseQualityScore,
+            hasCitations: result.interaction.responseHasCitations,
+            contextUsed: {
+              pastInteractions: result.interaction.contextInteractionIds.length,
+              documents: result.interaction.contextDocumentIds.length,
+            },
+          },
+        };
+      } catch (error) {
+        logger.error({ err: error }, 'Context Agent pipeline failed');
+        return reply.status(502).send({
+          success: false,
+          error: {
+            code: 'AI_SERVICE_ERROR',
+            message: 'Failed to process prompt through AI service',
+          },
+        });
+      }
+    },
+  );
+
+  /**
+   * GET /api/ai/interactions — List interaction history.
+   * Filterable by matter, category, with pagination.
+   */
+  fastify.get(
+    '/api/ai/interactions',
+    { preHandler: authenticateRequest },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+      const query_params = z
+        .object({
+          matterId: z.string().uuid().optional(),
+          category: z
+            .enum(['research', 'drafting', 'review', 'analysis', 'general'])
+            .optional(),
+          limit: z.coerce.number().min(1).max(100).default(20),
+          offset: z.coerce.number().min(0).default(0),
+        })
+        .parse(request.query);
+
+      const { interactions, total } = await getInteractionHistory(
+        authReq.tenantId,
+        authReq.advocateId,
+        query_params,
+      );
+
+      return {
+        success: true,
+        data: {
+          interactions: interactions.map((i) => ({
+            id: i.id,
+            matterId: i.matterId,
+            originalPrompt:
+              i.originalPrompt.slice(0, 200) +
+              (i.originalPrompt.length > 200 ? '...' : ''),
+            category: i.promptCategory,
+            qualityScore: i.responseQualityScore,
+            hasCitations: i.responseHasCitations,
+            modelUsed: i.modelUsed,
+            latencyMs: i.latencyMs,
+            tags: i.tags,
+            createdAt: i.createdAt,
+          })),
+          total,
+          limit: query_params.limit,
+          offset: query_params.offset,
+        },
+      };
+    },
+  );
+
+  /**
+   * GET /api/ai/interactions/:id — Get a specific interaction with full detail.
+   */
+  fastify.get(
+    '/api/ai/interactions/:id',
+    { preHandler: authenticateRequest },
+    async (request, reply) => {
+      const authReq = request as AuthenticatedRequest;
+      const { id } = z
+        .object({ id: z.string().uuid() })
+        .parse(request.params);
+
+      const interaction = await getInteractionById(authReq.tenantId, id);
+
+      if (!interaction || interaction.advocateId !== authReq.advocateId) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Interaction not found',
+          },
+        });
+      }
+
+      return {
+        success: true,
+        data: interaction,
+      };
+    },
+  );
+
+  /**
+   * GET /api/ai/report/user — Get user-level analytics report.
+   */
+  fastify.get(
+    '/api/ai/report/user',
+    { preHandler: authenticateRequest },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+      const params = z
+        .object({
+          from: z.string().datetime().optional(),
+          to: z.string().datetime().optional(),
+        })
+        .parse(request.query);
+
+      const dateRange =
+        params.from && params.to
+          ? { from: new Date(params.from), to: new Date(params.to) }
+          : undefined;
+
+      const report = await generateUserReport(
+        authReq.tenantId,
+        authReq.advocateId,
+        dateRange,
+      );
+
+      return { success: true, data: report };
+    },
+  );
+
+  /**
+   * GET /api/ai/report/matter/:matterId — Get matter-level interaction report.
+   */
+  fastify.get(
+    '/api/ai/report/matter/:matterId',
+    { preHandler: authenticateRequest },
+    async (request) => {
+      const authReq = request as AuthenticatedRequest;
+      const { matterId } = z
+        .object({ matterId: z.string().uuid() })
+        .parse(request.params);
+
+      const report = await generateMatterReport(
+        authReq.tenantId,
+        matterId,
+      );
+
+      return { success: true, data: report };
     },
   );
 

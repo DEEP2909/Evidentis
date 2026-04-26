@@ -1,5 +1,13 @@
 # EvidentIS Kubernetes Deployment
 # Production-ready configuration with autoscaling and secrets management
+#
+# NOTE: Images are pinned to v1.2.4 tags. For maximum supply-chain integrity,
+# replace tags with immutable SHA digests in production CI/CD pipelines:
+#   image: evidentis/api@sha256:<digest>
+# Generate digests with: docker inspect --format='{{index .RepoDigests 0}}' <image>
+#
+# NOTE: NetworkPolicies are co-located here for simplicity. For larger
+# deployments, consider splitting into k8s/network-policies.yaml.
 ---
 apiVersion: v1
 kind: Namespace
@@ -699,8 +707,11 @@ spec:
               command:
                 - sh
                 - -c
-                - test -f /tmp/celerybeat.pid && kill -0 "$(cat /tmp/celerybeat.pid)"
-            initialDelaySeconds: 30
+                # Check both: 1) PID is alive, 2) schedule file updated within last 5 min (detects deadlocks)
+                - |
+                  test -f /tmp/celerybeat.pid && kill -0 "$(cat /tmp/celerybeat.pid)" && \
+                  find /tmp/celerybeat-schedule -mmin -5 | grep -q .
+            initialDelaySeconds: 60
             periodSeconds: 60
             failureThreshold: 3
             timeoutSeconds: 10
